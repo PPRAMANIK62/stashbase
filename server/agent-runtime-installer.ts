@@ -1,3 +1,4 @@
+import { telemetry } from './telemetry.ts';
 /**
  * On-demand installation coordinator for application-scoped Agent runtimes.
  *
@@ -139,6 +140,9 @@ export class AgentBootstrapCoordinator {
         this.fail(id, stage, 'operation-failed', error, stage === 'installation' ? 'install-command' : undefined);
       }
     }).finally(() => {
+      if (action !== 'connect') telemetry.capture({ event: 'agent_setup_result', runtime: id,
+        stage: action === 'login' ? 'login' : 'prepare',
+        outcome: signal.aborted ? 'cancelled' : this.status(id).phase === 'ready' ? 'success' : 'failed' });
       this.controllers.delete(id);
       this.runs.delete(id);
     });

@@ -255,6 +255,27 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   per process. External clients copy their setup manually. No second client-config
   or credentials store belongs in StashBase.
 
+## Usage Statistics
+
+- Node owns telemetry preferences and random installation identity in the strict
+  app-config store. Missing preferences default on; malformed/unreadable state
+  fails closed. No account, project, document, or machine identity is reused.
+- Only the fixed event schema may leave the process. Direct Capture API requests
+  add no browser metadata; no SDK, replay, raw error capture, or AI tracing runs.
+  The distributor's public ingestion token is build configuration, not a user
+  credential. Unpackaged builds never send to the production destination.
+- Disabling persists first, cancels outstanding usage requests, and attempts one
+  disclosed final notification without retry. It removes the ID and daily save
+  markers. Re-enabling cannot upload prior activity or reuse the old ID. Already
+  transmitted requests cannot be recalled. Failed persistence stops current-process
+  collection and reports failure instead of claiming durable success.
+- Bounded best-effort delivery never blocks writing or shutdown. One shared owner
+  suppresses duplicate app-open events across windows and editor saves across
+  launches. Terminal Agent signals settle once; background setup is not activation.
+- Operator IP retention settings and interpretation limits are documented in
+  [Usage statistics](../docs/usage-statistics.md). An absent event proves neither
+  abandonment nor continued use after opt-out.
+
 ## Renderer Boundaries
 
 `app` binds adapters and coordinates features through public interfaces.

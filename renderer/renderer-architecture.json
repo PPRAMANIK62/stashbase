@@ -61,6 +61,7 @@
     "shared/protocols/http/agent-runtime.ts",
     "shared/protocols/http/agent-sessions.ts",
     "shared/protocols/http/appearance.ts",
+    "shared/protocols/http/telemetry.ts",
     "shared/protocols/http/embedder.ts",
     "shared/protocols/http/files.ts",
     "shared/protocols/http/gallery.ts",

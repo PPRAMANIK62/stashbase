@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 
 import type { AgentContextPort, AgentSessionPort } from '@/features/agent/application/ports';
 import type { AgentFilesChanged } from '@/features/agent/application/session-runtime';
+import type { AgentUsageEvent } from '@/features/agent/application/session/usage';
 import {
   createAgentWorkspaceRuntime,
   type AgentWorkspaceRuntime,
@@ -9,6 +10,7 @@ import {
 import { useRetainedRuntime } from '@/shared/runtime/use-retained-runtime';
 
 export interface AgentWorkspaceRuntimeOptions {
+  recordUsage?: ((event: AgentUsageEvent) => void) | undefined;
   context: AgentContextPort;
   createId(): string;
   folderPath: string | null;
@@ -25,6 +27,7 @@ export function useAgentWorkspaceRuntime({
   createId,
   folderPath,
   onFilesChanged,
+  recordUsage,
   session,
   subscribeFolderRemoved,
 }: AgentWorkspaceRuntimeOptions): AgentWorkspaceRuntime {
@@ -39,6 +42,7 @@ export function useAgentWorkspaceRuntime({
         folderPath,
         onFilesChanged: (change) => filesChangedHandler.current?.(change),
         port: session,
+        recordUsage,
       }),
     (agent) => agent.dispose(),
   );

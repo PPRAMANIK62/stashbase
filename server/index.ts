@@ -56,6 +56,8 @@ import { recoveryJournalDir } from './local-data.ts';
 import { mount as mountProjectRoutes } from './routes/project.ts';
 import { mount as mountGalleryRoutes } from './routes/gallery.ts';
 import { mount as mountEmbedderRoutes } from './routes/embedder.ts';
+import { mount as mountTelemetryRoutes } from './routes/telemetry.ts';
+import { telemetry } from './telemetry.ts';
 import { mount as mountAppearanceRoutes } from './routes/appearance.ts';
 import { mount as mountWorkspacePreferenceRoutes } from './routes/workspace-preferences.ts';
 import { mount as mountUpdateRoutes } from './routes/updates.ts';
@@ -325,6 +327,7 @@ app.use([
 
 // ----- mount routes -------------------------------------------------------
 mountAppearanceRoutes(app);
+mountTelemetryRoutes(app);
 mountWorkspacePreferenceRoutes(app);
 mountUpdateRoutes(app);
 mountAccountRoutes(app, {
@@ -604,6 +607,7 @@ let shuttingDown = false;
 async function shutdown(reason: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
+  telemetry.close();
   log.info(`shutdown: ${reason}`);
   // Stop accepting new connections immediately; in-flight ones drain.
   try { server.close(); } catch { /* already gone */ }

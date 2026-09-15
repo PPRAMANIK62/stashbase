@@ -1,3 +1,4 @@
+import { telemetry } from '../telemetry.ts';
 /** Active-folder file surface. This module owns note list/create/read/write
  * and reveal, then composes mutation, ordering, and asset subroutes. */
 import express from 'express';
@@ -144,6 +145,7 @@ async function handleWriteFile(req: express.Request, res: express.Response): Pro
             : {}),
         }),
       );
+      telemetry.capture({ event: 'document_write_result', outcome: 'success' });
       res.json(
         documentTextSaveResponseSchema.parse({
           ...saved,
@@ -152,6 +154,7 @@ async function handleWriteFile(req: express.Request, res: express.Response): Pro
         }),
       );
     } catch (err: unknown) {
+      telemetry.capture({ event: 'document_write_result', outcome: (err as { status?: number }).status === 409 ? 'conflict' : 'failed' });
       sendError(res, err);
     }
     return;

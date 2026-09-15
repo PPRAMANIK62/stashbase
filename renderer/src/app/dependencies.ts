@@ -40,6 +40,7 @@ import {
   type IndexDecisionPort,
   type SemanticSearchPort,
 } from '@/features/retrieval/public';
+import { createTelemetryAdapter, type TelemetryPort } from '@/features/settings/public';
 import {
   createAccountAdapter,
   createAgentRuntimeAdapter,
@@ -70,6 +71,7 @@ import { fileManagerLabel } from '@/platform/electron/file-manager';
 import { createFolderPicker } from '@/platform/electron/folder-picker';
 import { openedFolderWindow } from '@/platform/electron/project-lifecycle';
 import { createHttpClient } from '@/platform/http/client';
+import { createUsageRecorder } from '@/platform/telemetry';
 
 /** The folder chrome's dependencies, as the welcome screen declares them;
  *  the folder window's sidebar takes only the project port from the set. */
@@ -79,6 +81,7 @@ type ProjectChrome = Pick<
 >;
 
 export interface AppDependencies {
+  recordUsage: ReturnType<typeof createUsageRecorder>;
   agent: {
     /** Which runtimes a conversation can open on. Settings reads the same
      *  endpoint through its own port for its own question. */
@@ -110,6 +113,7 @@ export interface AppDependencies {
     accountApi: AccountPort;
     agentRuntimeApi: AgentRuntimePort;
     appearanceApi: AppearancePort;
+    telemetryApi: TelemetryPort;
     embedderApi: EmbedderPort;
     mcpAccessApi: McpAccessPort;
     transcriptionApi: TranscriptionPort;
@@ -135,6 +139,7 @@ export function createDependencies(): AppDependencies {
     workspaceSession: bridge.workspaceSession,
   });
   return {
+    recordUsage: createUsageRecorder(http),
     agent: {
       catalog: createAgentCatalogAdapter(http),
       instructions: createAgentInstructionsAdapter(http),
@@ -190,6 +195,7 @@ export function createDependencies(): AppDependencies {
       accountApi: createAccountAdapter(http, bridge.runtime.serverOrigin),
       agentRuntimeApi: createAgentRuntimeAdapter(http),
       appearanceApi: createAppearanceAdapter(http),
+      telemetryApi: createTelemetryAdapter(http),
       embedderApi: createEmbedderAdapter(http),
       mcpAccessApi: createMcpAccessAdapter(http),
       transcriptionApi: createTranscriptionAdapter(http),

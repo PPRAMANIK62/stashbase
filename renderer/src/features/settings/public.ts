@@ -20,3 +20,7 @@ export { SidebarAccountRow } from './ui/account/sidebar-account-row';
 export { Settings } from './ui/settings';
 export type { SettingsSectionId } from './ui/settings-types';
 export { createLocalComponentAdapter } from './infrastructure/local-component-api';
+
+export type { TelemetryPort } from './application/telemetry-port';
+export { createTelemetryAdapter } from './infrastructure/telemetry-api';
+export { TelemetryNotice } from './ui/telemetry-notice';

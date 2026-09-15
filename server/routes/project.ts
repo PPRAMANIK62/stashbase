@@ -1,3 +1,4 @@
+import { telemetry } from '../telemetry.ts';
 /**
  * Project registration and removal, window folder bindings, and imports.
  *
@@ -130,8 +131,10 @@ export function mount(app: express.Express): void {
       if (changed) {
         res.once('finish', () => notifyFolderSwitch(folderRoot, windowId));
       }
+      telemetry.capture({ event: 'project_entry_result', outcome: 'success' });
       res.json(snapshot);
     } catch (err: unknown) {
+      telemetry.capture({ event: 'project_entry_result', outcome: 'failed' });
       if ((err as { code?: string })?.code === 'WINDOW_CLOSED') {
         res.status(410).json({ error: 'window is closed', code: 'WINDOW_CLOSED' });
         return;

@@ -7,6 +7,7 @@ import type {
   McpAccessPort,
   TranscriptionPort,
 } from '@/features/settings/application/ports';
+import type { TelemetryPort } from '@/features/settings/application/telemetry-port';
 import type { SoftwareUpdateRow } from '@/shared/domain/software-update';
 
 /** Every section the Settings shell registers, in nav order. A section id
@@ -24,6 +25,7 @@ const SETTINGS_SECTION_IDS = [
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 
 export interface SettingsProps {
+  telemetryApi?: TelemetryPort;
   /** The StashBase account, which the Agents section owns. */
   accountApi: AccountPort;
   agentRuntimeApi: AgentRuntimePort;

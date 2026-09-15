@@ -98,6 +98,7 @@ export function isEmbedderProvider(value: unknown): value is EmbedderProvider {
 }
 
 export interface AppConfigFile {
+  telemetry?: import('./telemetry.ts').TelemetryState;
   recentFolders?: RecentFolder[];
   /** Application-wide embedding provider configuration. */
   embedder?: {

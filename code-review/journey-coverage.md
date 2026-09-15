@@ -44,6 +44,23 @@ OCR images, and transcript media. One representation cannot prove another.
 
 ## J01: Onboarding
 
+**Usage statistics:** `server/telemetry.ts` and `server/routes/telemetry.ts` own
+manual collection and Settings persistence; Settings General and the first-launch
+notice expose default-on disclosure and opt-out. `server/telemetry.test.ts` covers
+field rejection, opt-out/restart/ID rotation, offline delivery, corrupt config,
+and daily editor-save suppression. Renderer usage tests cover terminal event
+coalescing and Settings choice/failure UI. A 2026-09-15 built-service pass with
+isolated config, real Python/MFS, and a local capture sink exercised project open,
+versioned editor save, opt-out, ID removal, and suppression of later events.
+Built Storybook controls and disclosure were driven and reviewed visually;
+Electron boundary/authorization smoke passed. A separate real PostHog Capture
+API pass received HTTP 200 for `app_opened` and `telemetry_disabled`, both visible
+in project 384555 with version `2.7.0-telemetry-verification`. IP discard was
+confirmed enabled there. Signed packaged multi-window disclosure and real-provider
+Agent telemetry remain unproven; desktop accessibility selected a pre-existing
+app instance rather than the isolated verification window.
+
+
 **Intent:** [J01](../design-docs/user-journeys.md#j01-complete-onboarding-and-reach-first-value).
 
 **Implementation:** Renderer: `renderer/src/app/bootstrap/startup.tsx`, `renderer/src/features/workspace/ui/welcome.tsx`.

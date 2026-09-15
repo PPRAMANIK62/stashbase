@@ -576,11 +576,12 @@ function spawnServer(instanceId) {
     ? {
       ELECTRON_RUN_AS_NODE: '1',
       STASHBASE_APP_ROOT: PROJECT_ROOT,
+      STASHBASE_PACKAGED: '1',
       STASHBASE_RESOURCES_PATH: RESOURCES_ROOT,
       ...(hasPackagedDaemon ? { STASHBASE_DAEMON_BIN: packagedDaemon } : {}),
       ...(packagedPython ? { STASHBASE_PYTHON: packagedPython } : {}),
     }
-    : { STASHBASE_APP_ROOT: PROJECT_ROOT };
+    : { STASHBASE_APP_ROOT: PROJECT_ROOT, STASHBASE_PACKAGED: '0' };
   // In packaged+asar mode PROJECT_ROOT is `.../Resources/app.asar` —
   // a FILE, not a directory. spawn(cwd) hits the OS syscall (no
   // electron asar shim) and bails with ENOTDIR. Use the real

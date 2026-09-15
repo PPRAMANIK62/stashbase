@@ -32,6 +32,7 @@ export default function ManagedSettings({
   section,
   softwareUpdate = null,
   transcriptionApi,
+  telemetryApi,
 }: SettingsProps) {
   const localComponent = useLocalComponent(localComponentApi, open && section === 'general');
   const sections: SettingsSectionDef[] = [
@@ -43,6 +44,8 @@ export default function ManagedSettings({
       render: () => (
         <GeneralPanel
           localComponent={localComponent}
+          telemetryApi={telemetryApi}
+          onOpenExternal={onOpenExternal}
           onReportBug={onReportBug}
           softwareUpdate={softwareUpdate}
         />

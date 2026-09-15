@@ -74,6 +74,17 @@ explicit and crosses every window's save barrier. J09 owns the bug-report flow;
 review authorization, immutable approval, and local handoff. Reporting is not
 telemetry or automatic submission.
 
+### Basic usage statistics
+
+Official desktop builds share a small, public event allowlist with PostHog by
+default. A non-modal first-launch disclosure and Settings → General privacy
+switch explain the choice. Collection excludes all document/conversation content,
+paths, account identity, raw diagnostics, and automatic recordings. Turning it
+off persists the choice, discards pending usage, and attempts one disclosed final
+notification before stopping; re-enabling uses a new random installation ID.
+See [Usage statistics](../../docs/usage-statistics.md) for the exact event catalog
+and delivery/interpretation limits. Bug reports remain a separate explicit flow.
+
 ## Format Capability Matrix
 
 Current capabilities by source family; [terms](../glossary.md#format-capability)

@@ -14,6 +14,7 @@ import {
   type AgentFilesChanged,
   type AgentSessionRuntime,
 } from '@/features/agent/application/session-runtime';
+import type { AgentUsageEvent } from '@/features/agent/application/session/usage';
 import {
   AGENT_RUNTIMES,
   DEFAULT_AGENT_ID,
@@ -40,8 +41,6 @@ import {
 } from '@/features/agent/domain/workspace';
 import { createScopeGuard } from '@/shared/runtime/scope-guard';
 
-/** What the workspace's operations are about: the window folder its sessions
- *  were bound to when the work started. */
 type AgentWorkspaceScope = { readonly folderPath: string | null };
 
 export interface AgentWorkspaceRuntime {
@@ -70,6 +69,7 @@ export interface AgentWorkspaceRuntime {
 }
 
 export interface AgentWorkspaceRuntimeOptions {
+  recordUsage?: ((event: AgentUsageEvent) => void) | undefined;
   autostart?: boolean | undefined;
   context?: AgentContextPort | undefined;
   createId(): string;
@@ -102,6 +102,7 @@ export function createAgentWorkspaceRuntime({
   folderPath: initialFolderPath,
   initialAgent = DEFAULT_AGENT_ID,
   onFilesChanged,
+  recordUsage,
   port,
   scheduler,
 }: AgentWorkspaceRuntimeOptions): AgentWorkspaceRuntime {
@@ -139,8 +140,6 @@ export function createAgentWorkspaceRuntime({
       ),
     );
     const hasContent = state.transcript.length > 0;
-    // Recency follows the user's own prompts and the native record. Opening
-    // or replaying a chat must not promote it in the history list.
     const lastModified = Math.max(
       state.lastModified,
       transcriptModified,
@@ -191,6 +190,7 @@ export function createAgentWorkspaceRuntime({
       id,
       onFilesChanged,
       port,
+      recordUsage,
       scheduler,
       scope,
       title,

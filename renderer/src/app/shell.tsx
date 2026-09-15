@@ -15,7 +15,11 @@ import {
   useNewTab,
 } from '@/features/documents/public';
 import { useFolderStatus } from '@/features/preparation/public';
-import { AccountProvider, useSearchKeyConfigured } from '@/features/settings/public';
+import {
+  AccountProvider,
+  TelemetryNotice,
+  useSearchKeyConfigured,
+} from '@/features/settings/public';
 import { UpdateNotice, useUpdateNotice } from '@/features/updates/public';
 import {
   ProjectWelcome,
@@ -70,6 +74,7 @@ function WorkspaceWindow() {
   // Two adapter records this function hands on more than once.
   const { documents: docs, workspace: workspaceDeps } = dependencies;
   useAppearanceSurface(dependencies.settings.appearanceApi);
+  useEffect(() => dependencies.recordUsage({ event: 'app_opened' }), [dependencies]);
   const session = useWorkspaceSession(
     workspaceDeps.adapters.project,
     workspaceDeps.adapters.session,
@@ -122,6 +127,7 @@ function WorkspaceWindow() {
   const agent = useAgentEnvironment(listing, status, documents, folderPath, selectedPath);
   const runtime = useAgentWorkspaceRuntime({
     context: dependencies.agent.context,
+    recordUsage: dependencies.recordUsage,
     createId: docs.createId,
     folderPath: selectedPath,
     onFilesChanged: refresh.onAgentFilesChanged,
@@ -226,7 +232,12 @@ function WorkspaceWindow() {
             mode={chrome.navigator.mode}
           />
         }
-        updateNotice={<UpdateNotice notice={updateNotice} />}
+        updateNotice={
+          <>
+            <TelemetryNotice port={dependencies.settings.telemetryApi} />
+            <UpdateNotice notice={updateNotice} />
+          </>
+        }
         welcome={
           <ProjectWelcome
             {...dependencies.project}

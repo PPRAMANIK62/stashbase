@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import type { TelemetryPort } from '@/features/settings/application/telemetry-port';
 import type { LocalComponentViewModel } from '@/features/settings/hooks/use-local-component';
 import {
   SettingsGroup,
@@ -11,8 +12,11 @@ import type { SoftwareUpdateRow } from '@/shared/domain/software-update';
 import { FailureNotice } from '@/shared/ui/failure-notice';
 
 import { LocalComponentGroup } from './local-component-group';
+import { TelemetryGroup } from './telemetry-group';
 
 export interface GeneralPanelProps {
+  telemetryApi?: TelemetryPort | undefined;
+  onOpenExternal?: ((href: string) => void) | undefined;
   localComponent?: LocalComponentViewModel | null;
   /** Null outside the desktop app, where there is no review window to open;
    *  the row then stays, disabled, and says so. */
@@ -21,7 +25,13 @@ export interface GeneralPanelProps {
   softwareUpdate: SoftwareUpdateRow | null;
 }
 
-export function GeneralPanel({ localComponent, onReportBug, softwareUpdate }: GeneralPanelProps) {
+export function GeneralPanel({
+  localComponent,
+  onReportBug,
+  softwareUpdate,
+  telemetryApi,
+  onOpenExternal,
+}: GeneralPanelProps) {
   return (
     <SettingsPane lede="App updates, local components, and support." title="General">
       {softwareUpdate && (
@@ -65,6 +75,9 @@ export function GeneralPanel({ localComponent, onReportBug, softwareUpdate }: Ge
         </SettingsGroup>
       )}
       {localComponent && <LocalComponentGroup model={localComponent} />}
+      {telemetryApi && onOpenExternal && (
+        <TelemetryGroup port={telemetryApi} onOpenExternal={onOpenExternal} />
+      )}
       <SettingsGroup title="Support">
         <SettingsList>
           <SettingsRow

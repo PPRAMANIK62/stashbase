@@ -39,6 +39,7 @@ export function galleryPort(overrides: Partial<GalleryPort> = {}): GalleryPort {
 export function appDependencies(overrides: Partial<AppDependencies> = {}): AppDependencies {
   const adapters = overrides.workspace?.adapters ?? workspaceAdapters();
   return {
+    recordUsage: vi.fn(),
     agent: {
       catalog: agentCatalogPort(),
       context: agentContextPort(),
@@ -59,6 +60,15 @@ export function appDependencies(overrides: Partial<AppDependencies> = {}): AppDe
       accountApi: accountPort(),
       agentRuntimeApi: agentRuntimePort(),
       appearanceApi: appearancePort(),
+      telemetryApi: {
+        load: async () => ({ enabled: true, noticeSeen: false, available: false }),
+        update: async (change) => ({
+          enabled: true,
+          noticeSeen: false,
+          available: false,
+          ...change,
+        }),
+      },
       embedderApi: embedderPort(),
       mcpAccessApi: mcpAccessPort(),
       localComponentApi: {

@@ -32,6 +32,7 @@ import type {
   AgentSessionRuntime,
   AgentSessionRuntimeOptions,
 } from '@/features/agent/application/session/runtime-contract';
+import { createAgentUsage } from '@/features/agent/application/session/usage';
 import { addContextItem, removeContextItem } from '@/features/agent/domain/context';
 import { modelChoice } from '@/features/agent/domain/model-choice';
 import {
@@ -55,11 +56,13 @@ export function createAgentSessionRuntime({
   environment = () => null,
   id,
   onFilesChanged,
+  recordUsage,
   port,
   scheduler = createDefaultScheduler(),
   scope,
   title,
 }: AgentSessionRuntimeOptions): AgentSessionRuntime {
+  const usage = createAgentUsage(agent, recordUsage);
   const controller = new AbortController();
   const store = createStore<AgentSessionState>(() =>
     createAgentSessionState({ agent, id, scope, title }),
@@ -79,6 +82,7 @@ export function createAgentSessionRuntime({
   });
   const nextBlockId = (kind: string) => `${id}-${kind}-${++blockSequence}`;
   const transition = (action: Parameters<typeof transitionAgentSession>[1]) => {
+    usage.action(action);
     store.setState((current) => transitionAgentSession(current, action), true);
   };
 
@@ -158,7 +162,9 @@ export function createAgentSessionRuntime({
     },
     interrupt() {
       if (disposed || !agentTurnIsActive(state().connection)) return false;
-      return transport.send({ kind: 'interrupt' });
+      const sent = transport.send({ kind: 'interrupt' });
+      if (sent) usage.interrupt();
+      return sent;
     },
     replyPermission(toolUseId, permissionId, allow, always) {
       if (disposed) return false;
@@ -199,12 +205,14 @@ export function createAgentSessionRuntime({
       // emptiness — decides whether the failed turn can be resent.
       if (failure?.kind !== 'error' || failure.retryablePrompt === undefined) return false;
       if (current.connection.kind !== 'live') return false;
+      usage.start();
       const skill = ledger.turnFor(errorBlockId)?.skill ?? null;
       const sent = transport.send({
         kind: 'prompt',
         skill,
         text: failure.retryablePrompt,
       });
+      if (!sent) usage.finish('blocked');
       if (sent) {
         transition({ id: errorBlockId, kind: 'settle-error' });
         transition({ kind: 'turn-started' });
@@ -241,8 +249,19 @@ export function createAgentSessionRuntime({
     attachFiles(files) {
       return dispatcher.attach(files);
     },
-    sendPrompt(text = state().draft, options = {}) {
-      return dispatcher.send(text, options);
+    async sendPrompt(text = state().draft, options = {}) {
+      if (disposed || agentTurnIsActive(state().connection)) return dispatcher.send(text, options);
+      if (!text.trim() && !state().context.length && !state().skill)
+        return dispatcher.send(text, options);
+      usage.start();
+      try {
+        const result = await dispatcher.send(text, options);
+        if (!result.ok && result.reason !== 'busy') usage.finish('blocked');
+        return result;
+      } catch (error) {
+        usage.finish('failed');
+        throw error;
+      }
     },
     setAccessMode(mode) {
       if (disposed || state().accessMode === mode) return;

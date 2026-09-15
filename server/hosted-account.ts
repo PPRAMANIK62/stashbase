@@ -1,3 +1,4 @@
+import { telemetry } from './telemetry.ts';
 import packageJson from '../package.json' with { type: 'json' };
 import crypto from 'node:crypto';
 import type { HostedAccountState, HostedAgentAllowance, HostedOAuthProvider, HostedOAuthPurpose, HostedOAuthStart, HostedOAuthStatus } from '../shared/account.ts';
@@ -218,7 +219,10 @@ export async function exchangeHostedOAuthCode(flowId: string, authCode: string):
 
 export function finishHostedOAuth(flowId: string): void {
   const flow = pendingOAuthFlows.get(flowId);
-  if (flow?.state === 'exchanged') flow.state = 'complete';
+  if (flow?.state === 'exchanged') {
+    flow.state = 'complete';
+    telemetry.capture({ event: 'agent_setup_result', runtime: 'stashbase', stage: 'login', outcome: 'success' });
+  }
 }
 
 /** Give a callback that arrived without a usable OAuth flow its own bounded
@@ -274,6 +278,9 @@ export function noteHostedOAuthAppReturn(now = Date.now()): {
 export function failHostedOAuth(flowId: string, message: string): void {
   const flow = pendingOAuthFlows.get(flowId);
   if (!flow) return;
+  if (flow.state !== 'error' && flow.state !== 'complete') {
+    telemetry.capture({ event: 'agent_setup_result', runtime: 'stashbase', stage: 'login', outcome: 'failed' });
+  }
   flow.state = 'error';
   flow.error = message;
 }
