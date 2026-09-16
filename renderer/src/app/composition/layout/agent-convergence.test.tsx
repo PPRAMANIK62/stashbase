@@ -118,6 +118,9 @@ vi.mock('@milkdown/crepe/builder', () => ({
 type AgentConnectionListener = Parameters<AgentSessionPort['connect']>[1];
 
 const FOLDER = '/project/notes';
+// Each case mounts the complete workspace and awaits several lazy surfaces.
+// Allow more than the composer's five-second wait under full-suite coverage load.
+const COMPOSITION_TEST_MS = 15_000;
 
 interface Harness {
   dependencies: AppDependencies;
@@ -278,70 +281,100 @@ afterEach(() => {
 });
 
 describe('J07 converge chat into a document', () => {
-  it('shows an Agent-written Canvas without taking the open document or focus', async () => {
-    const test = harness();
-    const listener = await converge(test);
-    const focusedBefore = document.activeElement;
+  it(
+    'shows an Agent-written Canvas without taking the open document or focus',
+    async () => {
+      const test = harness();
+      const listener = await converge(test);
+      const focusedBefore = document.activeElement;
 
-    test.setFiles(['Welcome.md', 'Canvas.md']);
-    settleWrite(listener, 'write-1', 'Canvas.md', '# Canvas v1');
+      test.setFiles(['Welcome.md', 'Canvas.md']);
+      settleWrite(listener, 'write-1', 'Canvas.md', '# Canvas v1');
 
-    expect(await screen.findByRole('treeitem', { name: 'Canvas.md' })).not.toBeNull();
-    expect(
-      screen.getByRole('tab', { name: 'Welcome.md, preview' }).getAttribute('aria-selected'),
-    ).toBe('true');
-    expect(screen.queryByRole('tab', { name: /^Canvas\.md/ })).toBeNull();
-    // The write must not pull focus out of wherever the user left it.
-    expect(document.activeElement).toBe(focusedBefore);
-    expect(test.dependencies.preparation.controlApi.sync).toHaveBeenCalledWith(
-      FOLDER,
-      expect.any(AbortSignal),
-    );
-  });
+      expect(await screen.findByRole('treeitem', { name: 'Canvas.md' })).not.toBeNull();
+      expect(
+        screen.getByRole('tab', { name: 'Welcome.md, preview' }).getAttribute('aria-selected'),
+      ).toBe('true');
+      expect(screen.queryByRole('tab', { name: /^Canvas\.md/ })).toBeNull();
+      // The write must not pull focus out of wherever the user left it.
+      expect(document.activeElement).toBe(focusedBefore);
+      expect(test.dependencies.preparation.controlApi.sync).toHaveBeenCalledWith(
+        FOLDER,
+        expect.any(AbortSignal),
+      );
+    },
+    COMPOSITION_TEST_MS,
+  );
 
-  it('opens the changed Canvas only when asked and adopts newer disk text', async () => {
-    const test = harness();
-    const listener = await converge(test);
+  it.each(['file result', 'reply link'] as const)(
+    'opens the Canvas from Chat via %s in Documents and keeps the conversation',
+    async (entry) => {
+      const test = harness();
+      const listener = await converge(test);
+      await userEvent.click(screen.getByRole('tab', { name: 'Chats' }));
 
-    test.setFiles(['Welcome.md', 'Canvas.md']);
-    settleWrite(listener, 'write-1', 'Canvas.md', '# Canvas v1');
+      test.setFiles(['Welcome.md', 'Canvas.md']);
+      settleWrite(listener, 'write-1', 'Canvas.md', '# Canvas v1');
+      act(() => listener.onEvent({ kind: 'text', delta: 'Read [Canvas](Canvas.md).' }));
+      expect(screen.getByRole('tab', { name: 'Chats' }).getAttribute('aria-selected')).toBe('true');
+      const composer = await messageEditor();
+      act(() => composer.dispatch({ changes: { from: 0, insert: 'An unfinished follow-up' } }));
 
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Open Canvas.md' }));
+      await userEvent.click(
+        entry === 'file result'
+          ? await screen.findByRole('button', { name: 'Open Canvas.md' })
+          : await screen.findByRole('link', { name: 'Canvas' }),
+      );
+      expect(screen.getByRole('tab', { name: 'Documents' }).getAttribute('aria-selected')).toBe(
+        'true',
+      );
+      expect((await messageEditor()).state.doc.toString()).toBe('An unfinished follow-up');
+      expect(test.listeners).toHaveLength(1);
 
-    // Opening from the transcript is browsing too: the Canvas takes the
-    // preview's place rather than a tab of its own.
-    expect(await screen.findByRole('tab', { name: 'Canvas.md, preview' })).not.toBeNull();
-    expect(screen.queryByRole('tab', { name: /^Welcome\.md/ })).toBeNull();
-    await waitFor(() => expect(markdownEditorFor('Canvas.md').markdown).toBe('# Canvas v1'));
+      // Opening from the transcript is browsing too: the Canvas takes the
+      // preview's place rather than a tab of its own.
+      expect(await screen.findByRole('tab', { name: 'Canvas.md, preview' })).not.toBeNull();
+      expect(screen.queryByRole('tab', { name: /^Welcome\.md/ })).toBeNull();
+      await waitFor(() => expect(markdownEditorFor('Canvas.md').markdown).toBe('# Canvas v1'));
 
-    test.setSource('Canvas.md', '# Canvas v2', 'c2');
-    settleWrite(listener, 'write-2', 'Canvas.md', '# Canvas v2');
+      test.setSource('Canvas.md', '# Canvas v2', 'c2');
+      settleWrite(listener, 'write-2', 'Canvas.md', '# Canvas v2');
 
-    await waitFor(() => expect(markdownEditorFor('Canvas.md').markdown).toBe('# Canvas v2'));
-  });
+      await waitFor(() => expect(markdownEditorFor('Canvas.md').markdown).toBe('# Canvas v2'));
+    },
+    COMPOSITION_TEST_MS,
+  );
 
-  it('meets the versioned conflict when the Canvas holds unsaved edits', async () => {
-    const test = harness();
-    const listener = await converge(test);
+  it(
+    'meets the versioned conflict when the Canvas holds unsaved edits',
+    async () => {
+      const test = harness();
+      const listener = await converge(test);
 
-    test.setFiles(['Welcome.md', 'Canvas.md']);
-    settleWrite(listener, 'write-1', 'Canvas.md', '# Canvas v1');
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Open Canvas.md' }));
-    await screen.findByRole('tab', { name: 'Canvas.md, preview' });
-    await waitFor(() => expect(markdownEditorFor('Canvas.md').markdown).toBe('# Canvas v1'));
+      test.setFiles(['Welcome.md', 'Canvas.md']);
+      settleWrite(listener, 'write-1', 'Canvas.md', '# Canvas v1');
+      await userEvent.setup().click(await screen.findByRole('button', { name: 'Open Canvas.md' }));
+      await screen.findByRole('tab', { name: 'Canvas.md, preview' });
+      await waitFor(() => expect(markdownEditorFor('Canvas.md').markdown).toBe('# Canvas v1'));
 
-    const canvas = markdownEditorFor('Canvas.md');
-    test.setSaveConflict(true);
-    test.setSource('Canvas.md', '# Canvas from the Agent', 'c3');
-    act(() => canvas.change?.(null, '# Canvas, reviewed', '# Canvas v1'));
+      const canvas = markdownEditorFor('Canvas.md');
+      test.setSaveConflict(true);
+      test.setSource('Canvas.md', '# Canvas from the Agent', 'c3');
+      act(() => canvas.change?.(null, '# Canvas, reviewed', '# Canvas v1'));
 
-    expect(await screen.findByRole('tab', { name: 'Canvas.md, unsaved changes' })).not.toBeNull();
-    expect(
-      await screen.findByRole('heading', { name: 'Canvas.md changed on disk' }, { timeout: 3_000 }),
-    ).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Use disk version' })).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Merge' })).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Keep my version' })).not.toBeNull();
-    expect(test.saves).toEqual([]);
-  });
+      expect(await screen.findByRole('tab', { name: 'Canvas.md, unsaved changes' })).not.toBeNull();
+      expect(
+        await screen.findByRole(
+          'heading',
+          { name: 'Canvas.md changed on disk' },
+          { timeout: 3_000 },
+        ),
+      ).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Use disk version' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Merge' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Keep my version' })).not.toBeNull();
+      expect(test.saves).toEqual([]);
+    },
+    COMPOSITION_TEST_MS,
+  );
 });

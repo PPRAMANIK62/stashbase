@@ -380,6 +380,8 @@ registered host boundaries; renderer shared types are a different layer.
 - Tabs stay unique across asynchronous opens. First edit keeps a preview; only
   kept tabs persist. History advances after open succeeds. Hidden panes are inert;
   mode/visibility changes preserve drafts, transcripts, focus, and session identity.
+  App composition switches to Documents when a user opens a Chat file result or
+  local file link, restoring the last Documents sidebar panel.
 - Refresh keeps usable content. Clean editors may adopt newer source; dirty ones
   retain drafts for conflict. Optimistic metadata rollback uses the last confirmed
   value and ignores superseded failures. Network failure is not scope retirement.

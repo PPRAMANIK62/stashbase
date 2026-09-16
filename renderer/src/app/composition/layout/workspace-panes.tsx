@@ -39,6 +39,7 @@ export interface WorkspacePanesProps {
   onCreateDraft(): void;
   onPrepare(source: SourceReference): void;
   onReprocess(source: SourceReference): void;
+  onShowDocuments(): void;
   session: WorkspaceSessionController;
   settings: SettingsCommand;
   sources: DocumentSources;
@@ -54,6 +55,7 @@ export function WorkspacePanes({
   onCreateDraft,
   onPrepare,
   onReprocess,
+  onShowDocuments,
   session,
   settings,
   sources,
@@ -74,7 +76,10 @@ export function WorkspacePanes({
           instructions={dependencies.agent.instructions}
           onOpenAgentSettings={() => settings.openSettings('agents')}
           onOpenExternal={(href) => void dependencies.documents.openExternal(href)}
-          onOpenSource={sources.open}
+          onOpenSource={(source) => {
+            sources.open(source);
+            onShowDocuments();
+          }}
           onReprocess={onReprocess}
           // The bundled runtime's only gate is the account, so the picker's
           // row starts the same browser sign-in the sidebar's footer row does.

@@ -527,7 +527,7 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
 
 **Intent:** [J07](../design-docs/journeys/README.md#j07-converge-chat-into-a-document).
 
-**Implementation:** Renderer: `renderer/src/features/agent/application/session-runtime.ts`, `renderer/src/features/documents/application/document-runtime.ts`.
+**Implementation:** Renderer: `renderer/src/features/agent/application/session-runtime.ts`, `renderer/src/features/documents/application/document-runtime.ts`, `renderer/src/app/composition/layout/workspace-panes.tsx`.
 Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction.ts`.
 
 **Status:** Release-dependent.
@@ -535,15 +535,25 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
 - **Contract Test:** `pnpm test:agent`, `pnpm test:mcp`,
   `pnpm test:project-files`, and `pnpm test:renderer` establish permission, version, and write boundaries, including literal
   dollar-sequence replacement.
+- **Composition Test:** `agent-convergence.test.tsx` exercises both a Chat file
+  result's Open action and a reply's local file link: each selects Documents,
+  shows the file, and retains the same conversation and unfinished follow-up.
 - **Driven Runtime Pass:** isolated built-app window-authorized write/edit
   (2026-09-14) persists literal replacements with version checks. It proves the
   file boundary, not a real conversation producing a requested draft/revision.
+  A controlled built desktop pass (2026-09-16), with a fixture Agent transport
+  and real document services, clicks both Open and a local Markdown link from
+  Chats. Both select Documents and display the file while retaining the same
+  Agent session and unfinished follow-up.
 - **AI Eval:** requested writing quality belongs to J10. Existing deterministic
   orchestration evidence is not document-specific diff evidence.
 - **Release Check:** real-runtime requested draft/revision followed by editor save.
-- **Test stability:** the Canvas composition case exceeded its five-second timeout
-  during the concurrent renderer coverage run; all three cases passed in isolation.
-  The full concurrent gate is not established as consistently green by that rerun.
+- **Validation:** the pre-commit coverage run passes all four Canvas cases and
+  all 1,456 renderer tests. The initial full-suite run exceeded the default test
+  timeout while the isolated case passed; the composition cases now allow time
+  for workspace startup and their bounded surface waits under coverage load.
+  The remaining renderer gates, host/service tests, types, service builds, and
+  built Electron smoke checks passed.
 
 ## J08: External MCP
 

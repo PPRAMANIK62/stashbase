@@ -229,6 +229,7 @@ function WorkspaceWindow() {
             onCreateDraft={newDraft}
             onPrepare={preparation.prepare}
             onReprocess={refresh.reprocess}
+            onShowDocuments={() => chrome.navigator.selectMode('documents')}
             session={session}
             settings={chrome.settings}
             sources={sources}
