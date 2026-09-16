@@ -12,7 +12,7 @@ with Claude Code and Codex, drawing on your own sources and past work.
 
 - 🔎 **From files to context.** Give your agent fast, accurate search across your
   sources with text extraction and semantic search.
-- 📝 **Code diff ≠ Doc diff.** Read edits in the flow of your document, without
+- 📝 **Doc diff ≠ Code diff.** Read edits in the flow of your document, without
   jumping between old and new lines.
 - ✍️ **Make it sound like you.** Use your past writing and edits to guide new
   drafts and preserve your voice.
