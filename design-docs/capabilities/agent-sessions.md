@@ -38,6 +38,10 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
 - Validate context before sending. Opening a document does not attach it; missing
   or changed context needs replacement, refresh, or explicit removal.
 - Model, effort, skills, and permission options follow the selected runtime.
+  Remember explicitly chosen thinking effort per project and Agent for new chats,
+  including after restart. A model that does not support that effort uses its own
+  default. Restoring history keeps that conversation's effort and never changes
+  the preference; selecting Default explicitly clears the saved effort.
   Options remain fixed during a turn. Instructions are standing session guidance,
   distinct from permissions, requests, and user-owned native instruction files.
 - Approval applies to its pending action only. Stop cancels unanswered approvals,

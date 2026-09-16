@@ -19,6 +19,132 @@ function workspace(preferences: AgentPreferencesPort) {
 }
 
 describe('project Agent preferences', () => {
+  it('keeps the chosen effort and draft while surfacing a failed preference write', async () => {
+    const preferences: AgentPreferencesPort = {
+      load: vi.fn(async () => [{ scope: scope.path, agent: 'codex' } as const]),
+      save: vi.fn(async () => {
+        throw new Error('Read-only');
+      }),
+    };
+    const runtime = workspace(preferences);
+    await runtime.loadPreferences();
+    const session = runtime.activeSession();
+    session.seedModels([
+      { id: 'codex', label: 'Codex', isDefault: true, supportedEfforts: ['high'] },
+    ]);
+    session.setDraft('Keep my idea');
+    session.setEffort('high');
+    await vi.waitFor(() =>
+      expect(runtime.preferences.getState().failure).toContain('Could not save'),
+    );
+    expect(session.store.getState()).toMatchObject({ draft: 'Keep my idea', effort: 'high' });
+    runtime.dispose();
+  });
+  it('persists effort per project and Agent without adopting history or catalog defaults', async () => {
+    const entries = new Map<string, Awaited<ReturnType<AgentPreferencesPort['load']>>[number]>();
+    const preferences: AgentPreferencesPort = {
+      load: vi.fn(async () => [...entries.values()]),
+      save: vi.fn(async (project, agent, _signal, effort) => {
+        const previous = entries.get(project.path);
+        entries.set(project.path, {
+          ...previous,
+          scope: project.path,
+          agent: effort === undefined ? agent : (previous?.agent ?? agent),
+          ...(effort === undefined ? {} : { efforts: { ...previous?.efforts, [agent]: effort } }),
+        });
+      }),
+    };
+    const models = [
+      {
+        id: 'model',
+        label: 'Model',
+        isDefault: true,
+        defaultEffort: 'medium',
+        supportedEfforts: ['medium', 'high'],
+      },
+    ];
+    const first = workspace(preferences);
+    await first.loadPreferences();
+    await first.chooseAgent('codex');
+    first.activeSession().seedModels(models);
+    first.activeSession().setEffort('high');
+    first.activeSession().setEffort('medium');
+    first.activeSession().setEffort('high');
+    await first.loadPreferences();
+    expect(entries.get(scope.path)?.efforts?.codex).toBe('high');
+    await first.chooseAgent('claude');
+    first.activeSession().seedModels(models);
+    expect(first.activeSession().store.getState().effort).toBeNull();
+    first.activeSession().setEffort('medium');
+    await first.chooseAgent('codex');
+    expect(first.activeSession().store.getState().effort).toBe('high');
+    first.setWindowFolder('/other');
+    await first.chooseAgent('codex');
+    expect(first.activeSession().store.getState().effort).toBeNull();
+    first.dispose();
+
+    const reopened = workspace(preferences);
+    await reopened.loadPreferences();
+    reopened.activeSession().seedModels(models);
+    expect(reopened.activeSession().store.getState()).toMatchObject({
+      agent: 'codex',
+      effort: 'high',
+    });
+    const writes = vi.mocked(preferences.save).mock.calls.length;
+    await reopened.restore({
+      id: 'history',
+      hasContent: true,
+      agent: 'codex',
+      scope,
+      title: 'Earlier',
+      lastModified: 1,
+    });
+    expect(vi.mocked(preferences.save).mock.calls.length).toBe(writes);
+    expect(reopened.newChat().store.getState().effort).toBe('high');
+    reopened
+      .activeSession()
+      .seedModels(models.map((model) => ({ ...model, supportedEfforts: ['medium'] })));
+    expect(reopened.activeSession().store.getState().effort).toBeNull();
+    expect(vi.mocked(preferences.save).mock.calls.length).toBe(writes);
+    reopened.activeSession().seedModels(models);
+    reopened.activeSession().setEffort('medium');
+    reopened.activeSession().setEffort(null);
+    await reopened.loadPreferences();
+    expect(entries.get(scope.path)?.efforts?.codex).toBeNull();
+    reopened.dispose();
+  });
+  it('carries explicit thinking effort into a new Codex chat and its connection', async () => {
+    let id = 0;
+    const port = idleAgentSessionPort();
+    const runtime = createAgentWorkspaceRuntime({
+      createId: () => String(++id),
+      folderPath: scope.path,
+      port,
+    });
+    await runtime.chooseAgent('codex');
+    const first = runtime.activeSession();
+    const models = [
+      {
+        id: 'gpt-codex',
+        label: 'Codex',
+        isDefault: true,
+        defaultEffort: 'medium',
+        supportedEfforts: ['medium', 'high'],
+      },
+    ];
+    first.seedModels(models);
+    first.setEffort('high');
+    first.setDraft('Keep this conversation');
+    const next = runtime.newChat();
+    next.seedModels(models);
+    expect(next.store.getState().effort).toBe('high');
+    next.start();
+    expect(port.connect).toHaveBeenLastCalledWith(
+      expect.objectContaining({ agent: 'codex', effort: 'high' }),
+      expect.anything(),
+    );
+    runtime.dispose();
+  });
   it('remembers an explicit choice across new chats and restarts, isolated from other projects', async () => {
     const entries: Awaited<ReturnType<AgentPreferencesPort['load']>> = [];
     const preferences: AgentPreferencesPort = {

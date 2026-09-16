@@ -94,7 +94,11 @@ export function isEmbedderProvider(value: unknown): value is EmbedderProvider {
 }
 
 export interface AppConfigFile {
-  agentPreferences?: Array<{ scope: string; agent: 'stashbase' | 'codex' | 'claude' }>;
+  agentPreferences?: Array<{
+    scope: string;
+    agent: 'stashbase' | 'codex' | 'claude';
+    efforts?: Partial<Record<'stashbase' | 'codex' | 'claude', string | null>>;
+  }>;
   telemetry?: import('./telemetry.ts').TelemetryState;
   recentFolders?: RecentFolder[];
   /** Application-wide embedding provider configuration. */

@@ -1,4 +1,5 @@
 /** Pure session transitions keep transport state separate from turn outcomes. */
+import { supportedEffort } from './model-choice';
 import {
   agentActiveTurn,
   agentTurnIsActive,
@@ -134,13 +135,14 @@ export function transitionAgentSession(
       return { ...state, effort: action.effort };
     case 'models': {
       const catalogIds = new Set(action.models.map((model) => model.id));
-      return {
+      const next = {
         ...state,
         activeModel: action.activeModel ?? state.activeModel,
         models: action.models,
         model:
           action.fallback || (state.model && !catalogIds.has(state.model)) ? null : state.model,
       };
+      return { ...next, effort: supportedEffort(next, state.effort) };
     }
     case 'skills': {
       const catalogIds = new Set(action.skills.map((skill) => skill.id));

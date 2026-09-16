@@ -25,13 +25,27 @@ test('project Agent choices persist in isolation, reject unregistered scopes, an
       const server = app.listen(0, '127.0.0.1');
       await new Promise(resolve => server.once('listening', resolve));
       const url = 'http://127.0.0.1:' + server.address().port + '/api/agent-preferences';
-      const save = (scope, agent) => fetch(url, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify({scope,agent}) });
+      const save = (scope, agent, effort) => fetch(url, { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify({scope,agent,...(effort === undefined ? {} : {effort})}) });
       assert.deepEqual(await (await fetch(url)).json(), []);
       assert.equal((await save(project, 'codex')).status, 200);
       assert.equal((await save(nested, 'claude')).status, 200);
       assert.equal((await save('/unregistered', 'codex')).status, 404);
       assert.equal((await save(project, 'other')).status, 400);
       assert.deepEqual(await (await fetch(url)).json(), [{scope:filesystemPath.absolute(project),agent:'codex'}, {scope:filesystemPath.absolute(nested),agent:'claude'}]);
+      assert.equal((await save(project, 'codex', 'high')).status, 200);
+      assert.equal((await save(project, 'claude')).status, 200);
+      assert.equal((await save(project, 'claude', 'medium')).status, 200);
+      assert.equal((await save(project, 'codex', 'low')).status, 200);
+      assert.deepEqual(config.readAppConfigStrict().agentPreferences.find(entry => entry.scope === filesystemPath.absolute(project)), {
+        scope: filesystemPath.absolute(project), agent: 'claude', efforts: {codex:'low',claude:'medium'},
+      });
+      assert.equal((await save(project, 'codex', null)).status, 200);
+      assert.equal((await save(project, 'codex', '')).status, 400);
+      assert.equal((await save(project, 'codex', 2)).status, 400);
+      assert.equal((await save('/unregistered', 'codex', 'high')).status, 404);
+      const saved = (await (await fetch(url)).json()).find(entry => entry.scope === filesystemPath.absolute(project));
+      assert.deepEqual(saved.efforts, {codex:null,claude:'medium'});
+      assert.equal(saved.agent, 'claude');
       assert.equal(config.readAppConfigStrict().workspace.showHiddenFiles, true);
       const { removeRecentAsync } = await import('./server/folder.ts');
       await removeRecentAsync(project);

@@ -1,5 +1,5 @@
 import type express from 'express';
-import { agentPreferencesSchema, projectAgentPreferenceSchema } from '../../shared/protocols/http/agent-preferences.ts';
+import { agentPreferencesSchema, projectAgentPreferenceUpdateSchema } from '../../shared/protocols/http/agent-preferences.ts';
 import { readAppConfigStrict, writeAppConfigStrict } from '../app-config.ts';
 import { exactRegisteredFolderRootAsync } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
@@ -14,9 +14,9 @@ export function mount(app: express.Express): void {
   });
   app.put('/api/agent-preferences', async (req, res) => {
     try {
-      const parsed = projectAgentPreferenceSchema.safeParse(req.body);
+      const parsed = projectAgentPreferenceUpdateSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: 'Invalid project Agent choice.' });
-      const { agent } = parsed.data;
+      const { agent, effort } = parsed.data;
       if (!filesystemPath.isAbsolute(parsed.data.scope)) return res.status(400).json({ error: 'Project must be an absolute path.' });
       readAppConfigStrict();
       const scope = await exactRegisteredFolderRootAsync(parsed.data.scope);
@@ -24,9 +24,18 @@ export function mount(app: express.Express): void {
       const config = readAppConfigStrict();
       if (!config.recentFolders?.some(folder => filesystemPath.equal(folder.path, scope))) return res.status(404).json({ error: 'Project is no longer registered.' });
       const existing = agentPreferencesSchema.parse(config.agentPreferences ?? []);
-      config.agentPreferences = [...existing.filter(entry => !filesystemPath.equal(entry.scope, scope)), { scope, agent }];
+      const previous = existing.find(entry => filesystemPath.equal(entry.scope, scope));
+      const updated = {
+        ...previous,
+        scope,
+        // Editing an older conversation's effort must not change the Agent
+        // explicitly chosen for future chats in this project.
+        agent: effort === undefined ? agent : previous?.agent ?? agent,
+        ...(effort === undefined ? {} : { efforts: { ...previous?.efforts, [agent]: effort } }),
+      };
+      config.agentPreferences = [...existing.filter(entry => !filesystemPath.equal(entry.scope, scope)), updated];
       writeAppConfigStrict(config);
-      res.json({ scope, agent });
+      res.json(updated);
     } catch (error) { sendError(res, error); }
   });
 }

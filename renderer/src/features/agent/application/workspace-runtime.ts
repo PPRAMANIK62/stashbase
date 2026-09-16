@@ -158,12 +158,14 @@ export function createAgentWorkspaceRuntime({
       },
       id,
       onFilesChanged,
+      onEffortChange: projectAgents.rememberEffort,
       port,
       recordUsage,
       scheduler,
       scope,
       title,
     });
+    projectAgents.seedEffort(session);
     const mounted: MountedAgentSession = {
       followsWindow,
       runtime: session,
@@ -188,8 +190,7 @@ export function createAgentWorkspaceRuntime({
     async loadPreferences() {
       if (!preferencesPort || !(await projectAgents.load()) || disposed) return;
       for (const { runtime: session } of sessions.values()) {
-        const state = session.store.getState();
-        if (agentSessionIsUnstarted(state)) session.changeAgent(preferred(state.scope));
+        projectAgents.apply(session);
       }
     },
     async chooseAgent(agent) {
@@ -205,6 +206,7 @@ export function createAgentWorkspaceRuntime({
         return false;
       if (agent !== current.agent && !session.changeAgent(agent))
         runtime.newChat(agent, current.scope);
+      else if (agent !== current.agent) projectAgents.seedEffort(session);
       return true;
     },
     activate(id) {
@@ -276,6 +278,7 @@ export function createAgentWorkspaceRuntime({
           ? blank
           : mountSession(id, agent, nextScope, followsCurrentFolder);
       mounted.followsWindow = followsCurrentFolder;
+      projectAgents.seedEffort(mounted.runtime);
       store.setState((state) => activateAgentTab(state, id), true);
       return mounted.runtime;
     },

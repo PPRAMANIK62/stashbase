@@ -56,6 +56,7 @@ export function createAgentSessionRuntime({
   environment = () => null,
   id,
   onFilesChanged,
+  onEffortChange,
   recordUsage,
   port,
   scheduler = createDefaultScheduler(),
@@ -304,7 +305,13 @@ export function createAgentSessionRuntime({
       }
     },
     setAccessMode: controls.setAccessMode,
-    setEffort: controls.setEffort,
+    setEffort(effort) {
+      const previous = state().effort;
+      controls.setEffort(effort);
+      const current = state();
+      if (current.effort !== previous)
+        onEffortChange?.(current.scope, current.agent, current.effort);
+    },
     setModel: controls.setModel,
     setSkill(skill) {
       if (disposed || state().skill === skill) return;

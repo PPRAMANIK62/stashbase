@@ -233,6 +233,11 @@ Signing and release publication belong to [Release Runbook](release-pipeline.md)
   Claude replacement waits for native iterator/query cleanup after verifying scope.
 - Project Agent preferences are explicit choices in Node-owned app config, keyed
   by registered project scope. Readiness and history restore never write them.
+  Thinking effort is stored separately per Agent in that project. Composer choices
+  update the window cache immediately and persist in order; new/blank chats seed
+  from that cache, while history keeps its native effort. Catalog admission clears
+  unsupported effort in the session without overwriting the saved choice. Effort
+  writes preserve the preferred Agent and other runtimes' efforts.
   Missing preference means Default; failed preference reads/writes remain visible.
   Access requested on Send retains a scope/session/draft snapshot and cancellation
   owner. Only confirmed readiness may continue that same submission once; navigation,

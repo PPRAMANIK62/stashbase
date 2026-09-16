@@ -95,6 +95,8 @@ export interface AgentSessionRuntimeOptions {
   /** Called after a write tool settles successfully or a native diff
    *  arrives, so the shell can refresh what the change touched. */
   onFilesChanged?: ((change: AgentFilesChanged) => void) | undefined;
+  /** Explicit composer choices only; native replay and catalog defaults do not save preferences. */
+  onEffortChange?: ((scope: AgentScope, agent: AgentId, effort: string | null) => void) | undefined;
   port: AgentSessionPort;
   scheduler?: AgentReconnectScheduler | undefined;
   scope: AgentScope;

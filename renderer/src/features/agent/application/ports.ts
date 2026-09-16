@@ -105,7 +105,18 @@ export interface AgentContextPort {
 }
 
 /** Explicit choices only: opening history and catalog readiness never write this. */
+export interface ProjectAgentPreference {
+  scope: string;
+  agent: AgentId;
+  efforts?: Partial<Record<AgentId, string | null | undefined>> | undefined;
+}
+
 export interface AgentPreferencesPort {
-  load(signal: AbortSignal): Promise<Array<{ scope: string; agent: AgentId }>>;
-  save(scope: AgentScope, agent: AgentId, signal: AbortSignal): Promise<void>;
+  load(signal: AbortSignal): Promise<ProjectAgentPreference[]>;
+  save(
+    scope: AgentScope,
+    agent: AgentId,
+    signal: AbortSignal,
+    effort?: string | null,
+  ): Promise<void>;
 }

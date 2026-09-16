@@ -18,6 +18,15 @@ export interface ModelChoice {
   efforts: readonly string[];
 }
 
+/** Retain a pending preference until a catalog identifies the effective model. */
+export function supportedEffort(
+  state: Pick<AgentSessionState, 'activeModel' | 'effort' | 'model' | 'models'>,
+  effort: string | null,
+): string | null {
+  const choice = modelChoice(state);
+  return choice.model && effort && !choice.efforts.includes(effort) ? null : effort;
+}
+
 export function modelChoice(
   state: Pick<AgentSessionState, 'activeModel' | 'effort' | 'model' | 'models'>,
 ): ModelChoice {

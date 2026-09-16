@@ -174,8 +174,7 @@ export function createSessionControls({
       if (changedOptions)
         transition({
           kind: 'set-context-issue',
-          message:
-            'Agent changed. Model, thinking, and skill choices were reset. Review your request before sending.',
+          message: 'Agent changed. Review model, thinking, and skill choices before sending.',
         });
       return true;
     },

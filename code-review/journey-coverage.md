@@ -386,6 +386,19 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**New-chat thinking effort (2026-09-16):** project preferences persist explicit
+effort separately for each Agent. Workspace/session tests reproduce High reverting
+to Medium, verify the next Codex connection receives High, preserve project/runtime
+isolation and restart choices, and keep history/catalog defaults from changing the
+preference. Host-route tests exercise persistence, invalid input, explicit Default,
+and effort updates without switching the project's preferred Agent.
+An isolated built-main/host/renderer pass selected Codex High through the composer,
+verified the real preferences route persisted it, created a new chat and inspected
+its `effort=high` socket request, then reloaded the renderer and created another
+chat with High retained. The catalog/socket were controlled; this is not a live
+Codex provider run. Validation: all 12 renderer gates, 57 configuration tests,
+96 protocol tests, host types, service builds, and documentation checks passed.
+
 **Request and attachment lifetime (2026-09-16):** the hosted broker binds
 requests to the active turn's cancellation signal before reading the body.
 Retirement closes local requests and aborts upstream work; token acquisition and

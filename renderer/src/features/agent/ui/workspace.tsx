@@ -100,6 +100,7 @@ function ChatWorkspace({
   });
   const readyAgent = gate.kind === 'ready' ? gate.agent : null;
   const preferences = useStore(runtime.preferences);
+  const preferencesUnavailable = preferences.loading || Boolean(preferences.failure);
   const selectedAgent = catalog.agents.find((agent) => agent.id === state.agent) ?? {
     id: state.agent,
     label: agentLabel(state.agent),
@@ -285,7 +286,7 @@ function ChatWorkspace({
                         ? catalog.agents
                         : [selectedAgent, ...catalog.agents]
                     }
-                    disabled={busy || preferences.loading || Boolean(preferences.failure)}
+                    disabled={busy || preferencesUnavailable}
                     onAgentChange={(agent) => {
                       void runtime.chooseAgent(agent);
                     }}
@@ -308,15 +309,14 @@ function ChatWorkspace({
                     onEffortChange={active.setEffort}
                     onModelChange={active.setModel}
                     onRequestCatalog={active.start}
-                    state={{ ...state, activeTurn: busy }}
+                    state={{ ...state, activeTurn: busy || preferencesUnavailable }}
                   />
                 ) : null
               }
               sendable={
                 !catalog.loading &&
                 !catalog.error &&
-                !preferences.loading &&
-                !preferences.failure &&
+                !preferencesUnavailable &&
                 state.delivery !== 'unknown' &&
                 state.delivery !== 'stopping' &&
                 state.delivery !== 'preparing' &&
