@@ -157,9 +157,14 @@ export function WorkspaceTitlebar({
             // window rather than two surfaces agreeing to change at once.
             // `bg-background` is the row's own ground: the cover has to be
             // opaque or it would reveal the strip it is meant to hide.
+            // The name reads from the left, where the strip it covers starts
+            // and where the pane's own name row keeps its mark: the cover is
+            // laid against the slot's padding box, so its own 8px carries the
+            // mark to the 16px inset that row uses, and the chat is named in
+            // the same column in both layouts.
             <motion.div
               animate={{ clipPath: 'inset(0 0 0 0%)' }}
-              className="absolute inset-0 flex items-center justify-center bg-background"
+              className="absolute inset-0 flex items-center bg-background pl-2"
               exit={{ clipPath: 'inset(0 0 0 100%)' }}
               initial={{ clipPath: 'inset(0 0 0 100%)' }}
               key="chat"

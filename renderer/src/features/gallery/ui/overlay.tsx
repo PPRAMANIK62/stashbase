@@ -63,7 +63,8 @@ export function GalleryOverlay({
         <DialogHeader className="shrink-0">
           <DialogTitle>Gallery</DialogTitle>
           <DialogDescription>
-            Explore how people organize files and write with Agents. Find ideas for your own.
+            Explore how people organize files and write with agents. Find ideas for your own
+            workflow.
           </DialogDescription>
         </DialogHeader>
         <GalleryIndexRecovery recovery={recovery} />

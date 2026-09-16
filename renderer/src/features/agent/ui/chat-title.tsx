@@ -1,7 +1,8 @@
 /** The active Chat's name for the workspace titlebar: the Agent's mark and
- *  the conversation's title, centred in the row's shared slot while the
- *  Chat has the whole card and the pane draws no name row of its own. It
- *  names and does not rename: the Chats panel beside it owns renaming. */
+ *  the conversation's title, at the left of the row's shared slot while the
+ *  Chat has the whole card and the pane draws no name row of its own, on the
+ *  column that row would have named it in. It names and does not rename: the
+ *  Chats panel beside it owns renaming. */
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 

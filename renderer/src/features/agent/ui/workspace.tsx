@@ -267,7 +267,7 @@ function ChatWorkspace({
               onSkillChange={active.setSkill}
               onStop={active.interrupt}
               onSend={access.send}
-              placeholder={armedSkill?.argumentHint ?? promptPlaceholder ?? 'Ask or write…'}
+              placeholder={armedSkill?.argumentHint ?? promptPlaceholder ?? 'Write with StashBase…'}
               placeholderIsPrompt={promptPlaceholder !== null}
               queue={state.queuedPrompts.map(({ context, id, text }) => ({
                 files: context.flatMap((item) =>

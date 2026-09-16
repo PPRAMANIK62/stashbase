@@ -328,7 +328,8 @@ export function ProjectWelcome({
           <section className="mt-10 w-full max-w-5xl">
             <h2 className="text-title font-medium">Or start from a project in the Gallery</h2>
             <p className="mt-1 max-w-lg text-body leading-relaxed text-muted-foreground">
-              Explore how people organize files and write with Agents. Find ideas for your own.
+              Explore how people organize files and write with agents. Find ideas for your own
+              workflow.
             </p>
             <div className="mt-4">{gallery}</div>
           </section>

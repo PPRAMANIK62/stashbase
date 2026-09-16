@@ -51,14 +51,14 @@ describe('Agent workspace', () => {
     await agentGateLifted();
 
     // Taking a suggestion fills the draft without starting a turn.
-    expect(screen.getByText('Help me explore an idea')).not.toBeNull();
+    expect(screen.getByText('Brainstorm article ideas from this project')).not.toBeNull();
     expect(screen.queryByRole('button', { name: /Build/u })).toBeNull();
 
     const field = screen.getByRole('textbox', { name: 'Message' });
     await userEvent.click(field);
     await userEvent.keyboard('{Tab}');
 
-    expect(draftOf(runtime)).toBe('Help me explore an idea');
+    expect(draftOf(runtime)).toBe('Brainstorm article ideas from this project');
     // Filled, not sent: the visible request stays the reader's to edit, so
     // what the Agent receives is still exactly what the transcript records.
     expect(port.connect).not.toHaveBeenCalled();
