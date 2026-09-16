@@ -215,18 +215,21 @@ export function WorkspaceSidebar({
                   key={workspace.scope.generation}
                   runtime={workspace}
                 >
-                  <FileTree
-                    api={dependencies.workspace.adapters.files}
-                    {...(folder.hiddenFiles ? { hiddenFiles: folder.hiddenFiles } : {})}
-                    key={workspace.scope.generation}
-                    onOpenSource={sources.open}
-                    onReprocess={onReprocess}
-                    onScopeLost={sources.recoverLostScope}
-                    mutateSources={sources.mutate}
-                    revealLabel={dependencies.workspace.revealLabel}
-                    rowMarkers={folder.rowMarkers}
-                    runtime={workspace}
-                  />
+                  {(importFiles) => (
+                    <FileTree
+                      api={dependencies.workspace.adapters.files}
+                      importFiles={importFiles}
+                      {...(folder.hiddenFiles ? { hiddenFiles: folder.hiddenFiles } : {})}
+                      key={workspace.scope.generation}
+                      onOpenSource={sources.open}
+                      onReprocess={onReprocess}
+                      onScopeLost={sources.recoverLostScope}
+                      mutateSources={sources.mutate}
+                      revealLabel={dependencies.workspace.revealLabel}
+                      rowMarkers={folder.rowMarkers}
+                      runtime={workspace}
+                    />
+                  )}
                 </FileImport>
               ) : (
                 <p className="px-4 py-2 text-caption text-muted-foreground">Loading files…</p>

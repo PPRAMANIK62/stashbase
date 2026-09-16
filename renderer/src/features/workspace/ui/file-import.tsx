@@ -13,7 +13,7 @@ export function FileImport({
   runtime,
 }: {
   api: UploadPort;
-  children: ReactNode;
+  children: (importAction: { disabled: boolean; run(): void }) => ReactNode;
   runtime: WorkspaceRuntime;
 }) {
   const [folderDropped, setFolderDropped] = useState(false);
@@ -39,15 +39,7 @@ export function FileImport({
         if (!hasFolder) void state.importFiles(Array.from(event.dataTransfer.files));
       }}
     >
-      <div className="px-2 pb-2">
-        <Button
-          disabled={state.pending}
-          onClick={() => input.current?.click()}
-          size="compact"
-          variant="ghost"
-        >
-          {state.pending ? 'Importing…' : 'Import files…'}
-        </Button>
+      <div className="px-2">
         <input
           aria-label="Choose files to import"
           hidden
@@ -68,6 +60,7 @@ export function FileImport({
         )}
         {state.failure && <FailureNotice failure={state.failure} />}
         <div aria-live="polite" className="text-caption text-muted-foreground">
+          {state.pending && <p>Importing…</p>}
           {state.imported > 0 && (
             <p>
               {state.imported} {state.imported === 1 ? 'file' : 'files'} imported.
@@ -88,7 +81,7 @@ export function FileImport({
           )}
         </div>
       </div>
-      {children}
+      {children({ disabled: state.pending, run: () => input.current?.click() })}
     </div>
   );
 }

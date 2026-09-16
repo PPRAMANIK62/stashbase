@@ -10,6 +10,7 @@ import {
   PencilLine,
   RefreshCw,
   Trash2,
+  Upload,
   type LucideIcon,
 } from 'lucide-react';
 import { useState, type MouseEvent, type ReactElement, type ReactNode } from 'react';
@@ -31,6 +32,7 @@ export type FileTreeMenuTarget =
     };
 
 export interface FileTreeMenuActions {
+  importFiles?: { disabled: boolean; run(): void } | undefined;
   onCreate(entryKind: WorkspaceEntry['kind'], parentPath: string): void;
   onDelete(entry: WorkspaceEntry): void;
   onRename(entry: WorkspaceEntry): void;
@@ -66,6 +68,9 @@ function actionsFor(
   ];
   if (target.kind === 'space') {
     const rows: MenuRow[] = create('');
+    if (actions.importFiles) {
+      rows.push({ icon: Upload, label: 'Import files…', ...actions.importFiles });
+    }
     if (actions.hiddenFiles) {
       const { disabled, shown, toggle } = actions.hiddenFiles;
       rows.push('separator', {

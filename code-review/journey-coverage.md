@@ -200,13 +200,18 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
 - **AI Eval:** not required.
 - **Release Check:** real OS folder picker, file drop, and packaged public Git import.
 - **File import (2026-09-16):** Files exposes `FileImport` through
-  `useFileImport` and `createUploadAdapter`. Picking or dropping files copies
+  `useFileImport` and `createUploadAdapter`. The file tree's empty-space context
+  menu offers Import files; no idle import row precedes the file list.
+  `file-import.test.tsx` exercises menu-to-picker wiring and pending/completed
+  feedback alongside an existing file listing. Picking or dropping files copies
   them into the captured project root. Partial results retain successful paths
   and allow retry of refused files only; lost responses require checking the
   refreshed listing. Adapter/hook tests cover partial retry and project retirement.
   An isolated built Electron pass supplies browser File objects through the input
   and a DOM drop, verifies actual server publication, preserves a colliding source,
-  and observes confirmation/tree refresh. The native OS chooser/drop remains a release check.
+  and observes confirmation/tree refresh. The context-menu follow-up also verifies
+  chooser activation and visually checks the idle list without an import row.
+  The native OS chooser/drop remains a release check.
 - **Gap:** no cross-platform atomic no-replace directory publication primitive;
   concurrent user additions/edits must survive rollback. See
   [File Transactions](architecture.md#import-publication).

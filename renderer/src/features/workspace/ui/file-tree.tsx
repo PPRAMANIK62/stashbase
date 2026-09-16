@@ -1,8 +1,5 @@
 /**
- * The Files tree.
- *
- * This module owns the tree's decisions and nothing else: which rows are
- * rendered, what a gesture means, and where focus goes after a mutation. A row
+ * The Files tree owns row visibility, gestures, and focus after mutations. A row
  * draws itself (`file-tree-rows`), a group animates itself
  * (`file-tree-group`), the keyboard contract is a pure function
  * (`file-tree-keyboard`), and the roving tab stop lives in a hook
@@ -44,7 +41,7 @@ import { useTreeDraft } from './file-tree-draft';
 import { tabStopPath, useTreeRowFocus } from './file-tree-focus';
 import { treeGestures } from './file-tree-gestures';
 import { TreeGroup, TreeProximityHighlight } from './file-tree-group';
-import { FileTreeMenu, type FileTreeMenuTarget } from './file-tree-menu';
+import { FileTreeMenu, type FileTreeMenuActions, type FileTreeMenuTarget } from './file-tree-menu';
 import {
   hoverRect,
   itemKey,
@@ -70,6 +67,7 @@ export type { FileTreeRowMarker };
 
 export interface FileTreeProps {
   api: FilesPort;
+  importFiles?: FileTreeMenuActions['importFiles'];
   /** Opens a source. A click browses, which opens a preview; a double click,
    *  and a file the tree just created, ask for a tab that stays. */
   onOpenSource?: ((source: SourceReference, options?: TreeOpenOptions) => void) | undefined;
@@ -94,6 +92,7 @@ export interface FileTreeProps {
 export function FileTree({
   api,
   hiddenFiles,
+  importFiles,
   onOpenSource,
   onReprocess,
   onScopeLost,
@@ -312,6 +311,7 @@ export function FileTree({
   return (
     <FileTreeMenu
       actions={{
+        importFiles,
         onCreate: operations.beginCreate,
         onDelete: operations.requestDelete,
         onRename: (entry) => {
