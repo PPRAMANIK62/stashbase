@@ -48,18 +48,27 @@ describe('Agent Markdown', () => {
   it('renders math without enabling trusted HTML or external resource commands', () => {
     const { container } = render(
       <AgentMarkdown
-        markdown={String.raw`Inline $x^2$.
+        markdown={String.raw`Inline $$x^2$$.
 
 $$
 \frac{1}{2}
 $$
 
-$\href{javascript:alert(1)}{unsafe}$`}
+$$\href{javascript:alert(1)}{unsafe}$$`}
       />,
     );
     expect(container.querySelectorAll('math')).toHaveLength(3); // dom-contract: KaTeX's accessible MathML output
     expect(screen.queryByRole('link')).toBeNull();
     expect(container.textContent).not.toContain('$$');
+  });
+
+  it('keeps prices as written instead of reading them as math', () => {
+    const { container } = render(
+      <AgentMarkdown markdown="Sync costs $4 per month billed annually or $5 billed monthly." />,
+    );
+
+    expect(container.querySelectorAll('math')).toHaveLength(0); // dom-contract: KaTeX renders no MathML for plain prose
+    expect(container.textContent).toContain('$4 per month billed annually or $5');
   });
 
   it('opens only project-resolved file references and keeps refused paths inert', async () => {

@@ -116,7 +116,9 @@ export const AgentMarkdown = memo(function AgentMarkdown({
     >
       <ReactMarkdown
         components={markdownComponents({ onOpenExternal, onOpenSource, sourceFor })}
-        remarkPlugins={[remarkGfm, remarkMath]}
+        // Single-dollar text math would swallow ordinary prices ("$4 ... $5");
+        // math still opens with two dollars or a ```math fence.
+        remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
         rehypePlugins={[
           [rehypeKatex, { trust: false, strict: 'ignore', maxExpand: 1000, maxSize: 20 }],
         ]}
