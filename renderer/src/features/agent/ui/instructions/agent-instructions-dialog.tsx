@@ -18,16 +18,19 @@ import { textFieldClass } from '@/shared/ui/text-field';
  * the browser's furniture, not the product's.
  *
  * It draws no focus indicator. The field is the dialog's only content and the
- * panel hands it the caret as it opens, so a ring would stand there the whole
- * time the dialog is up — chrome rather than a state — and it would be the one
- * colored thing on a monochrome panel. The caret already says where the typing
- * lands. `outline-none` keeps the base-layer fallback ring off for the same
- * reason. */
+ * panel hands it the caret as it opens, so the shared field ring would stand
+ * there the whole time the dialog is up — chrome rather than a state — and it
+ * would be the one colored thing on a monochrome panel. The caret already says
+ * where the typing lands, and nothing else here can take focus by keyboard
+ * without the reader having just left this field. `focus-visible:ring-0` turns
+ * the shared ring off; `outline-none` keeps the base-layer fallback off for the
+ * same reason. */
 // The editor sits on the dialog's own raised surface and holds a file's text,
 // so it takes the panel corner, a mono face, and a fixed height it does not
 // let the reader drag.
 const FIELD_CLASS = textFieldClass(
   'h-[min(52vh,26rem)] resize-none overflow-auto bg-surface-3 font-mono text-caption leading-relaxed text-foreground',
+  'focus-visible:ring-0',
   shapeTokens.panel,
 );
 
@@ -65,16 +68,15 @@ export function AgentInstructionsDialog({
       <DialogContent width="wide">
         <DialogHeader>
           <DialogTitle>Instructions</DialogTitle>
-          {/* Both lines are context, not content, so they take the quieter ink
-           *  the sidebar's group labels already use rather than the muted tone
-           *  a dialog states facts in. The field is the thing to look at. */}
+          {/* One line of context, not content, so it takes the quieter ink the
+           *  sidebar's group labels already use rather than the muted tone a
+           *  dialog states facts in. The field is the thing to look at. What
+           *  the field is for and when an edit takes effect are two short facts
+           *  about the same object: a forced break made them read as two
+           *  competing subtitles, so they run on and wrap only if the scope
+           *  name is long enough to need it. */}
           <DialogDescription className="text-muted-foreground/70">
-            Tailor the Agent’s responses in {scopeName}.
-            {/* Its own line: when an edit takes effect is a separate fact from
-             *  what the field is for, and a scope with a long name would
-             *  otherwise push the two into one ragged block. The break alone
-             *  separates them at this weight, so it takes no step above it. */}
-            <span className="block">Changes apply to new chats.</span>
+            Tailor the Agent’s responses in {scopeName}. Changes apply to new chats.
           </DialogDescription>
         </DialogHeader>
         <textarea
