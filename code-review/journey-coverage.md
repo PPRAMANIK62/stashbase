@@ -489,6 +489,11 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
   registered-project history still loads. Isolated credentials leave installed
   Codex history unavailable; this pass does not establish authenticated native
   history or a real-provider turn.
+  A built Storybook pass in Electron (2026-09-17) checks the neutral permission
+  card in light and dark themes. Allow and Reject remove the decision controls,
+  show Running and Denied respectively, and return focus to the heading. This
+  verifies the rendered card and its controlled reply callback, not native
+  Agent execution.
 - **AI Eval:** mechanics do not establish prompt adherence or writing quality;
   see J10 and J12.
 - **Release Check:** signed bundled OpenCode executability plus a fake-gateway

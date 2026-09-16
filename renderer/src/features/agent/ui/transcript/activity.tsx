@@ -297,7 +297,7 @@ export function AgentPermissionCard({
   return (
     <div
       className={cn(
-        'relative flex min-h-[60px] min-w-0 flex-col overflow-hidden border border-decision/30 bg-decision-soft/45 pb-4 shadow-sm',
+        'relative flex min-h-[60px] min-w-0 flex-col overflow-hidden border border-border bg-surface-2 pb-4',
         shape.panel,
       )}
     >

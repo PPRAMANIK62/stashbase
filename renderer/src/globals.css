@@ -74,11 +74,11 @@
   --destructive-light: light-dark(#fef2f2, #450a0a);
 
   /* Agent work provenance and decisions. Provenance speaks in plain ink —
-     the monochrome theme keeps no cyan voice — while decisions keep the
-     amber voice defined by the product style contract. */
+     the monochrome theme keeps no cyan voice — while a decision keeps the
+     amber voice as a single mark: the icon on the card that asks, never a
+     wash behind a card the transcript repeats. */
   --working: var(--foreground);
   --decision: light-dark(#b45309, #fbbf24);
-  --decision-soft: light-dark(#fffbeb, #451a03);
 
   /* Diff evidence: added lines read green, removed lines read red.
      The wash behind a whole line and the stronger tint behind the changed
@@ -343,7 +343,6 @@
   --color-destructive-light: var(--destructive-light);
   --color-working: var(--working);
   --color-decision: var(--decision);
-  --color-decision-soft: var(--decision-soft);
   --color-diff-add: var(--diff-add);
   --color-diff-remove: var(--diff-remove);
   --color-hover: var(--hover);
