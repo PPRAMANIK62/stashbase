@@ -391,6 +391,15 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Agent switching:** `application/session/controls.ts` resets runtime-specific
+choices without adding a composer notice. The session recovery test switches a
+Codex draft with model, effort, and skill selections to Default, verifying the
+draft survives and no context issue is introduced. A driven built-Storybook pass
+also switched a Codex draft with a selected model and High effort to Default,
+confirming the draft remained and no notice appeared. This uses controlled ports,
+not a packaged app or live provider. All 12 renderer gates, host types, Electron
+tests and smoke, service builds, and documentation validation passed.
+
 **New-chat thinking effort (2026-09-16):** project preferences persist explicit
 effort separately for each Agent. Workspace/session tests reproduce High reverting
 to Medium, verify the next Codex connection receives High, preserve project/runtime

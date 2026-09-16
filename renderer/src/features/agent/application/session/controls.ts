@@ -165,17 +165,11 @@ export function createSessionControls({
     },
     changeAgent(agent: AgentId) {
       if (disposed() || !agentCanChangeAgent(state())) return false;
-      const changedOptions = Boolean(state().model || state().effort || state().skill);
       transport.invalidate();
       transport.close();
       resetStart();
       transition({ kind: 'select-agent', agent });
       transition({ kind: 'reset-draft-connection' });
-      if (changedOptions)
-        transition({
-          kind: 'set-context-issue',
-          message: 'Agent changed. Review model, thinking, and skill choices before sending.',
-        });
       return true;
     },
     editPrompt(blockId: string) {

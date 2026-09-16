@@ -12,9 +12,11 @@ capabilities through this common experience.
   duplicate titles are valid. Automatic naming never replaces a manual title.
 - A completely blank chat may be reused. Drafts, context, queued requests, and
   started transcripts remain reachable when navigating or switching modes.
-- Changing Agent before the first send preserves the draft and explains unsupported
-  context/options. Changing Agent after starting creates another conversation;
-  it does not transfer history.
+- Changing Agent before the first send preserves the draft and resets model,
+  thinking, and skill choices without a switch notice. The selected Agent's saved
+  thinking preference applies when supported. Unsupported context still needs an
+  actionable explanation. Changing Agent after starting creates another
+  conversation; it does not transfer history.
 - Project removal stops active work, retains transcripts, and disables sending.
   A conversation never migrates to another project.
 

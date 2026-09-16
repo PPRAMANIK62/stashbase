@@ -160,11 +160,21 @@ describe('conversation recovery and pending work', () => {
       connection: { kind: 'live', turn: null },
       nativeSessionId: 'catalog-only',
       transcript: [],
+      model: 'codex-model',
+      effort: 'high',
+      skill: 'draft',
     });
     session.setDraft('Unsent idea');
-    expect(session.changeAgent('claude')).toBe(true);
-    expect(session.store.getState().draft).toBe('Unsent idea');
-    expect(session.store.getState().nativeSessionId).toBeNull();
+    expect(session.changeAgent('stashbase')).toBe(true);
+    expect(session.store.getState()).toMatchObject({
+      agent: 'stashbase',
+      draft: 'Unsent idea',
+      nativeSessionId: null,
+      model: null,
+      effort: null,
+      skill: null,
+      contextIssue: null,
+    });
     session.store.setState({ transcript: [{ kind: 'user', id: 'sent', text: 'Old question' }] });
     expect(session.editPrompt('sent')).toBe(false);
     expect(session.store.getState().draft).toBe('Unsent idea');
