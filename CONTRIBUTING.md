@@ -9,6 +9,13 @@ owners and evidence.
 
 ## Local Development
 
+Install Node.js 24.11.0+, pnpm, and Python 3.13 with venv support.
+On Ubuntu / Debian, also install the native build tools:
+
+```bash
+sudo apt install build-essential binutils cmake curl git nasm pkg-config xz-utils
+```
+
 ```bash
 git clone https://github.com/liliu-z/stashbase
 cd stashbase
@@ -17,11 +24,19 @@ pnpm setup:python
 
 # Build the renderer and run Electron
 pnpm build:web
-pnpm electron
+env -u ELECTRON_RUN_AS_NODE pnpm electron
 
 # Development mode
-pnpm dev
+env -u ELECTRON_RUN_AS_NODE pnpm dev
 ```
+
+The launch commands use POSIX shell syntax to clear an inherited
+`ELECTRON_RUN_AS_NODE`. On Windows, clear that variable in your shell before
+running `pnpm electron` or `pnpm dev`.
+
+For local PDF and image OCR extraction from this checkout, run
+`pnpm setup:python-extract`. To build the independent PDF/OCR component payload,
+run `pnpm build:python-extract-sidecar`.
 
 `pnpm count:lines` reports hand-written source lines per area, splitting the
 renderer from the host processes and keeping tests and Stories out of the

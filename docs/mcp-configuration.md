@@ -1,11 +1,11 @@
 # MCP Configuration
 
-OpenQuill receives an attributed MCP connection automatically. StashBase
-also configures Codex and Claude Code when their built-in Chat readiness runs.
-Nothing needs to be pasted for those panel runtimes. Every external
-MCP-compatible client is configured by you: copy the standard configuration or
-the URL access details from **Settings -> Advanced -> External apps (MCP)** and register them in the client,
-as in the examples below.
+The Default Agent, Codex, and Claude Code connect to StashBase's tools
+automatically when used in the built-in Chat.
+
+For an external MCP client, copy the configuration or URL access details from
+**Settings → Advanced → External apps (MCP)** into the client, as in the
+examples below. Keep StashBase running while using the connection.
 
 ## Manual stdio Setup
 

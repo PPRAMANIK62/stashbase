@@ -11,24 +11,22 @@ Gallery. Chat becomes available inside the project, even if it contains no
 files. An entry's **Copy prompt** copies its build request for you to paste;
 it does not start a conversation automatically.
 
-**OpenQuill** is selected initially. Sign in to StashBase from the bottom of
-the sidebar, or from **Settings → Agents**, to use its free credits, which
-refill every seven days; no separate Agent installation or model API key is
-required. You can instead select Claude Code or Codex.
-Those runtimes use their own provider login; a missing runtime waits for
+Choose Claude Code or Codex and sign in with your provider account.
+A missing runtime waits for
 **Install and continue** before installation.
+
+If you can't use either, the built-in **Default Agent** provides a fallback
+with free credits. Sign in to StashBase from the bottom of the sidebar or
+**Settings → Agents**; no separate Agent installation or model API key is required.
 
 Start with an idea or question in the project's Chat. When ready, ask the
 Agent to create an outline or draft, or write directly in a new document.
 References and search are available when useful; neither a wiki nor a
 completed index is required to brainstorm.
 
-For a source-filled project, [Build Your First Wiki](../README.md#build-your-first-wiki)
-is an optional way to organize references. Search always targets one project,
+For a source-filled project, you can ask your Agent to organize references
+into linked wiki pages. Search always targets one project,
 and wiki maintenance runs only when requested.
-
-First launch starts at Welcome with no sample projects or documents. Open your
-own folder or create an empty project to begin.
 
 ## Read and Work Alongside Chat
 
@@ -49,7 +47,7 @@ instructions. StashBase stores the setting without creating or rewriting
 `AGENTS.md` or `CLAUDE.md` in your folders.
 
 Drafting, editing, Agent file-change reports, and save-conflict comparisons are
-available now. [Document diff — Coming soon](../README.md#document-diff--coming-soon)
+available now. [Document diff — Coming soon](../design-docs/capabilities/project-files.md#document-specific-diff)
 will add inline suggested revisions in the prose with individual and whole-set
 accept/reject; those controls are not currently available.
 
@@ -74,7 +72,7 @@ restricted key needs embedding access for `text-embedding-3-small`;
 model-list access is not required.
 
 Search covers direct text in supported Markdown, UTF-8 plain text, HTML, and
-JSON files, plus prepared text from PDFs, DOCX files, images, and recordings.
+JSON files, plus prepared text from PDFs, DOCX files, and images.
 Results point back to the visible source file. Some material needs preparation
 before it can appear; Search reports readiness, and failed preparation can be
 retried.
@@ -82,7 +80,7 @@ retried.
 Agents search the same way: text matching always, including prepared
 document text, plus meaning-based evidence once a key is on.
 
-OpenQuill's free credits have nothing to do with search. Check the account
+Default Agent credits don't cover search by meaning. Check the account
 menu at the bottom of the sidebar or **Settings → Agents** for the remaining
 percentage and refill date.
 
