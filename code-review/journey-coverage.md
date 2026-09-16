@@ -399,6 +399,40 @@ chat with High retained. The catalog/socket were controlled; this is not a live
 Codex provider run. Validation: all 12 renderer gates, 57 configuration tests,
 96 protocol tests, host types, service builds, and documentation checks passed.
 
+**Tool-attempt presentation (2026-09-16):** `ui/transcript/activity.tsx` omits failed
+tools from chat, including summaries and expanded details. Activity tests cover
+a subsequent running, successful, or failed call, empty-group suppression,
+and changed-file results only after success. Transcript tests keep a
+terminal turn failure and its retry action visible, and retain progress after a
+running tool fails. No retry identity is inferred
+from a shared file path; the native runtime still owns execution and retries.
+The `FailedAttemptThenSuccess` Story covers the reported failed-edit/success layout.
+An isolated built-main/host/renderer pass with controlled Agent socket events
+verified failed-only activity disappears, the successful file result and final
+reply remain visible, expanded activity excludes the failure, and a subsequent
+network turn failure retains its retry action. Both collapsed and expanded
+layouts were inspected. This proves presentation, not real-provider retry behavior.
+Validation: 35 focused tests passed; the subsequent combined validation passed
+all 12 renderer gates, including coverage.
+
+**Work in progress presentation (2026-09-16):** a running turn is narrated by the
+activity group that closes the transcript: `ui/transcript/tool-presentation.ts`
+names the step in hand while the group is live and returns to the aggregate
+summary once the turn settles, and `ui/transcript/transcript.tsx` marks that
+group live from the turn rather than from any single call's status, so the
+header keeps moving between two calls. The standing thinking indicator now
+stands in only when no live group or decision card closes the transcript.
+Transcript tests cover the reported still frame between calls, the settled
+header, and a pending decision; presentation tests cover the running step,
+parallel calls, refused calls, and one-ellipsis clipping of a long command.
+The `StillWorking` Story shows the live and settled headers together.
+A built-Storybook pass inside Electron's Chromium confirmed the live header
+reads the step just taken while the settled group beside it keeps its summary.
+That pass renders the group alone; a streaming turn against a real provider,
+where the header advances call by call, remains unverified.
+Validation: all 12 renderer gates passed, including coverage and Story
+accessibility, and documentation checks passed.
+
 **Request and attachment lifetime (2026-09-16):** the hosted broker binds
 requests to the active turn's cancellation signal before reading the body.
 Retirement closes local requests and aborts upstream work; token acquisition and

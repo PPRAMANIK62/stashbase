@@ -207,8 +207,18 @@ function AgentToolRow({ tool }: { tool: AgentToolBlock }) {
 
 export type AgentActivityStep = Extract<AgentTranscriptBlock, { kind: 'thinking' | 'tool' }>;
 
+/** What a group actually shows. Tool failures belong to native execution
+ *  history. The Agent explains task outcomes; transcript-level failures
+ *  separately report an interrupted turn. A group left with nothing renders
+ *  nothing, so the transcript above must ask before counting on it to
+ *  narrate. */
+export function visibleActivitySteps(steps: AgentActivityStep[]): AgentActivityStep[] {
+  return steps.filter((step) => step.kind !== 'tool' || step.status !== 'error');
+}
+
 export function AgentActivityGroup({
   focusToolId = null,
+  live = false,
   onOpenSource,
   sourceFor,
   steps,
@@ -216,12 +226,17 @@ export function AgentActivityGroup({
   /** A tool whose ask was just decided: the group that receives it takes
    *  focus once, at its summary, so the decision stays reachable. */
   focusToolId?: string | null;
+  /** This group holds the turn that is still running, so its header names the
+   *  step in hand. A tool between calls leaves nothing running; the turn is
+   *  what makes the group live, not a single call's status. */
+  live?: boolean;
   onOpenSource?: ((source: SourceReference) => void) | undefined;
   sourceFor?: ((path: string) => SourceReference | null) | undefined;
   steps: AgentActivityStep[];
 }) {
-  const tools = steps.filter((step): step is AgentToolBlock => step.kind === 'tool');
-  const active = tools.some((tool) => tool.status === 'running');
+  const visibleSteps = visibleActivitySteps(steps);
+  const tools = visibleSteps.filter((step): step is AgentToolBlock => step.kind === 'tool');
+  const active = live || tools.some((tool) => tool.status === 'running');
   const changes = settledFileChanges(tools);
   const headerRef = useRef<HTMLButtonElement>(null);
   const focusedFor = useRef<string | null>(null);
@@ -231,15 +246,19 @@ export function AgentActivityGroup({
     focusedFor.current = focusToolId;
     headerRef.current?.focus();
   }, [focusToolId, holdsFocusTool]);
+  // Thinking alone has no step to name, so the header says what it is and
+  // carries the same unfinished mark the summaries do.
+  const thinkingHeader = active ? 'Thinking…' : 'Thinking';
+  if (visibleSteps.length === 0) return null;
   return (
     <div className="-ml-2 flex w-[calc(100%+0.5rem)] flex-col gap-1">
       <ThinkingSteps className="w-full" defaultOpen={false}>
         <ThinkingStepsHeader className="px-2 py-1.5 text-[13px]" ref={headerRef}>
-          {tools.length ? agentActivitySummary(tools, active) : 'Thinking'}
+          {tools.length ? agentActivitySummary(tools, active) : thinkingHeader}
         </ThinkingStepsHeader>
         <ThinkingStepsContent className="gap-0.5 pl-2">
-          {steps
-            .filter((step) => step.kind !== 'tool' || !['error', 'denied'].includes(step.status))
+          {visibleSteps
+            .filter((step) => step.kind !== 'tool' || step.status !== 'denied')
             .map((step) =>
               step.kind === 'thinking' ? (
                 <p className="text-caption whitespace-pre-wrap text-muted-foreground" key={step.id}>
@@ -252,7 +271,7 @@ export function AgentActivityGroup({
         </ThinkingStepsContent>
       </ThinkingSteps>
       {tools
-        .filter((tool) => tool.status === 'error' || tool.status === 'denied')
+        .filter((tool) => tool.status === 'denied')
         .map((tool) => (
           <AgentToolRow key={tool.id} tool={tool} />
         ))}

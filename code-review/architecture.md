@@ -257,6 +257,10 @@ Signing and release publication belong to [Release Runbook](release-pipeline.md)
 - Native history is authoritative. Native cwd determines project ownership; no
   override store or live session migration exists. History and WebSocket startup
   require a registered project; no aggregate history endpoint is exposed.
+- Transcript presentation omits failed tools from activity rows and summaries
+  without deleting native history or inferring recovery from later calls.
+  Empty activity groups render nothing. Turn failures and permission decisions
+  remain separate, and only successful file operations produce changed-file results.
 - Instructions are scoped Settings guidance resolved at native mount and composed
   with internal routing policy. They are not permissions, skill contents, or
   project-file edits. Empty reset restores the packaged default; saves do not

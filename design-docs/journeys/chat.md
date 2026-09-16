@@ -14,8 +14,14 @@ Chat, Documents assistance, and runtimes.
    The action clearly sends, queues, or stops work. Instructions tailor responses
    for new sessions and remain distinct from the current request.
 3. Follow replies and useful progress. Routine tools and provided thinking are
-   grouped per turn and collapsed on completion; approvals, failures, and file
-   results remain individually actionable. New output preserves reading position.
+   grouped per turn and collapsed. The group holding a running turn names the
+   step in hand so long work visibly advances; a settled group states what it
+   did. Approvals, turn failures, and file results remain individually
+   actionable. Tool-call failures do not appear in chat, including activity
+   summaries and expanded details. The Agent explains task outcomes; native
+   execution history retains the failed attempts.
+   Only successful file operations contribute to changed-file results.
+   New output preserves reading position.
 4. Continue, queue a follow-up, stop, or reuse a message for another turn. Open a
    file result explicitly to work in Documents; Agent writes do not take focus.
 5. Return through history or change modes without losing the conversation or unsent

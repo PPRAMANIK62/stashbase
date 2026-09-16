@@ -1,3 +1,8 @@
+/** What a tool call reads as: the verb and target on its row, the header its
+ *  group carries while the work moves and once it settles, the title on a
+ *  permission ask, and the bounded arguments and result behind an opened row.
+ *  Wording only — whether a call is shown at all, and which group is still
+ *  live, are decided by the surfaces in `activity.tsx`. */
 import type { AgentTranscriptBlock } from '@/features/agent/domain/session';
 import { basePathName } from '@/shared/utils/file-path';
 
@@ -7,6 +12,8 @@ export type AgentToolKind = 'read' | 'list' | 'search' | 'command' | 'write' | '
 const PAYLOAD_LINE_LIMIT = 14;
 const PAYLOAD_CHARACTER_LIMIT = 1_200;
 const RESULT_CHARACTER_LIMIT = 4_000;
+/** A header names one step on one line, so a long command stops here. */
+const HEADLINE_TARGET_LIMIT = 48;
 
 function argumentsOf(input: Record<string, unknown>): Record<string, unknown> {
   const nested = input.arguments;
@@ -117,7 +124,31 @@ export function agentToolResult(result: string): string {
     : result;
 }
 
+/** The step a moving group is on, named the way its own row names it. A long
+ *  command is clipped, and the trailing ellipsis is both the unfinished mark
+ *  and the clip mark, so the header never ends in two of them. */
+function agentCurrentStep(tools: AgentToolBlock[]): string | null {
+  // A call that was refused or interrupted is not the step in hand, and the
+  // group shows its outcome on its own row rather than in the header.
+  const current =
+    tools.findLast((tool) => tool.status === 'running') ??
+    tools.findLast((tool) => tool.status === 'done');
+  if (!current) return null;
+  const { target, verb } = agentToolRow(current);
+  if (!target) return `${verb}…`;
+  const clipped =
+    target.length > HEADLINE_TARGET_LIMIT
+      ? target.slice(0, HEADLINE_TARGET_LIMIT).trimEnd()
+      : target;
+  return `${verb} ${clipped}…`;
+}
+
+/** The group's header: while the turn is still moving, the step in hand, so a
+ *  reader watching a long turn sees the work advance rather than one count
+ *  that holds still for minutes. Once it settles, the group at a glance. */
 export function agentActivitySummary(tools: AgentToolBlock[], active: boolean): string {
+  const step = active ? agentCurrentStep(tools) : null;
+  if (step) return step;
   const counts = new Map<AgentToolKind, number>();
   for (const tool of tools) {
     const kind = agentToolKind(tool);

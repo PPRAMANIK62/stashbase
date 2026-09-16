@@ -29,6 +29,97 @@ function renderTranscript(blocks: AgentTranscriptBlock[], activeTurn: boolean) {
   );
 }
 
+it('keeps a terminal turn failure visible while tool failures are omitted', () => {
+  renderTranscript(
+    [
+      ...turn.slice(0, 2),
+      {
+        id: 'failed-tool',
+        kind: 'tool',
+        name: 'Bash',
+        input: { command: 'ls' },
+        status: 'error',
+        result: 'Permission denied',
+      },
+      {
+        id: 'turn-error',
+        kind: 'error',
+        text: 'Connection lost',
+        failure: 'network',
+        retryablePrompt: 'Map the repo',
+      },
+    ],
+    false,
+  );
+  expect(screen.getByRole('heading', { name: 'The Agent could not finish' })).not.toBeNull();
+  expect(screen.getByRole('button', { name: 'Try again' })).not.toBeNull();
+  expect(screen.queryByRole('button', { name: /Ran.*ls.*Failed/u })).toBeNull();
+});
+
+it('keeps progress visible after a running tool fails and disappears', () => {
+  const blocks: AgentTranscriptBlock[] = [
+    ...turn.slice(0, 2),
+    { id: 'edit', kind: 'tool', name: 'Edit', input: {}, status: 'running' },
+  ];
+  const props = {
+    activeTurn: true,
+    onOpenExternal: vi.fn(),
+    onPermission: vi.fn(() => true),
+    onRetry: vi.fn(() => true),
+  };
+  const { rerender } = render(<AgentTranscript {...props} blocks={blocks} />);
+  expect(screen.queryByRole('status')).toBeNull();
+  rerender(
+    <AgentTranscript
+      {...props}
+      blocks={[
+        ...blocks.slice(0, -1),
+        { id: 'edit', kind: 'tool', name: 'Edit', input: {}, status: 'error' },
+      ]}
+    />,
+  );
+  expect(screen.getByRole('status').textContent).toContain('Thinking');
+  expect(screen.queryByRole('button', { name: /Edited file/u })).toBeNull();
+});
+
+it('keeps the work moving in the header between two tool calls', () => {
+  // The reported frozen frame: the turn is still running but nothing is, so a
+  // header that only counted settled calls held still and the indicator was
+  // suppressed by the group that was supposed to narrate.
+  renderTranscript(turn.slice(0, 4), true);
+
+  expect(screen.getByRole('button', { name: 'Ran ls…', expanded: false })).not.toBeNull();
+  expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('returns the header to the settled group once the turn ends', () => {
+  renderTranscript(turn, false);
+
+  expect(screen.getByRole('button', { name: 'Ran command', expanded: false })).not.toBeNull();
+  expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('lets a decision card speak for itself instead of the indicator', () => {
+  renderTranscript(
+    [
+      ...turn.slice(0, 2),
+      {
+        id: 'ask',
+        input: { command: 'rm -rf build' },
+        kind: 'tool',
+        name: 'Bash',
+        permissionId: 'permission-1',
+        permissionRequested: true,
+        status: 'awaiting',
+      },
+    ],
+    true,
+  );
+
+  expect(screen.getByRole('heading', { name: 'Run this command?' })).not.toBeNull();
+  expect(screen.queryByRole('status')).toBeNull();
+});
+
 describe('Agent transcript time cues', () => {
   it('shows a day divider only where consecutive prompts change day, and a hover time per prompt', () => {
     // Pinned, so the cue below is a literal the reader would see rather than
@@ -105,10 +196,9 @@ describe('Agent transcript permission decisions', () => {
     );
 
     expect(screen.queryByRole('heading', { name: 'Apply these changes?' })).toBeNull();
-    const summary = screen.getByRole('button', {
-      name: /Ran command, Edited file/u,
-      expanded: false,
-    });
+    // The refused write is not the step in hand, so the header names the last
+    // call that actually ran while the turn carries on.
+    const summary = screen.getByRole('button', { name: 'Ran ls…', expanded: false });
     expectFocused(summary);
     await userEvent.click(summary);
     expect(screen.getByRole('button', { name: /Wrote.*plan\.md.*Denied/u })).not.toBeNull();

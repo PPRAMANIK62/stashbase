@@ -26,7 +26,12 @@ import type { SourceReference } from '@/shared/domain/source-reference';
 import { writeToClipboard } from '@/shared/ui/clipboard';
 import { basePathName } from '@/shared/utils/file-path';
 
-import { AgentActivityGroup, AgentPermissionCard, type AgentActivityStep } from './activity';
+import {
+  AgentActivityGroup,
+  AgentPermissionCard,
+  visibleActivitySteps,
+  type AgentActivityStep,
+} from './activity';
 import { AgentMarkdown } from './markdown';
 
 const TRANSCRIPT_PAGE_SIZE = 200;
@@ -323,8 +328,16 @@ export const AgentTranscript = memo(function AgentTranscript({
     () => ({ dayBreaks: transcriptDayBreaks(visibleBlocks), now: Date.now() }),
     [visibleBlocks],
   );
+  // While a turn runs, the group that closes the transcript narrates it in its
+  // own header, and a decision card speaks for itself. The indicator stands in
+  // only when neither of those is there to say the work is still moving.
+  const tailGroup = groups.at(-1);
+  const liveGroup =
+    tailGroup?.kind === 'activity' && visibleActivitySteps(tailGroup.steps).length > 0
+      ? tailGroup
+      : null;
   const tail = blocks.at(-1);
-  const tailNarratesWork = tail?.kind === 'thinking' || tail?.kind === 'tool';
+  const narrated = liveGroup !== null || (tail?.kind === 'tool' && tail.status === 'awaiting');
 
   return (
     <>
@@ -343,6 +356,7 @@ export const AgentTranscript = memo(function AgentTranscript({
           <AgentActivityGroup
             focusToolId={decidedToolId}
             key={group.id}
+            live={activeTurn && group === liveGroup}
             onOpenSource={onOpenSource}
             sourceFor={sourceFor}
             steps={group.steps}
@@ -369,7 +383,7 @@ export const AgentTranscript = memo(function AgentTranscript({
           </Fragment>
         ),
       )}
-      {activeTurn && !tailNarratesWork && <ThinkingIndicator className="px-0" size="compact" />}
+      {activeTurn && !narrated && <ThinkingIndicator className="px-0" size="compact" />}
     </>
   );
 });

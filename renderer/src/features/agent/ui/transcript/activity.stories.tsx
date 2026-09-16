@@ -204,6 +204,50 @@ export const FileChanges: Story = {
   render: () => <FileChangeHarness />,
 };
 
+export const FailedAttemptThenSuccess: Story = {
+  render: () => (
+    <div className="w-[34rem] space-y-5">
+      <p>I will update the transition in the plan.</p>
+      <AgentActivityGroup
+        steps={[
+          {
+            id: 'failed-edit',
+            kind: 'tool',
+            name: 'stashbase_edit_file',
+            input: { path: '/project/ai-writing.md', old_text: 'Draft.', new_text: '' },
+            status: 'error',
+            result: 'EDIT_MISMATCH: old_text not found',
+          },
+          {
+            id: 'successful-edit',
+            kind: 'tool',
+            name: 'stashbase_edit_file',
+            input: { path: '/project/ai-writing.md', old_text: 'Draft。', new_text: 'Revised。' },
+            status: 'done',
+          },
+        ]}
+      />
+      <p>The transition is now in the plan.</p>
+    </div>
+  ),
+};
+
+// The same work a moment later, when nothing is running between two calls.
+const settledTools: AgentToolBlock[] = [];
+for (const tool of tools) settledTools.push({ ...tool, status: 'done' });
+
+export const StillWorking: Story = {
+  render: () => (
+    // Between two calls the turn is the only thing that says the work
+    // continues: the live header names the step just taken, the settled one
+    // below returns to the group at a glance.
+    <div className="w-[34rem] space-y-5">
+      <AgentActivityGroup live steps={settledTools} />
+      <AgentActivityGroup steps={settledTools} />
+    </div>
+  ),
+};
+
 export const Compact: Story = {
   args: { compact: true },
   parameters: { fluidCanvas: { width: '22rem', minHeight: '30rem' } },

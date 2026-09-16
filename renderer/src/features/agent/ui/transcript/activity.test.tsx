@@ -18,10 +18,58 @@ const command: AgentToolBlock = {
 afterEach(cleanup);
 
 describe('Agent activity', () => {
+  it.each(['running', 'done', 'error'] as const)(
+    'omits tool failures from chat when the next call is %s',
+    async (status) => {
+      const failed: AgentToolBlock = {
+        id: 'failed-edit',
+        input: { path: '/project/plan.md', old_text: 'Draft.', new_text: '' },
+        kind: 'tool',
+        name: 'stashbase_edit_file',
+        result: 'EDIT_MISMATCH: old_text not found',
+        status: 'error',
+      };
+      render(
+        <AgentActivityGroup
+          steps={[
+            failed,
+            {
+              ...failed,
+              id: 'next-edit',
+              input: { path: '/project/plan.md', old_text: 'Draft。', new_text: 'Revised。' },
+              result: status === 'error' ? 'FILE_CHANGED' : undefined,
+              status,
+            },
+          ]}
+        />,
+      );
+
+      expect(screen.queryByRole('button', { name: /plan\.md.*Failed/u })).toBeNull();
+      expect(screen.queryByRole('list', { name: 'Changed files' }) !== null).toBe(
+        status === 'done',
+      );
+      expect(screen.queryByRole('button') === null).toBe(status === 'error');
+      if (status !== 'error') {
+        await userEvent.click(
+          screen.getByRole('button', {
+            name: status === 'running' ? 'Edited plan.md…' : 'Edited file',
+            expanded: false,
+          }),
+        );
+      }
+      expect(screen.queryByRole('button', { name: /plan\.md.*(Running|Done)/u }) !== null).toBe(
+        status !== 'error',
+      );
+      expect(screen.queryByRole('button', { name: /Failed/u })).toBeNull();
+      expect(screen.queryByText(/EDIT_MISMATCH|FILE_CHANGED/u)).toBeNull();
+      expect(screen.queryByLabelText('stashbase_edit_file result')).toBeNull();
+    },
+  );
+
   it('keeps ordinary activity collapsed behind an accessible disclosure', async () => {
     render(<AgentActivityGroup steps={[command]} />);
 
-    const summary = screen.getByRole('button', { name: 'Ran command…' });
+    const summary = screen.getByRole('button', { name: 'Ran pnpm test:agent…' });
     expect(summary.getAttribute('aria-expanded')).toBe('false');
     await userEvent.click(summary);
     expect(summary.getAttribute('aria-expanded')).toBe('true');
