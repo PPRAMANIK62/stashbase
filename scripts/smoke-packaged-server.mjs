@@ -767,6 +767,8 @@ const child = spawn(electronBin, [serverEntry, `--port=${port}`], {
     STASHBASE_LOCAL_DATA_ROOT: localDataRoot,
     STASHBASE_APP_ROOT: appRoot,
     STASHBASE_RESOURCES_PATH: resourcesPath,
+    STASHBASE_PACKAGED: '1',
+    STASHBASE_TELEMETRY_DISABLED: '1',
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
@@ -784,6 +786,8 @@ try {
     resourcesPath,
   });
   console.log('[smoke] packaged server responded');
+  const telemetry = await requestApi(port, 'GET', '/api/telemetry');
+  if (telemetry.available !== false) throw new Error('Packaged smoke must disable telemetry before exercising user flows');
   await assertPackagedRendererWorkers(port);
   await assertPackagedUserFlow(port, home);
 } finally {

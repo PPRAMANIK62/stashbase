@@ -137,7 +137,12 @@ export function createTelemetry(options: {
 }
 
 export const telemetry = createTelemetry({
-  available: process.env.STASHBASE_PACKAGED === '1' && destination.projectToken.startsWith('phc_') && destination.host.startsWith('https://'),
+  // Packaged UI checks must be able to suppress collection before the first
+  // event, independently of the user's persisted preference. Electron passes
+  // this launch-only override to its server; Settings cannot re-enable it.
+  available: process.env.STASHBASE_TELEMETRY_DISABLED !== '1'
+    && process.env.STASHBASE_PACKAGED === '1'
+    && destination.projectToken.startsWith('phc_') && destination.host.startsWith('https://'),
   projectToken: destination.projectToken, host: destination.host,
   version: packageInfo.version, os: process.platform,
   read: readAppConfigStrict, write: writeAppConfigStrict,

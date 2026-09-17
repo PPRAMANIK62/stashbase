@@ -35,6 +35,14 @@ credentials, personal documents, or private Agent output into screenshots or
 issue reports. Check an item only after observing the result; record a concise
 reason when a platform cannot exercise it.
 
+Before launching any test package, follow the
+[packaged telemetry suppression instructions](../docs/usage-statistics.md#testing-packaged-builds).
+Start the app with `STASHBASE_TELEMETRY_DISABLED=1` and verify the local telemetry
+preferences report `available: false` before exercising flows. Reapply the override
+to each new process, including update verification; versions without the override
+need telemetry disabled in their disposable configuration before first launch.
+Never use production PostHog as the test event sink.
+
 ## Residual checks
 
 - [ ] **J05** — When the retrieval-quality trigger above applies, select OpenAI

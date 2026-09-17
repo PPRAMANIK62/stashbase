@@ -69,7 +69,19 @@ PUT overtaken by DELETE with isolated configuration and controlled validation.
 
 **Usage statistics:** `server/telemetry.ts` and `server/routes/telemetry.ts` own
 manual collection and Settings persistence; Settings General exposes default-on
-disclosure and opt-out. The workspace has no first-launch statistics banner. `server/telemetry.test.ts` covers
+disclosure and opt-out. Test launches set `STASHBASE_TELEMETRY_DISABLED=1` to
+suppress packaged collection independently of Settings. A subprocess regression
+uses the production telemetry owner and Electron's server environment builder
+with an intercepted transport: packaged test events and the opt-out notification
+are suppressed, capture preserves stored preferences/identity, and normal packaged
+collection still works. Smoke launchers set the override, and packaged-server
+smoke checks `available: false` before user flows. A built-service pass in packaged
+mode exercised real HTTP capture and preference changes with isolated config and
+an intercepted outbound transport: no fetch was attempted, the saved preference
+survived capture, and no identity was created. Configuration tests (58), package
+contracts (16), host types, service build, Electron smoke, and docs validation
+passed. Signed-package verification of this override remains pending the next release.
+The workspace has no first-launch statistics banner. `server/telemetry.test.ts` covers
 field rejection, opt-out/restart/ID rotation, offline delivery, corrupt config,
 and daily editor-save suppression. Renderer usage tests cover terminal event
 coalescing and Settings choice/failure UI. A 2026-09-15 built-service pass with

@@ -7,6 +7,7 @@ const { waitForChildExit } = require('../smoke-process.cjs');
 
 const environment = { ...process.env };
 delete environment.ELECTRON_RUN_AS_NODE;
+environment.STASHBASE_TELEMETRY_DISABLED = '1';
 
 const electronArguments = [];
 // GitHub's Linux hosts cannot install Electron's setuid helper. Local Linux,

@@ -66,6 +66,10 @@ check architecture, or collect coverage. `pnpm check:web` is the complete
 renderer gate, including coverage, accessibility, static checks, and both builds.
 Build and lint commands do only their named work.
 
+Automated Electron and packaged-server smoke launches disable production telemetry.
+Manual packaged checks must set `STASHBASE_TELEMETRY_DISABLED=1` before launching;
+see [testing packaged builds](docs/usage-statistics.md#testing-packaged-builds).
+
 Before opening a PR, run `pnpm check` for the complete local source gate.
 It includes `check:web`, documentation validation, host suites, type checks,
 builds, and Electron smoke; do not repeat its constituent commands afterward.

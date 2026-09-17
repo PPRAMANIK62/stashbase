@@ -1,5 +1,7 @@
 import './__tests__/isolated-home.ts';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import express from 'express';
 import type { AppConfigFile } from './app-config.ts';
@@ -7,6 +9,69 @@ import { createTelemetry } from './telemetry.ts';
 import { mount } from './routes/telemetry.ts';
 
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+test('test launches suppress every event without changing saved preferences, including through Electron', () => {
+  for (const [packaged, disabled] of [['1', '1'], ['1', '0'], ['0', '0']]) {
+    const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', `
+      import './server/__tests__/isolated-home.ts';
+      import assert from 'node:assert/strict';
+      import { createServerChildEnvironment } from './electron/main-probe.cjs';
+
+      const packaged = process.env.STASHBASE_PACKAGED === '1';
+      const available = packaged && process.env.STASHBASE_TELEMETRY_DISABLED !== '1';
+      Object.assign(process.env, createServerChildEnvironment({
+        baseEnv: process.env, packaged,
+        packagedEnv: { STASHBASE_PACKAGED: packaged ? '1' : '0' },
+        shutdownToken: 'test-shutdown', oauthReturnToken: 'test-oauth', instanceId: 'test',
+      }));
+      const sent = [];
+      // Replace the outbound transport before importing the production owner.
+      // Even the positive control must never contact the production destination.
+      globalThis.fetch = async (_url, init) => {
+        sent.push(JSON.parse(init.body).event);
+        return new Response(null, { status: 200 });
+      };
+      const { telemetry } = await import('./server/telemetry.ts');
+      const { readAppConfigStrict, writeAppConfigStrict } = await import('./server/app-config.ts');
+      const tick = () => new Promise(resolve => setImmediate(resolve));
+      if (!available) {
+        writeAppConfigStrict({});
+        telemetry.capture({ event: 'app_opened' });
+        await tick();
+        assert.deepEqual(sent, []);
+        assert.deepEqual(readAppConfigStrict(), {});
+      }
+      const saved = { telemetry: {
+        enabled: true, installationId: '11111111-1111-4111-8111-111111111111',
+      } };
+      writeAppConfigStrict(saved);
+      telemetry.capture({ event: 'app_opened' });
+      telemetry.capture({ event: 'agent_turn_started', runtime: 'codex' });
+      telemetry.capture({ event: 'document_write_result', outcome: 'success' });
+      await tick();
+      assert.deepEqual(sent, available ? ['app_opened', 'agent_turn_started', 'document_write_result'] : []);
+      assert.deepEqual(telemetry.preferences(), { enabled: true, available });
+      if (!available) assert.deepEqual(readAppConfigStrict(), saved);
+
+      telemetry.update({ enabled: false });
+      telemetry.update({ enabled: true });
+      telemetry.capture({ event: 'project_entry_result', outcome: 'success' });
+      await tick();
+      assert.deepEqual(sent, available ? [
+        'app_opened', 'agent_turn_started', 'document_write_result',
+        'telemetry_disabled', 'project_entry_result',
+      ] : []);
+      if (!available) assert.deepEqual(readAppConfigStrict(), { telemetry: { enabled: true } });
+      telemetry.close();
+    `], {
+      cwd: fileURLToPath(new URL('..', import.meta.url)),
+      env: { ...process.env, STASHBASE_PACKAGED: packaged, STASHBASE_TELEMETRY_DISABLED: disabled },
+      encoding: 'utf8', timeout: 10_000,
+    });
+    assert.equal(result.status, 0, `packaged=${packaged}, disabled=${disabled}\n${result.stderr}`);
+  }
+});
+
 function fixture(available = true) {
   let config: AppConfigFile = { updates: { autoCheck: false } };
   let readFails = false;

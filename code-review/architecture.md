@@ -348,6 +348,12 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   add no browser metadata; no SDK, replay, raw error capture, or AI tracing runs.
   The distributor's public ingestion token is build configuration, not a user
   credential. Unpackaged builds never send to the production destination.
+- `STASHBASE_TELEMETRY_DISABLED=1` is a launch-only override owned by the Node
+  collector. It makes collection unavailable even in packaged builds, including
+  the final disabled notification, without rewriting Settings or creating an ID.
+  Electron inherits it into the server. Smoke launchers set it explicitly; manual
+  packaged checks must set it before starting a new process. Preference changes
+  cannot override it, and removing it on a later launch restores the saved choice.
 - Disabling persists first, cancels outstanding usage requests, and attempts one
   disclosed final notification without retry. It removes the ID and daily save
   markers. Re-enabling cannot upload prior activity or reuse the old ID. Already

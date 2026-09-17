@@ -62,6 +62,8 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
   Collection excludes content, paths, account identity, and raw diagnostics.
   Opt-out stops pending collection; re-enabling starts a fresh identity without
   backfilling activity. [Usage statistics](../../docs/usage-statistics.md) owns details.
+  Test launches of official builds suppress collection before startup without
+  changing the user's saved preference or installation identity.
 - Bug reporting is a separate explicit review and local handoff. The approved
   snapshot cannot change during preparation; StashBase does not submit the report.
 

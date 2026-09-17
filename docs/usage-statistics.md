@@ -82,6 +82,37 @@ not a user credential or Personal API key. Forks should clear or replace it.
 Never embed a PostHog Personal API key or project secret key. No end-user setup
 or environment credential is required.
 
+### Testing packaged builds
+
+Set `STASHBASE_TELEMETRY_DISABLED=1` in the launch environment before starting a
+test app or server. It suppresses all outbound usage events, including
+`app_opened` and `telemetry_disabled`, even in an official packaged build. The
+override does not change the saved preference, installation ID, or daily markers;
+capture does not create them either. Settings changes cannot enable collection
+for that process. `/api/telemetry` reports `available: false` while still exposing
+the saved `enabled` preference. A later launch without the override follows the
+saved preference normally.
+
+The Electron smoke runner and packaged-server smoke set this override themselves.
+For manual packaged UI checks, quit existing test instances first and pass the
+variable to the new app process; changing the environment of an already-running
+app has no effect. For example, on macOS:
+
+```bash
+env -u ELECTRON_RUN_AS_NODE STASHBASE_TELEMETRY_DISABLED=1 \
+  /Applications/StashBase.app/Contents/MacOS/StashBase
+```
+
+On Windows PowerShell, set `$env:STASHBASE_TELEMETRY_DISABLED = '1'` before starting
+the test executable. On Linux, launch the AppImage or installed executable with
+`STASHBASE_TELEMETRY_DISABLED=1` in its environment. Use an isolated test profile
+for preference-editing checks. The override itself never persists a user opt-out.
+For older versions without this override, disable telemetry in the disposable
+test configuration before the first launch.
+
+Tests of telemetry delivery must replace the outbound transport with a fake or
+local capture sink. They must not send test-marked events to production PostHog.
+
 Before enabling a production destination, disable IP capture in that PostHog
 project and choose a retention period appropriate for basic product statistics.
 The application does not alter PostHog administration settings. Suggested initial
