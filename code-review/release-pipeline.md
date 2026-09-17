@@ -221,16 +221,17 @@ checks both versions, architectures, payload hashes, and component manifests
 before creating one latest-mac.yml containing both ZIP/DMG pairs. Only the
 combined set is uploaded to the draft; parallel jobs must never upload competing
 metadata under the same name. Homebrew selects the DMG and checksum by CPU.
-The v2.9.4 source commit passed [CI on all four native targets](https://github.com/liliu-z/stashbase/actions/runs/35249145365).
+The v2.9.5 source commit passed [CI on all four native targets](https://github.com/liliu-z/stashbase/actions/runs/35262909836).
 [Coordinated packaging](https://github.com/liliu-z/stashbase/actions/runs/35253051281)
-passed both macOS architectures' signing, notarization, mounted-DMG checks,
+of the earlier 2.9.4 candidate, which shares this packaging source, passed both
+macOS architectures' signing, notarization, mounted-DMG checks,
 frozen daemon execution, independent PDF/OCR component installation and offline
 reuse, DOCX conversion, and the packaged OpenCode test turn. Windows and Linux
 packaged runtime checks also passed. That attempt remained unpublished because
 GitHub asset upload returned HTTP 500; passing package jobs do not establish
 successful release delivery.
-Local checks of the downloaded arm64 candidate passed strict/deep codesign,
-Gatekeeper, and stapler validation. About reported 2.9.4; the welcome screen,
+Local checks of that downloaded arm64 candidate passed strict/deep codesign,
+Gatekeeper, and stapler validation. About reported its own 2.9.4 version; the welcome screen,
 native folder-picker cancellation, and native menu quit were observed. Desktop
 automation failed while selecting a fixture folder, so editing was not verified
 in that package. Real Intel macOS 12–14 entry/editing, representative OCR quality,

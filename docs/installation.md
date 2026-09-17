@@ -5,7 +5,7 @@ Download installers from the official
 
 ## macOS
 
-Macs running macOS 12 or later can open StashBase. Starting with v2.9.4,
+Macs running macOS 12 or later can open StashBase. Starting with v2.9.5,
 separate Apple Silicon and Intel installers are available; arm64 installers
 cannot run on Intel Macs. Homebrew selects the matching architecture:
 

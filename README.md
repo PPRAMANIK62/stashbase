@@ -29,7 +29,7 @@ with Claude Code and Codex, drawing on your own sources and past work.
 platforms. Linux x86_64 Debian 12+ / Ubuntu 22.04+ is community-supported.
 On Intel Macs, local search and PDF/image text extraction require macOS 15+;
 older supported systems can still open projects and edit files. Agent runtime
-requirements may vary. Intel installers are available starting with v2.9.4.
+requirements may vary. Intel installers are available starting with v2.9.5.
 
 On macOS, install with Homebrew:
 
