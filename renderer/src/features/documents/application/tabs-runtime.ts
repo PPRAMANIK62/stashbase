@@ -10,7 +10,7 @@ import type { DocumentVisit } from '@/features/documents/domain/history';
 import type { DocumentLocation } from '@/features/documents/domain/location';
 import {
   activateDocumentTab,
-  closeDocumentTab,
+  clearDocumentCloseDecision,
   createDocumentTabsState,
   disposeDocumentTabsState,
   documentTabsSession,
@@ -22,6 +22,14 @@ import {
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { createScopeGuard } from '@/shared/runtime/scope-guard';
 
+import {
+  askAboutDraft,
+  closeDecidedTab,
+  dropSettledTab,
+  isDetachedDraft,
+  mutateOpenSources,
+  type DraftSettlementContext,
+} from './draft-settlement';
 import { createDocumentHistoryRuntime } from './history-runtime';
 import { createDocumentNavigationRuntime } from './navigation-runtime';
 import type {
@@ -235,6 +243,22 @@ export function createDocumentTabsRuntime({
 
   for (const tab of initialState.tabs) createChild(tab.id, tab.source);
 
+  const settlement: DraftSettlementContext = {
+    createQueries,
+    disposed: () => disposed,
+    documents,
+    folderPath,
+    history,
+    keep,
+    navigation,
+    retireChild,
+    retireOperations: () => guard.retireOperations(),
+    saveDocuments,
+    sourceIds,
+    store,
+    uncertainMutations,
+  };
+
   const restoredActive = initialState.tabs.find((tab) => tab.id === initialState.activeTabId);
   if (restoredActive) history.record({ source: restoredActive.source });
 
@@ -275,15 +299,15 @@ export function createDocumentTabsRuntime({
         if (disposed) return false;
         const document = documents.get(tabId);
         const captured = guard.capture();
-        if (!document || document.store.getState().mutationPending || !(await document.save(api)))
-          return false;
+        if (!document || document.store.getState().mutationPending) return false;
+        // A draft with no file cannot be settled by saving it, so the barrier
+        // below would refuse this close forever. Ask instead of doing nothing.
+        if (isDetachedDraft(document)) return askAboutDraft(settlement, tabId);
+        if (!(await document.save(api))) return false;
         let closed = false;
         guard.accept(captured, () => {
           if (documents.get(tabId) !== document) return;
-          retireChild(tabId);
-          store.setState((state) => closeDocumentTab(state, tabId));
-          navigation.activate(store.getState().activeTabId);
-          guard.retireOperations();
+          dropSettledTab(settlement, tabId);
           closed = true;
         });
         return closed;
@@ -294,6 +318,12 @@ export function createDocumentTabsRuntime({
     },
     dismissOpenFailure() {
       store.setState((state) => ({ ...state, openFailure: null }));
+    },
+    closeWithoutSaving() {
+      return enqueueTransition(async () => closeDecidedTab(settlement));
+    },
+    dismissCloseDecision() {
+      store.setState((state) => clearDocumentCloseDecision(state));
     },
     dispose() {
       if (disposed) return;
@@ -311,69 +341,17 @@ export function createDocumentTabsRuntime({
     flush() {
       return enqueueTransition(async () => {
         if (disposed || uncertainMutations.size) return false;
+        // Quitting or leaving the project cannot settle such a draft either,
+        // so the release is refused with the question rather than in silence.
+        // Both exits are then on screen: the document's own restore, or the
+        // close that drops the draft.
+        const detached = [...documents.values()].find(isDetachedDraft);
+        if (detached) return askAboutDraft(settlement, detached.scope.id);
         return saveDocuments([...documents.values()]);
       });
     },
     mutate(path, operation) {
-      return enqueueTransition(async () => {
-        if (disposed) return false;
-        if (
-          [...uncertainMutations].some(
-            (p) => p !== path && (p.startsWith(`${path}/`) || path.startsWith(`${p}/`)),
-          )
-        )
-          return false;
-        const affected = [...documents.values()].filter(
-          (document) =>
-            document.scope.source.folderPath === folderPath &&
-            (document.scope.source.path === path ||
-              document.scope.source.path.startsWith(`${path}/`)),
-        );
-        for (const document of affected) {
-          keep(document.scope.id);
-          document.setMutationPending(true);
-        }
-        try {
-          if (!(await saveDocuments(affected)) || disposed) return false;
-          const destination = await operation();
-          if (destination === undefined) {
-            uncertainMutations.add(path);
-            return false;
-          }
-          uncertainMutations.delete(path);
-          if (disposed) return false;
-          for (const document of affected) {
-            const { id, source } = document.scope;
-            if (destination === null) {
-              retireChild(id);
-              store.setState((state) => closeDocumentTab(state, id));
-            } else {
-              sourceIds.delete(sourceIdentity(source));
-              document.rebind(
-                { ...source, path: destination + source.path.slice(path.length) },
-                createQueries,
-              );
-              sourceIds.set(sourceIdentity(document.scope.source), id);
-            }
-          }
-          if (destination !== null) {
-            store.setState((state) => ({
-              ...state,
-              tabs: state.tabs.map((tab) => ({
-                ...tab,
-                source: documents.get(tab.id)?.scope.source ?? tab.source,
-              })),
-            }));
-            history.rename(folderPath, path, destination);
-          }
-          navigation.activate(store.getState().activeTabId);
-          guard.retireOperations();
-          return true;
-        } finally {
-          if (!uncertainMutations.has(path))
-            for (const document of affected) document.setMutationPending(false);
-        }
-      });
+      return enqueueTransition(() => mutateOpenSources(settlement, path, operation));
     },
     forward: () => stepHistory(history.next, history.stepForward),
     getDocument: (tabId) => documents.get(tabId) ?? null,

@@ -40,8 +40,10 @@ without discarding the merge draft.
 
 Keep failures attached to their document or operation while other documents remain
 usable. A failed preview keeps the source identifiable; save failure keeps the
-draft; a missing source is not silently recreated. Deletion requires an explicit
-choice to remove files, distinct from closing tabs. Shared mutation/unknown-outcome
+draft; a missing source is not silently recreated. A draft whose source file is
+gone stops autosaving and says so; restoring the file is the reader's explicit choice,
+and closing, quitting, or leaving the project asks before discarding the draft.
+Deletion requires an explicit choice to remove files, distinct from closing tabs. Shared mutation/unknown-outcome
 recovery belongs to [Project Files](../capabilities/project-files.md#failure-and-recovery).
 
 ## Related Journeys

@@ -52,6 +52,12 @@ be reported as failed merely because search updates lag.
 Document navigation and mode changes retain live work. Autosave is independent of
 which document is visible. Closing a dirty document, leaving its project, quitting,
 or installing an update must settle affected saves or keep that work available.
+A save refused because the source file no longer exists stops that draft's autosave;
+nothing rewrites a path that is gone. The draft stays open and unsaved, and the reader
+is offered one explicit write that recreates the file at its original path. That write
+first checks the source again, so a file that came back is compared, never overwritten.
+Closing the tab, quitting, or leaving the project asks about such a draft rather than
+discarding it or refusing in silence.
 A save acknowledgement clears only the submitted edit, preserving newer changes.
 Crash/shell-remount recovery reads saved files; newer unsaved text is not recoverable.
 
@@ -64,7 +70,7 @@ recoverable work. Rollback must not replace newer user or external changes.
 | Situation | Required result |
 |---|---|
 | Refresh, preview, or save fails | Keep usable content, source identity, and any live draft; offer recovery at the affected surface. |
-| Source changed or disappeared | Preserve the draft and report the source state; never silently recreate or overwrite it. |
+| Source changed or disappeared | Preserve the draft, report the source state, and stop autosave; never silently recreate or overwrite it. |
 | Write conflict | Keep local and disk versions for a deliberate decision; the Documents journey owns the user's resolution flow. |
 | Outcome unknown | Establish the result before repeating a mutation; an import may require inspecting the refreshed file list. |
 | Search update fails after save | Confirm the save and report search lag separately. |

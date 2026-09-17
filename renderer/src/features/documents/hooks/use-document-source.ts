@@ -44,6 +44,7 @@ export function useDocumentSource(
     mutationPending,
     resolveConflict: (resolution: DocumentConflictResolution) =>
       runtime.resolveConflict(api, resolution),
+    restoreSource: () => runtime.restore(api),
     retrySave: () => runtime.save(api),
     source,
   };

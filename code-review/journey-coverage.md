@@ -236,6 +236,12 @@ The [Documents design](../design-docs/journeys/documents.md) owns navigation, co
 and recovery behavior; the evidence below establishes its exercised paths.
 
 **Implementation:** Renderer: `renderer/src/features/documents/ui/source/registry.tsx`, `renderer/src/features/documents/application/document-runtime.ts`, `renderer/src/features/documents/ui/markdown/document.tsx`.
+A save refused against a version a deleted file no longer has, whose reload confirms
+the source is gone, enters the document's `detached` state and stops autosave.
+`application/draft-settlement.ts` turns a close or a release of such a tab into the
+question rendered by `ui/workspace/discard-draft-dialog.tsx`, and `document-runtime.ts`
+owns the explicit restore, which re-attempts the ordinary save before creating the file
+so a source that came back is compared instead of overwritten.
 Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`.
 
 **Status:** Release-dependent.
@@ -274,6 +280,27 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`.
   use remain unproven. The runtime pass above covers the changed text/Markdown
   flow, not every format or every interruption. See
   [conflict recovery](architecture.md#source-transactions).
+- **Detached-draft runtime pass (2026-09-17):** the built renderer in Electron, with
+  an isolated HOME, its own user-data directory and port, drove one real project: open
+  a Markdown file, switch to Edit, type, autosave (41 bytes on disk), then delete it
+  from outside the app and keep typing. The chip reported the draft as unsaved, Cmd+W
+  asked "Close without saving?" naming the file instead of doing nothing, Cancel kept
+  the tab and the draft, Restore file recreated the source with the draft in it, the
+  next edit autosaved again, and a second Cmd+W closed the tab with no question.
+  Not driven: the native window-close/quit barrier, because a renderer-side
+  `window.close()` bypasses the main process's close event (proven with an
+  always-refusing release handler), and CDP cannot deliver the native gesture. The
+  only product caller of `window.close()` is the bug-report window, which holds no
+  drafts.
+- **Detached drafts:** `document-lifecycle.test.ts` covers the autosave stop, the
+  close and release questions, the restore that creates the file, and the comparison
+  that replaces it when the source came back. `work-preservation.test.tsx` covers the
+  reader's path through the chip and the dialog. A transaction regression proves the
+  host contract both depend on: a versioned save to a deleted source is refused, and
+  only a write carrying no base version recreates it. The save barrier refuses a release
+  while such a draft is open, so quitting needs the reader to restore or discard first
+  and then repeat the quit; that refusal is proven at the renderer layer only, and no
+  packaged build has been driven through this journey.
 - **Known issues — source/viewers:** Markdown relative images lack folder-scoped resolution/upload/lightbox; heading
   ids are assigned by order without identity cross-check. PDF placeholder/observer
   counts are unbounded. Active-line paint is not focus-scoped.

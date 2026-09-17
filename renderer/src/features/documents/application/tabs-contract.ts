@@ -62,6 +62,11 @@ export interface DocumentTabsRuntime {
    *  set as of now, which is not. */
   capture(): CapturedTabsScope;
   close(tabId: string): Promise<boolean>;
+  /** Closes the tab a standing close question is about and drops its draft.
+   *  Only the reader's answer to that question may call this. */
+  closeWithoutSaving(): Promise<boolean>;
+  /** Withdraws a standing close question; the tab and its draft stay. */
+  dismissCloseDecision(): void;
   dismissOpenFailure(): void;
   retryOpen(): Promise<DocumentRuntime | null>;
   /** Closes the tab in front of the reader, if there is one. */

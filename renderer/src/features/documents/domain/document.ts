@@ -59,6 +59,12 @@ export interface DocumentConflictState {
 export type DocumentSaveState =
   | { kind: 'clean' }
   | { kind: 'conflict'; conflict: DocumentConflictState }
+  /** The source file is gone, so this draft has nowhere to be written. Unlike
+   *  `failed`, which is one refused attempt, this is a standing condition: it
+   *  survives every edit and stops autosave, because repeating a write to a
+   *  path that no longer exists cannot start succeeding on its own. Only a
+   *  save that lands, or a clean reload of a restored file, leaves it. */
+  | { kind: 'detached'; message: string }
   | { kind: 'merging'; message: string | null; finishing: boolean }
   | { kind: 'dirty' }
   | { kind: 'failed'; message: string }
@@ -88,6 +94,7 @@ export function documentConflict(editor: DocumentEditorState): DocumentConflictS
 
 export function documentSaveMessage(save: DocumentSaveState): string | null {
   switch (save.kind) {
+    case 'detached':
     case 'failed':
     case 'warned':
       return save.message;
@@ -230,9 +237,14 @@ export function changeDocumentText(state: DocumentState, value: string): Documen
       ? { kind: 'merging', finishing: false, message: null }
       : editor.save.kind === 'saving'
         ? { kind: 'saving' }
-        : dirty
-          ? { kind: 'dirty' }
-          : { kind: 'saved' };
+        : // Typing does not bring the missing file back, so the draft stays
+          // detached and keeps saying so. Reporting `dirty` here would let the
+          // autosave scheduler start writing to the gone path again.
+          editor.save.kind === 'detached'
+          ? editor.save
+          : dirty
+            ? { kind: 'dirty' }
+            : { kind: 'saved' };
   return {
     ...state,
     editor: { ...editor, revision: editor.revision + 1, save, value },
@@ -268,129 +280,29 @@ export function acceptDocumentSave(
   };
 }
 
-export function rejectDocumentSave(state: DocumentState, message: string): DocumentState {
-  if (!state.editor || state.lifecycle === 'disposed') return state;
-  const save: DocumentSaveState =
-    state.editor.save.kind === 'merging'
-      ? { kind: 'merging', finishing: false, message }
-      : { kind: 'failed', message };
-  return { ...state, editor: { ...state.editor, save } };
-}
-
-export function enterDocumentConflict(
-  state: DocumentState,
-  diskSource: DocumentTextSource,
-): DocumentState {
+/** Moves an open editor to another save state, leaving its text untouched. */
+function withSaveState(state: DocumentState, save: DocumentSaveState): DocumentState {
   const editor = state.editor;
   if (!editor || state.lifecycle === 'disposed') return state;
-  return {
-    ...state,
-    editor: {
-      ...editor,
-      save: {
-        kind: 'conflict',
-        conflict: {
-          diskContent: documentEditorText(diskSource.content),
-          diskVersion: diskSource.version,
-          editorContent: editor.value,
-          resolutionMessage: null,
-          resolving: null,
-        },
-      },
-    },
-  };
+  return { ...state, editor: { ...editor, save } };
 }
 
-export function beginDocumentConflictResolution(
-  state: DocumentState,
-  resolution: DocumentConflictResolution,
-): DocumentState {
-  const editor = state.editor;
-  const conflict = editor ? documentConflict(editor) : null;
-  if (!editor || !conflict || conflict.resolving || state.lifecycle === 'disposed') return state;
-  return {
-    ...state,
-    editor: {
-      ...editor,
-      save: {
-        kind: 'conflict',
-        conflict: { ...conflict, resolutionMessage: null, resolving: resolution },
-      },
-    },
-  };
+/**
+ * The save destination is gone. The draft is kept exactly as it is; what
+ * changes is that nothing will try to write it again until the reader decides
+ * where it should go.
+ */
+export function detachDocumentSave(state: DocumentState, message: string): DocumentState {
+  return withSaveState(state, { kind: 'detached', message });
 }
 
-export function failDocumentConflictResolution(
-  state: DocumentState,
-  message: string,
-): DocumentState {
-  const editor = state.editor;
-  const conflict = editor ? documentConflict(editor) : null;
-  if (!editor || !conflict || state.lifecycle === 'disposed') return state;
-  return {
-    ...state,
-    editor: {
-      ...editor,
-      save: {
-        kind: 'conflict',
-        conflict: { ...conflict, resolutionMessage: message, resolving: null },
-      },
-    },
-  };
-}
-
-export function reloadDocumentConflict(state: DocumentState): DocumentState {
-  const editor = state.editor;
-  const conflict = editor ? documentConflict(editor) : null;
-  if (!editor || !conflict || conflict.resolving !== 'reload') return state;
-  return {
-    ...state,
-    editor: {
-      ...editor,
-      baseline: conflict.diskContent,
-      save: { kind: 'clean' },
-      value: conflict.diskContent,
-      version: conflict.diskVersion,
-    },
-  };
-}
-
-export function mergeDocumentConflict(state: DocumentState, mergedContent: string): DocumentState {
-  const editor = state.editor;
-  const conflict = editor ? documentConflict(editor) : null;
-  if (!editor || !conflict || conflict.resolving !== 'merge') return state;
-  return {
-    ...state,
-    editor: {
-      ...editor,
-      baseline: conflict.diskContent,
-      revision: editor.revision + 1,
-      save: { kind: 'merging', finishing: false, message: null },
-      value: mergedContent,
-      version: conflict.diskVersion,
-    },
-  };
-}
-
-export function acceptDocumentOverwrite(
-  state: DocumentState,
-  result: DocumentTextSaveResult,
-): DocumentState {
-  const editor = state.editor;
-  const conflict = editor ? documentConflict(editor) : null;
-  if (!editor || conflict?.resolving !== 'overwrite') return state;
-  const baseline = documentEditorText(result.content);
-  const warning = result.indexWarning ?? null;
-  return {
-    ...state,
-    editor: {
-      ...editor,
-      baseline,
-      save: warning === null ? { kind: 'saved' } : { kind: 'warned', message: warning },
-      value: baseline,
-      version: result.version,
-    },
-  };
+export function rejectDocumentSave(state: DocumentState, message: string): DocumentState {
+  return withSaveState(
+    state,
+    state.editor?.save.kind === 'merging'
+      ? { kind: 'merging', finishing: false, message }
+      : { kind: 'failed', message },
+  );
 }
 
 export function disposeDocumentState(state: DocumentState): DocumentState {

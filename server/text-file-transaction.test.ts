@@ -159,3 +159,25 @@ test('save submits the current projection without waiting for embedding completi
   });
   assert.deepEqual(accepted, ['first', 'second']);
 });
+
+test('a deleted source refuses a versioned save and is recreated only by an explicit overwrite', async (t) => {
+  t.mock.method(indexer, 'upsertFile', async () => ({ outcome: 'unchanged' }));
+  const root = folder();
+  const note = path.join(root, 'note.md');
+  fs.writeFileSync(note, 'original');
+  const baseVersion = textVersion('original');
+  fs.rmSync(note);
+
+  // Autosave writes against the version it read. With no file there is no such
+  // version, so the draft is refused rather than silently recreating the file.
+  await assert.rejects(
+    runWithFolderRoot(root, () => saveFileContent('note.md', 'my draft', { baseVersion })),
+    (error: { code?: string }) => error.code === 'FILE_CHANGED',
+  );
+  assert.equal(fs.existsSync(note), false);
+
+  // The reader's explicit restore carries no base version, and creates it.
+  const restored = await runWithFolderRoot(root, () => saveFileContent('note.md', 'my draft'));
+  assert.equal(fs.readFileSync(note, 'utf8'), 'my draft');
+  assert.equal(restored.version, textVersion('my draft'));
+});

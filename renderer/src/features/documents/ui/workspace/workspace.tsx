@@ -27,6 +27,7 @@ import type {
 } from '@/features/documents/ui/source/viewer';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
+import { DiscardDraftDialog } from './discard-draft-dialog';
 import { DocumentFind } from './find';
 import { DocumentReadingSurface } from './reading-surface';
 
@@ -70,6 +71,7 @@ export function DocumentWorkspace({
 }: DocumentWorkspaceProps) {
   const searchNotice = useStore(runtime.navigation.store, (state) => state.searchNotice);
   const openFailure = useStore(runtime.store, (state) => state.openFailure);
+  const closeDecision = useStore(runtime.store, (state) => state.closeDecision);
   const { activeTab, activeTabId, tabs } = useDocumentTabs(runtime);
   const [retention, setRetention] = useState<{ ids: string[]; runtime: DocumentTabsRuntime }>(
     () => ({
@@ -142,6 +144,11 @@ export function DocumentWorkspace({
 
   return (
     <section aria-label="Document workspace" className="relative flex h-full min-h-0 flex-col">
+      <DiscardDraftDialog
+        onCancel={runtime.dismissCloseDecision}
+        onConfirm={() => void runtime.closeWithoutSaving()}
+        source={closeDecision?.source ?? null}
+      />
       {openFailure && (
         <div className="flex items-center gap-3 border-b border-border px-4 py-2 text-caption">
           <span role="alert">

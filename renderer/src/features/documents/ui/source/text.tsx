@@ -49,10 +49,24 @@ export interface TextSurfaceProps {
   status(status: DocumentViewerStatus): ReactNode;
 }
 
-function SaveFeedback({ retry, save }: { retry: () => void; save: DocumentSaveState }) {
+function SaveFeedback({
+  restore,
+  retry,
+  save,
+}: {
+  restore: () => void;
+  retry: () => void;
+  save: DocumentSaveState;
+}) {
   const shape = useShape();
-  if (save.kind !== 'failed' && save.kind !== 'warned') return null;
-  const failed = save.kind === 'failed';
+  if (save.kind !== 'detached' && save.kind !== 'failed' && save.kind !== 'warned') return null;
+  // A detached draft reads as a failure because that is what it is: nothing is
+  // writing this text anywhere. Autosave has stopped, so the action beside the
+  // sentence is the only writer left, and it is the reader's to press. What it
+  // offers differs: a failed write can simply be repeated, while a draft whose
+  // file is gone needs that file created, which only the reader may ask for.
+  const detached = save.kind === 'detached';
+  const failed = detached || save.kind === 'failed';
   const text = documentSaveMessage(save) ?? '';
 
   return (
@@ -86,8 +100,8 @@ function SaveFeedback({ retry, save }: { retry: () => void; save: DocumentSaveSt
         {text}
       </span>
       {failed && (
-        <Button onClick={retry} size="compact" variant="tertiary">
-          Retry
+        <Button onClick={detached ? restore : retry} size="compact" variant="tertiary">
+          {detached ? 'Restore file' : 'Retry'}
         </Button>
       )}
     </div>
@@ -111,6 +125,7 @@ export function TextSurface({
     markdownMode,
     mutationPending,
     resolveConflict,
+    restoreSource,
     retrySave,
     source,
   } = useDocumentSource(runtime, sourceApi, active);
@@ -193,7 +208,11 @@ export function TextSurface({
           })}
         </Suspense>
         {access === 'editable' && editor && (
-          <SaveFeedback retry={() => void retrySave()} save={editor.save} />
+          <SaveFeedback
+            restore={() => void restoreSource()}
+            retry={() => void retrySave()}
+            save={editor.save}
+          />
         )}
       </div>
     </div>

@@ -39,7 +39,10 @@ export const DOCUMENT_SOURCE_MESSAGES: Readonly<Record<DocumentSourceFailureKind
 };
 
 export const DOCUMENT_SAVE_MESSAGES: Readonly<Record<DocumentSaveFailureKind, string>> = {
-  missing: 'The source file is missing. Open work is still available; restore the file and retry.',
+  // The draft's destination is gone, which is a standing condition rather than
+  // a write to repeat. The sentence names the risk and leaves the way out to
+  // the action beside it.
+  missing: 'The source file is gone, so this draft is not being saved.',
   conflict:
     'The file changed on disk, but its newer version could not be loaded. Retry to compare both versions.',
   'invalid-response': 'The document could not be saved. Your changes are still available.',

@@ -23,6 +23,10 @@ export interface DocumentTabsState {
   activeTabId: string | null;
   openRequest: SourceReference | null;
   openFailure: { source: SourceReference; message: string } | null;
+  /** A close waiting on the reader, because the tab holds work that cannot be
+   *  saved where it came from. Held here rather than in the strip so the X,
+   *  the keyboard, and the close commands all ask the same question. */
+  closeDecision: { source: SourceReference; tabId: string } | null;
   lifecycle: 'active' | 'disposed';
   tabs: DocumentTab[];
 }
@@ -73,7 +77,14 @@ export function createDocumentTabsState(
 
   const requestedActiveId = restored?.activeTabId ?? null;
   return withTabs(
-    { activeTabId: null, openRequest: null, openFailure: null, lifecycle: 'active', tabs: [] },
+    {
+      activeTabId: null,
+      closeDecision: null,
+      openRequest: null,
+      openFailure: null,
+      lifecycle: 'active',
+      tabs: [],
+    },
     sources,
     [
       requestedActiveId,
@@ -144,7 +155,33 @@ export function closeDocumentTab(state: DocumentTabsState, tabId: string): Docum
   if (index === -1) return state;
   const tabs = state.tabs.filter((tab) => tab.id !== tabId);
   const neighbour = tabs[Math.min(index, tabs.length - 1)]?.id ?? null;
-  return withTabs(state, tabs, [state.activeTabId === tabId ? neighbour : state.activeTabId]);
+  const settled = clearDocumentCloseDecision(state, tabId);
+  return withTabs(settled, tabs, [settled.activeTabId === tabId ? neighbour : settled.activeTabId]);
+}
+
+/**
+ * Asks the reader before a close that would drop work. The tab stays open and
+ * becomes the visible one, so the question and the draft it is about are on
+ * screen together.
+ */
+export function requestDocumentClose(state: DocumentTabsState, tabId: string): DocumentTabsState {
+  if (state.lifecycle === 'disposed') return state;
+  const tab = state.tabs.find((candidate) => candidate.id === tabId);
+  if (!tab) return state;
+  return withTabs({ ...state, closeDecision: { source: tab.source, tabId } }, state.tabs, [
+    tabId,
+    state.activeTabId,
+  ]);
+}
+
+/** Drops a standing close question: the named tab's, or whichever stands. */
+export function clearDocumentCloseDecision(
+  state: DocumentTabsState,
+  tabId?: string,
+): DocumentTabsState {
+  if (state.closeDecision === null) return state;
+  if (tabId !== undefined && state.closeDecision.tabId !== tabId) return state;
+  return { ...state, closeDecision: null };
 }
 
 export function disposeDocumentTabsState(state: DocumentTabsState): DocumentTabsState {

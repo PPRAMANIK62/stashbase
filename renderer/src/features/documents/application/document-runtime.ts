@@ -6,23 +6,17 @@
  */
 import { createStore, type StoreApi } from 'zustand/vanilla';
 
-import { buildConflictMarkerDraft } from '@/features/documents/domain/conflict-diff';
+import { enterDocumentConflict } from '@/features/documents/domain/conflict-state';
 import {
-  acceptDocumentOverwrite,
   acceptDocumentSave,
-  beginDocumentConflictResolution,
   beginDocumentSave,
   changeDocumentText,
   createDocumentState,
+  detachDocumentSave,
   documentAccess,
   disposeDocumentState,
-  documentConflict,
-  enterDocumentConflict,
-  failDocumentConflictResolution,
   isDocumentDirty,
-  mergeDocumentConflict,
   reconcileDocumentSource,
-  reloadDocumentConflict,
   rejectDocumentSave,
   sameSource,
   setDocumentJsonSession,
@@ -39,12 +33,15 @@ import { documentTextFormat } from '@/features/documents/domain/document-format'
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { createScopeGuard, type CapturedScope } from '@/shared/runtime/scope-guard';
 
+import { watchAutosave } from './autosave';
+import { resolveDocumentConflict, type ConflictResolutionContext } from './conflict-resolution';
+import { documentFailure, DOCUMENT_SAVE_MESSAGES } from './failure-messages';
 import {
-  documentFailure,
-  DOCUMENT_OVERWRITE_MESSAGES,
-  DOCUMENT_SAVE_MESSAGES,
-} from './failure-messages';
-import { DocumentSaveError, type DocumentQueryScope, type DocumentSourcePort } from './ports';
+  DocumentSaveError,
+  DocumentSourceError,
+  type DocumentQueryScope,
+  type DocumentSourcePort,
+} from './ports';
 
 /** What one document operation was started under: the document's scope, and
  *  the generation of operations live at the time. The scope alone cannot tell a
@@ -84,6 +81,10 @@ export interface DocumentRuntime {
     api: DocumentSourcePort,
     resolution: DocumentConflictResolution,
   ): Promise<boolean>;
+  /** Writes a detached draft back to the path its file was deleted from.
+   *  Answers whether the draft now has a file. Only the reader may ask: this
+   *  is the one write that creates a source the app did not find. */
+  restore(api: DocumentSourcePort): Promise<boolean>;
   save(api: DocumentSourcePort): Promise<boolean>;
   setJsonSession(patch: Partial<JsonDocumentSession>): void;
   setMarkdownMode(mode: MarkdownViewMode): void;
@@ -126,7 +127,6 @@ export function createDocumentRuntime({
   );
   let disposed = false;
   let saveInFlight: Promise<boolean> | null = null;
-  let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
 
   const { accept, capture, retireOperations } = createScopeGuard<DocumentScope>({
     disposed: () => disposed,
@@ -168,21 +168,55 @@ export function createDocumentRuntime({
             queries.replaceSource(diskSource);
             store.setState((state) => enterDocumentConflict(state, diskSource));
           });
-        } catch {
+        } catch (loadError) {
+          // The write was refused against a version the file no longer has,
+          // and the read confirms why: there is no file. That is not a
+          // comparison the reader can make, so the draft detaches instead.
+          const gone =
+            loadError instanceof DocumentSourceError && loadError.kind === 'missing'
+              ? DOCUMENT_SAVE_MESSAGES.missing
+              : null;
           accept(captured, () =>
-            store.setState((state) => rejectDocumentSave(state, DOCUMENT_SAVE_MESSAGES.conflict)),
+            store.setState((state) =>
+              gone === null
+                ? rejectDocumentSave(state, DOCUMENT_SAVE_MESSAGES.conflict)
+                : detachDocumentSave(state, gone),
+            ),
           );
         }
         return false;
       }
+      const message = documentFailure(error, 'DocumentSaveError', DOCUMENT_SAVE_MESSAGES).message;
+      // A missing destination is not a write that might work next time. It
+      // becomes the document's standing state so autosave stops and the reader
+      // is left with the explicit restore.
+      const detached = error instanceof DocumentSaveError && error.kind === 'missing';
       accept(captured, () =>
         store.setState((state) =>
-          rejectDocumentSave(
-            state,
-            documentFailure(error, 'DocumentSaveError', DOCUMENT_SAVE_MESSAGES).message,
-          ),
+          detached ? detachDocumentSave(state, message) : rejectDocumentSave(state, message),
         ),
       );
+      return false;
+    }
+  };
+
+  /** The one write that may create a file the app did not find. It is reached
+   *  only from `restore`, after a save has re-confirmed the source is gone. */
+  const performCreate = async (
+    api: DocumentSourcePort,
+    captured: DocumentOperationScope,
+    capturedRevision: number,
+    content: string,
+  ): Promise<boolean> => {
+    try {
+      const created = await api.overwrite(captured.scope.source, { content }, controller.signal);
+      return accept(captured, () => {
+        queries.replaceSource(created);
+        store.setState((state) => acceptDocumentSave(state, capturedRevision, created));
+      });
+    } catch (error) {
+      const message = documentFailure(error, 'DocumentSaveError', DOCUMENT_SAVE_MESSAGES).message;
+      accept(captured, () => store.setState((state) => detachDocumentSave(state, message)));
       return false;
     }
   };
@@ -210,23 +244,19 @@ export function createDocumentRuntime({
     }
   };
 
-  const unsubscribeAutosave = store.subscribe((state, previous) => {
-    if (state.editor?.revision === previous.editor?.revision) return;
-    clearTimeout(autosaveTimer);
-    const editor = state.editor;
-    if (
-      !state.mutationPending &&
-      autosaveApi &&
-      editor &&
-      isDocumentDirty(editor) &&
-      editor.save.kind !== 'merging' &&
-      editor.save.kind !== 'conflict'
-    ) {
-      autosaveTimer = setTimeout(() => {
-        void save(autosaveApi);
-      }, 500);
-    }
-  });
+  const resolutionContext: ConflictResolutionContext = {
+    accept,
+    capture,
+    queries,
+    retireOperations,
+    get scope() {
+      return scope;
+    },
+    signal: controller.signal,
+    store,
+  };
+
+  const autosave = watchAutosave({ api: autosaveApi, save, store });
 
   return {
     readingPosition: null,
@@ -246,8 +276,7 @@ export function createDocumentRuntime({
     dispose() {
       if (disposed) return;
       disposed = true;
-      clearTimeout(autosaveTimer);
-      unsubscribeAutosave();
+      autosave.dispose();
       retireOperations();
       controller.abort();
       // Cancelling in-flight reads is best effort during teardown.
@@ -257,7 +286,7 @@ export function createDocumentRuntime({
       store.setState(disposeDocumentState);
     },
     setMutationPending(pending) {
-      clearTimeout(autosaveTimer);
+      autosave.cancelPending();
       store.setState((state) => ({ ...state, mutationPending: pending }));
     },
     rebind(nextSource, createQueries) {
@@ -305,67 +334,34 @@ export function createDocumentRuntime({
         if (saveInFlight === run) saveInFlight = null;
       }
     },
-    async resolveConflict(api, resolution) {
-      if (disposed) return false;
-      const before = store.getState();
-      const editorState = before.editor;
-      const conflict = editorState ? documentConflict(editorState) : null;
-      if (!conflict || conflict.resolving) return false;
-      const format = documentTextFormat(scope.source.path);
-      if (!format) return false;
-      store.setState((state) => beginDocumentConflictResolution(state, resolution));
-      const diskSource = {
-        content: conflict.diskContent,
-        format,
-        version: conflict.diskVersion,
-      };
-
-      // Both local resolutions rebase the editor on what is now on disk, so
-      // anything still in flight against the old base is retired first.
-      if (resolution === 'reload') {
-        retireOperations();
-        queries.replaceSource(diskSource);
-        store.setState(reloadDocumentConflict);
-        return true;
-      }
-      if (resolution === 'merge') {
-        retireOperations();
-        const merged = buildConflictMarkerDraft(conflict.editorContent, conflict.diskContent);
-        queries.replaceSource(diskSource);
-        store.setState((state) => mergeDocumentConflict(state, merged));
-        return true;
-      }
-
+    resolveConflict(api, resolution) {
+      return disposed
+        ? Promise.resolve(false)
+        : resolveDocumentConflict(resolutionContext, api, resolution);
+    },
+    /**
+     * Writes a detached draft back to the path its file was deleted from.
+     *
+     * An ordinary save runs first, because the file may have come back since
+     * the draft detached: that lands, or it becomes the comparison the reader
+     * decides in. Only a save that re-confirms the file is gone reaches the
+     * create below, so this can never overwrite something that reappeared.
+     */
+    async restore(api) {
+      if (disposed || store.getState().editor?.save.kind !== 'detached') return false;
+      if (await save(api)) return true;
+      const editor = store.getState().editor;
+      if (disposed || editor?.save.kind !== 'detached') return false;
       const captured = capture();
+      const capturedRevision = editor.revision;
+      const content = editor.value;
+      store.setState(beginDocumentSave);
+      const run = performCreate(api, captured, capturedRevision, content);
+      saveInFlight = run;
       try {
-        const saved = await api.save(
-          captured.scope.source,
-          { baseVersion: conflict.diskVersion, content: conflict.editorContent },
-          controller.signal,
-        );
-        return accept(captured, () => {
-          queries.replaceSource(saved);
-          store.setState((state) => acceptDocumentOverwrite(state, saved));
-        });
-      } catch (error) {
-        if (error instanceof DocumentSaveError && error.kind === 'conflict') {
-          try {
-            const disk = await api.load(captured.scope.source, controller.signal);
-            accept(captured, () => store.setState((state) => enterDocumentConflict(state, disk)));
-            return false;
-          } catch {
-            /* Keep both reviewed versions if the newer source cannot be read. */
-          }
-        }
-        accept(captured, () =>
-          store.setState((state) =>
-            failDocumentConflictResolution(
-              state,
-              documentFailure(error, 'DocumentSaveError', DOCUMENT_OVERWRITE_MESSAGES).message,
-            ),
-          ),
-        );
-        return false;
+        return await run;
+      } finally {
+        if (saveInFlight === run) saveInFlight = null;
       }
     },
     retireOperations,

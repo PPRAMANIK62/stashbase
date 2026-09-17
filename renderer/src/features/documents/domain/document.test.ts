@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import { textSource } from '@/test/fakes/documents';
 
+import { enterDocumentConflict } from './conflict-state';
 import {
   acceptDocumentSave,
   beginDocumentSave,
@@ -10,7 +11,6 @@ import {
   documentAccess,
   documentEditorText,
   disposeDocumentState,
-  enterDocumentConflict,
   isDocumentDirty,
   reconcileDocumentSource,
   sameSource,
