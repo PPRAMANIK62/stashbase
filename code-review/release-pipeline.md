@@ -33,8 +33,12 @@ before its metadata and payloads coexist.
   macOS run renderer behavior without repeating coverage or the Story sweep.
   Both Apple Silicon and Intel macOS runners run the source checks. Non-Linux
   renderer behavior runs use two workers: repeated Intel runs with default
-  concurrency timed out in different otherwise-passing UI tests. The bound
-  preserves the complete suite and its existing timeout assertions.
+  concurrency timed out in different otherwise-passing UI tests. Whole-test
+  timeout is 15 seconds on native runners so lazy imports and multiple awaited
+  assertions fit around their individual timeouts; the shell test itself has
+  a five-second content assertion. The complete suite and all per-assertion
+  wait limits remain unchanged. Two workers alone did not eliminate hosted
+  Intel whole-test timeouts.
 - `pnpm check:web` is the release-blocking renderer gate, run once on Linux:
   boundaries, size, conventions, unused exports, duplication, formatting, lint,
   coverage, structural Story accessibility, typecheck, production build, and
