@@ -53,7 +53,8 @@ jobs:
 
       - name: Test renderer behavior
         if: runner.os != 'Linux'
-        run: pnpm test:renderer
+        # Bound happy-dom workers on hosted CPUs; keep every test and timeout.
+        run: pnpm test:renderer --maxWorkers=2
 
       - name: Build renderer
         if: runner.os != 'Linux'

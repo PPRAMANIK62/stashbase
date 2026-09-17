@@ -31,7 +31,10 @@ before its metadata and payloads coexist.
   host/Python suites, native OpenCode verification, platform builds, and real
   Electron lifecycle smoke. Linux runs the complete renderer gate; Windows and
   macOS run renderer behavior without repeating coverage or the Story sweep.
-  Both Apple Silicon and Intel macOS runners run the source checks.
+  Both Apple Silicon and Intel macOS runners run the source checks. Non-Linux
+  renderer behavior runs use two workers: repeated Intel runs with default
+  concurrency timed out in different otherwise-passing UI tests. The bound
+  preserves the complete suite and its existing timeout assertions.
 - `pnpm check:web` is the release-blocking renderer gate, run once on Linux:
   boundaries, size, conventions, unused exports, duplication, formatting, lint,
   coverage, structural Story accessibility, typecheck, production build, and
