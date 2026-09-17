@@ -92,7 +92,14 @@ const ChatMessage = forwardRef<HTMLDivElement, ChatMessageProps>(
         {children != null && children !== '' && (
           <div
             className={cn(
-              'break-words whitespace-pre-wrap',
+              // `items-start` leaves this box content-sized, so unbreakable
+              // content — a code block's longest line — sizes it by its own
+              // max-content and carries the whole transcript past the pane's
+              // edge; the scroller above only asks for vertical scroll, so
+              // CSS grants horizontal too and the column slides. The cap
+              // hands the width back to the message, letting the code block's
+              // own `overflow-auto` scroll the line instead of the panel.
+              'max-w-full break-words whitespace-pre-wrap',
               compact ? 'text-[13px]' : 'text-[14px]',
               // Only the bubble carries vertical padding; the flush assistant
               // reply lets the transcript gap set its rhythm.
