@@ -39,6 +39,30 @@ async function until(check: () => Promise<boolean>): Promise<void> {
   }
 }
 
+test('older Intel Macs reject only extraction without download, retry, or durable demand', async (t) => {
+  const f = await fixture(t);
+  const runtime = f.make({ arch: 'x64', osRelease: '21.6.0', fetch: async () => {
+    assert.fail('unsupported components must never download');
+  } });
+  const unavailable = { status: 'failed', error: 'unsupported-system' };
+  assert.deepEqual(await runtime.status(), unavailable);
+  await runtime.resume();
+  assert.deepEqual(await runtime.retry(), unavailable);
+  await assert.rejects(runtime.ensure(), /macOS 15.*Intel Macs/);
+  assert.equal(runtime.current(), undefined);
+  assert.equal(await fs.access(f.options.root).then(() => true, () => false), false);
+});
+
+test('supported Intel Macs install their own component and reuse it offline', async (t) => {
+  const f = await fixture(t);
+  const manifest = { ...f.manifest, arch: 'x64', asset: extractorAssetName('1.2.3', 'darwin', 'x64') };
+  const options = { arch: 'x64', osRelease: '24.0.0', manifest: async () => manifest };
+  const runtime = f.make({ ...options, fetch: async () => new Response(f.bytes) });
+  const executable = await runtime.ensure();
+  const offline = f.make({ ...options, fetch: async () => { assert.fail('installed component must stay offline'); } });
+  assert.equal(await offline.ensure(), executable);
+});
+
 test('status and fresh startup are read-only; concurrent first demand installs once and reopens offline', async (t) => {
   const f = await fixture(t);
   let calls = 0;

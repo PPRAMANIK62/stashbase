@@ -82,7 +82,7 @@
     "test:icons": "node --test scripts/icons/encode.test.mjs",
     "test:macos-signing": "node --test scripts/macos-release-contract.test.mjs",
     "test:windows-signing": "node --test scripts/windows-release-contract.test.mjs",
-    "test:updates": "node --test electron/update-manager.test.cjs electron/update-install-strategy.test.cjs electron/update-window-barrier.test.cjs scripts/github-release-api.test.mjs scripts/update-release-contract.test.mjs",
+    "test:updates": "node --test electron/update-manager.test.cjs electron/update-install-strategy.test.cjs electron/update-window-barrier.test.cjs scripts/github-release-api.test.mjs scripts/update-release-contract.test.mjs scripts/packaging/macos-artifacts.test.mjs",
     "typecheck:electron-boundary": "tsc --noEmit -p electron/tsconfig.json",
     "typecheck": "pnpm typecheck:host && pnpm typecheck:web",
     "check": "pnpm test:toolchain && pnpm test:docs && pnpm test:inventory && pnpm test:python && pnpm test:release-gate && pnpm test:package-inputs && pnpm test:icons && pnpm test:macos-signing && pnpm test:windows-signing && pnpm test:updates && pnpm test:config && pnpm check:web && npm run test:electron && pnpm test:conversion-scheduler && pnpm test:project-files && pnpm test:retrieval && pnpm test:agent && pnpm test:opencode:native && pnpm test:mcp && pnpm typecheck:host && pnpm build:services && pnpm test:electron:smoke:built",
@@ -193,6 +193,7 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
+      "minimumSystemVersion": "12.0",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "notarize": true,

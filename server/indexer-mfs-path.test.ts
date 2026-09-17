@@ -8,6 +8,22 @@ import { isMfsDaemonRetiringError, MfsDaemon } from './mfs-daemon.ts';
 
 const windowsPath = createFilesystemPath({ platform: 'win32', cwd: 'C:/' });
 
+test('an older Intel Mac rejects native search without starting a daemon', async (t) => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const arch = Object.getOwnPropertyDescriptor(process, 'arch');
+  Object.defineProperty(process, 'platform', { value: 'darwin' });
+  Object.defineProperty(process, 'arch', { value: 'x64' });
+  t.mock.method(os, 'release', () => '21.6.0');
+  t.after(() => {
+    Object.defineProperty(process, 'platform', platform!);
+    Object.defineProperty(process, 'arch', arch!);
+  });
+  const daemon = new MfsDaemon();
+  await assert.rejects(daemon.ensureReady(), /Local search.*macOS 15/);
+  assert.equal(daemon.currentGeneration(), 0);
+  await daemon.close();
+});
+
 test('Unicode identity is evaluated only by Node, including Unicode 16 case pairs', () => {
   const garayUpper = '\u{10D50}';
   const garayLower = '\u{10D70}';

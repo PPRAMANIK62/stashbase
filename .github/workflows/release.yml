@@ -114,8 +114,10 @@ jobs:
           }
 
           require_asset 'latest-mac.yml' 'macOS update metadata'
-          require_asset "StashBase-${release_version}-mac-*.dmg" 'macOS DMG'
-          require_asset "StashBase-${release_version}-mac-*.zip" 'macOS update archive'
+          for mac_arch in arm64 x64; do
+            require_asset "StashBase-${release_version}-mac-${mac_arch}.dmg" "macOS ${mac_arch} DMG"
+            require_asset "StashBase-${release_version}-mac-${mac_arch}.zip" "macOS ${mac_arch} update archive"
+          done
           require_asset 'latest.yml' 'Windows update metadata'
           require_asset "StashBase-${release_version}-win-*.exe" 'Windows installer'
           require_asset "StashBase-${release_version}-win-*.zip" 'Windows archive'
@@ -124,7 +126,7 @@ jobs:
           require_asset "StashBase-${release_version}-linux-*.AppImage" 'Linux AppImage'
           require_asset "StashBase-${release_version}-linux-*.deb" 'Linux Debian package'
 
-          for component_platform in darwin-arm64 win32-x64 linux-x64; do
+          for component_platform in darwin-arm64 darwin-x64 win32-x64 linux-x64; do
             require_asset "stashbase-extract-${release_version}-${component_platform}.tar.gz" "PDF/OCR component ${component_platform}"
             require_asset "stashbase-extract-${release_version}-${component_platform}.json" "PDF/OCR component manifest ${component_platform}"
           done

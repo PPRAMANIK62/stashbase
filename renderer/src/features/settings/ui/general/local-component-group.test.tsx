@@ -11,6 +11,17 @@ import { LocalComponentRecovery } from './local-component-recovery';
 
 afterEach(cleanup);
 
+it('explains an unsupported system without offering a download retry', async () => {
+  const port: LocalComponentPort = {
+    load: vi.fn(async () => ({ status: 'failed' as const, error: 'unsupported-system' as const })),
+    retry: vi.fn(),
+  };
+  withQueryClient(<LocalComponentRecovery port={port} />);
+  expect(await screen.findByText(/requires macOS 15 or later/)).not.toBeNull();
+  expect(screen.queryByRole('button', { name: 'Retry download' })).toBeNull();
+  expect(port.retry).not.toHaveBeenCalled();
+});
+
 it('shows a failed download, retries only on click, and follows shared installation state', async () => {
   let status: LocalComponentStatus = { status: 'failed', error: 'network' };
   const port: LocalComponentPort = {

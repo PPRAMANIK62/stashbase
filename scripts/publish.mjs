@@ -45,7 +45,11 @@ console.log(`[publish] ${pkg.name}@${pkg.version}`);
 console.log('[publish] step 1/2: build and upload GitHub Release artifacts');
 run(process.execPath, [path.join(root, 'scripts', 'publish-github-release.mjs'), ...args]);
 
-console.log('[publish] step 2/2: publish Homebrew cask update');
-run(process.execPath, [path.join(root, 'scripts', 'publish-homebrew.mjs'), ...args]);
+console.log('[publish] step 2/2: preview Homebrew cask update');
+const bothMacDmgs = ['arm64', 'x64'].every((arch) => fs.existsSync(
+  path.join(root, 'release.nosync', `${pkg.build.productName}-${pkg.version}-mac-${arch}.dmg`),
+));
+if (bothMacDmgs) run(process.execPath, [path.join(root, 'scripts', 'publish-homebrew.mjs'), ...args]);
+else console.log('[publish] cask preview requires both verified arm64 and x64 DMGs; native package preview is complete.');
 
 console.log('[publish] done');

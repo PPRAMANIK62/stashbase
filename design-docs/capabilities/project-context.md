@@ -20,6 +20,10 @@ an empty project and a conversation without references are valid.
   Failed setup offers retry beside a waiting document, or one retry on next launch.
   Cancelled source demand cannot silently resume; independently requested component
   installation may continue. Downloads do not send source bytes or steal focus.
+- An unsupported native component is a capability limitation, not a setup retry.
+  Explain the limitation without downloading incompatible binaries or blocking
+  project browsing and editing. Search can be unavailable on systems where its
+  native backend cannot run; neither search mode may pretend to succeed there.
 - Explicit source cancellation remains stopped until Reprocess. Shutdown interruption
   is recoverable. Storage failure must not report durable cancellation or silently
   restart work whose state cannot be established.

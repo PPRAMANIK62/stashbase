@@ -14,6 +14,9 @@ Enter a project → prepare the selected Agent if needed → discuss an idea →
 
 First value may be discussion in an empty project. No references, wiki, search key, or
 file output is required. Local browsing and editing remain available without an account.
+Hardware or OS limitations in optional search, extraction, or Agent runtimes must
+not prevent application entry on an OS supported by the desktop runtime. Explain
+the unavailable capability where it is used; preserve project access and editing.
 
 ### Failure and Recovery
 

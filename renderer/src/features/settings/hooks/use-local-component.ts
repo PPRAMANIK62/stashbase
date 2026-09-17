@@ -49,7 +49,7 @@ export function useLocalComponent(
   return {
     busy,
     status: query.data?.status ?? null,
-    canRetry: query.data?.status === 'failed',
+    canRetry: query.data?.status === 'failed' && query.data.error !== 'unsupported-system',
     description: query.data ? localComponentDescription(query.data) : 'Loading component status…',
     failure: retry.failure ?? (query.isError ? settingsFailure(query.error) : null),
     reload: () => void query.refetch(),

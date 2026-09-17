@@ -26,6 +26,7 @@ import { logger } from './log.ts';
 import { globalVectorStoreDir } from './local-data.ts';
 import { filesystemPath } from './filesystem-path.ts';
 import { isDevelopmentRuntime } from './development-runtime.ts';
+import { nativeComponentUnavailable } from './native-component-support.ts';
 import type { EmbedderProvider } from '../shared/embedding.ts';
 
 const log = logger('mfs');
@@ -459,6 +460,8 @@ function pythonCandidates(root: string): string[] {
 }
 
 function resolveDaemonCommand(): DaemonCommand {
+  const unavailable = nativeComponentUnavailable();
+  if (!DEVELOPMENT_RUNTIME && unavailable) throw new Error(unavailable);
   const binary = resolveDaemonBinary();
   const storeArgs = ['--store-root', globalVectorStoreDir()];
   if (binary) {

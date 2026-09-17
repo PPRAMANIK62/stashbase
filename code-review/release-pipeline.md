@@ -31,6 +31,7 @@ before its metadata and payloads coexist.
   host/Python suites, native OpenCode verification, platform builds, and real
   Electron lifecycle smoke. Linux runs the complete renderer gate; Windows and
   macOS run renderer behavior without repeating coverage or the Story sweep.
+  Both Apple Silicon and Intel macOS runners run the source checks.
 - `pnpm check:web` is the release-blocking renderer gate, run once on Linux:
   boundaries, size, conventions, unused exports, duplication, formatting, lint,
   coverage, structural Story accessibility, typecheck, production build, and
@@ -128,7 +129,7 @@ toolchain rather than the linter any gate runs.
 - Artifact upload gates fail closed unless macOS has DMG, ZIP, and metadata;
   Windows has NSIS EXE, ZIP, blockmap, and metadata; and Linux has deb,
   AppImage, and latest metadata carrying its embedded blockmap size.
-  All three platform extractor archives and manifests must also exist before
+  All four platform/architecture extractor archives and manifests must also exist before
   the coordinator publishes the release.
 - Versioned release assets are immutable. Platform Adapters upload only to a
   draft and never overwrite an existing name. If a coordinated run leaves an
@@ -139,7 +140,12 @@ toolchain rather than the linter any gate runs.
   unpublished draft and must not be used as the draft-existence check.
 - Windows provisions the manifest-reading Node runtime and compiler tools inside
   MINGW64. Linux preserves the documented glibc/glibc++ baseline. macOS targets
-  12.0 and retains the generic CPU fallback alongside supported acceleration.
+  12.0 for the desktop application. Intel native search/extraction bundles use
+  macOS 15 dependencies; older Intel systems retain project entry and editing,
+  while those components report unavailable without blocking application startup.
+  Intel OCR uses the last selected ONNX Runtime/OpenCV releases with x64 wheels;
+  other platforms keep their existing dependency resolution. Intel OpenCode uses
+  the baseline executable so build-runner AVX2 support cannot narrow customer CPUs.
 - Packaged smoke checks that the extractor is absent from the base installer,
   installs the release archive through the production download/verification
   owner using a local HTTP transport, exercises real PDF/OCR, and checks offline
@@ -200,6 +206,27 @@ and Linux cache restoration, frozen Python execution, macOS signing after
 restoration, and end-to-end time savings require hosted release evidence.
 
 ## macOS Developer ID Distribution
+
+The macOS Adapter builds arm64 on `macos-15` and x64 on `macos-15-intel`.
+Each runner verifies its native daemon, signed application, and independent
+extractor. Artifacts are staged separately, then `scripts/merge-macos-artifacts.mjs`
+checks both versions, architectures, payload hashes, and component manifests
+before creating one latest-mac.yml containing both ZIP/DMG pairs. Only the
+combined set is uploaded to the draft; parallel jobs must never upload competing
+metadata under the same name. Homebrew selects the DMG and checksum by CPU.
+Published Intel installation, oldest-OS editing, native components, signing, and
+N→N+1 updates remain unproven until the first release runs on both architectures.
+The Intel dependency resolution was checked for CPython 3.13/macOS 15 with uv
+and pip's target-platform dry run. This verifies available distributions, not
+native execution. Local artifact tests exercise checksum rejection and the
+installed electron-updater's architecture selection; the generated Homebrew
+cask also passes Ruby syntax validation.
+Local verification passed host types, release/toolchain/package/signing/update
+contracts, component/configuration/file-operation suites, and Electron boundary
+smokes. The renderer gate passed 11 stages; its first coverage run had timeout
+failures, then the complete coverage stage passed with two workers. The same
+renderer/service builds were reused for runtime checks. These local checks do
+not replace native Intel CI or signed-package verification.
 
 Published macOS apps use a Developer ID Application identity, Hardened Runtime,
 secure timestamps, Apple notarization, and a stapled ticket. Release packaging
@@ -305,8 +332,8 @@ choice:
    residual packaged UI sanity checks, including a real N→N+1 update on every
    platform before calling the update path verified.
 
-Release notes state that macOS is arm64-only, Developer ID-signed, and
-notarized. The macOS workflow requires the signing certificate secrets
+Release notes identify separate arm64/x64 installers, the older Intel component
+limitations, Developer ID signing, and notarization. The macOS workflow requires the signing certificate secrets
 `MAC_CSC_LINK` and `MAC_CSC_KEY_PASSWORD` plus the App Store Connect Team API
 key secrets `APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER`.
 Windows signing is optional; configure both `WIN_CSC_LINK` and

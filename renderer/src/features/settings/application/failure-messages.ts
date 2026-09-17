@@ -70,6 +70,8 @@ export function localComponentDescription(component: LocalComponentStatus): stri
     case 'installed':
       return 'Installed. Ready for offline use.';
     case 'failed':
+      if (component.error === 'unsupported-system')
+        return 'PDF and image text extraction requires macOS 15 or later on Intel Macs. You can still open projects and edit files.';
       return `${COMPONENT_FAILURES[component.error ?? 'interrupted']} Waiting files stay queued. Retry here or restart StashBase to try again.`;
   }
 }

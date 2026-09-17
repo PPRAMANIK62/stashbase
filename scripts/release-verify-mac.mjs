@@ -33,8 +33,7 @@ function run(command, args, options = {}) {
 function findDmg() {
   const files = fs.existsSync(releaseDir) ? fs.readdirSync(releaseDir) : [];
   const dmgs = files
-    .filter((name) => name.endsWith('.dmg'))
-    .filter((name) => name.includes(pkg.version))
+    .filter((name) => name === `${productName}-${pkg.version}-mac-${process.arch}.dmg`)
     .sort()
     .map((name) => path.join(releaseDir, name));
   if (dmgs.length !== 1) {
@@ -84,6 +83,13 @@ function verifyMountedDmg(dmg) {
     const appPath = path.join(mountPoint, `${productName}.app`);
     assertPath(appPath, `${productName}.app`);
     assertPath(path.join(mountPoint, 'Applications'), 'Applications link');
+    for (const relative of [
+      `Contents/MacOS/${productName}`,
+      'Contents/Resources/opencode/opencode.exe',
+      'Contents/Resources/python/sidecar/stashbase-daemon/stashbase-daemon',
+    ]) {
+      run('/usr/bin/lipo', ['-verify_arch', process.arch === 'x64' ? 'x86_64' : 'arm64', path.join(appPath, relative)]);
+    }
     run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', appPath]);
     verifyOpenCodeEntitlements(appPath);
     run('/usr/sbin/spctl', ['--assess', '--type', 'execute', '--verbose=2', appPath]);

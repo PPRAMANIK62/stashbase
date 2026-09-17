@@ -73,7 +73,8 @@ test('shared caches are populated on main before signing and reused by every rel
   assert.ok(steps.every((step) => !/sign-extractor|build:extractor-component|package-desktop/.test(step.run ?? '')));
   for (const [platform, job] of [['macos', 'macos-dmg'], ['linux', 'linux-packages'], ['windows', 'windows-installer']]) {
     const release = parse(read(`.github/workflows/release-${platform}.yml`)).jobs[job];
-    assert.ok(warm.jobs.prepare.strategy.matrix.os.includes(release['runs-on']));
+    const runners = release.strategy?.matrix?.include?.map((entry) => entry.os) ?? [release['runs-on']];
+    for (const runner of runners) assert.ok(warm.jobs.prepare.strategy.matrix.os.includes(runner));
     const prepareIndex = release.steps.findIndex((step) => step.uses === './.github/actions/prepare-native-components');
     const componentIndex = release.steps.findIndex((step) => step.run === 'pnpm build:extractor-component');
     const packageIndex = release.steps.findIndex((step) => step.env?.STASHBASE_SKIP_SIDECAR_BUILD === '1');

@@ -11,3 +11,9 @@ pymupdf4llm>=0.0.17
 # Later releases declare Python <3.13; keep the Python 3.13-compatible release.
 # uv's universal resolution alone does not prove pip can install the result.
 rapidocr-onnxruntime==1.2.3
+
+# Intel macOS wheels stop at these releases. Other platforms retain their pins.
+onnxruntime==1.23.2 ; sys_platform == "darwin" and platform_machine == "x86_64"
+opencv-python==4.11.0.86 ; sys_platform == "darwin" and platform_machine == "x86_64"
+onnxruntime==1.30.0 ; sys_platform != "darwin" or platform_machine != "x86_64"
+opencv-python==5.0.0.93 ; sys_platform != "darwin" or platform_machine != "x86_64"

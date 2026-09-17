@@ -92,7 +92,7 @@ function runElectronBuilder() {
     ? resolveWindowsSigningConfiguration(process.env)
     : false;
   if (requireMacosSigning) assertMacosReleaseCredentials(process.env);
-  const builderArgs = [electronBuilderCli, `--${platform}`, ...target, '--publish', 'never'];
+  const builderArgs = [electronBuilderCli, `--${platform}`, `--${targetRuntime().arch}`, ...target, '--publish', 'never'];
   if (requireMacosSigning) builderArgs.push('--config.forceCodeSigning=true');
   if (windowsSigningConfigured) builderArgs.push('--config.forceCodeSigning=true');
   try {
@@ -172,7 +172,10 @@ function targetRuntime() {
   if (platform === 'linux') {
     return { nodePlatform: 'linux', arch: 'x64', binaryFormat: 'elf', label: 'Linux' };
   }
-  return { nodePlatform: 'darwin', arch: 'arm64', binaryFormat: 'macho', label: 'macOS' };
+  if (process.platform !== 'darwin' || !['arm64', 'x64'].includes(process.arch)) {
+    throw new Error('macOS packaging requires a native arm64 or x64 macOS build host.');
+  }
+  return { nodePlatform: 'darwin', arch: process.arch, binaryFormat: 'macho', label: 'macOS' };
 }
 
 function hostMatchesTarget() {
@@ -215,7 +218,16 @@ function formatLabel(format) {
 function sidecarIssue(file, label) {
   const expected = targetRuntime().binaryFormat;
   const actual = binaryFormat(file);
-  if (actual === expected) return null;
+  if (actual === expected) {
+    if (expected === 'macho') {
+      try {
+        execFileSync('/usr/bin/lipo', ['-verify_arch', process.arch === 'x64' ? 'x86_64' : 'arm64', file], { stdio: 'pipe' });
+      } catch {
+        return `${path.relative(root, file)} (${label}) does not contain the target ${process.arch} architecture`;
+      }
+    }
+    return null;
+  }
   return `${path.relative(root, file)} (${label}) is ${formatLabel(actual)}, expected ${formatLabel(expected)}`;
 }
 
@@ -255,6 +267,16 @@ function assertClaudeAgentSdkForPlatform() {
   }
 }
 
+function prepareIntelOpenCode() {
+  if (platform !== 'mac' || process.arch !== 'x64') return;
+  // A hosted runner's AVX2 support must not decide the minimum customer CPU.
+  const runtimeRoot = fs.realpathSync(path.join(root, 'node_modules', 'opencode-ai'));
+  const resolve = createRequire(path.join(runtimeRoot, 'package.json'));
+  const baseline = resolve.resolve('opencode-darwin-x64-baseline/bin/opencode');
+  fs.copyFileSync(baseline, path.join(runtimeRoot, 'bin', 'opencode.exe'));
+  fs.chmodSync(path.join(runtimeRoot, 'bin', 'opencode.exe'), 0o755);
+}
+
 if (!hostMatchesTarget()) {
   assertSidecarsForPlatform();
   assertClaudeAgentSdkForPlatform();
@@ -269,4 +291,5 @@ if (!hostMatchesTarget()) {
   assertClaudeAgentSdkForPlatform();
 }
 clearQuarantine();
+prepareIntelOpenCode();
 runElectronBuilder();

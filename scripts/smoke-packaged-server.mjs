@@ -39,8 +39,7 @@ function findPackagedApp() {
 function packagedAppCandidates() {
   if (process.platform === 'darwin') {
     return [
-      path.join(releaseDir, 'mac-arm64', `${productName}.app`),
-      path.join(releaseDir, 'mac', `${productName}.app`),
+      path.join(releaseDir, process.arch === 'arm64' ? 'mac-arm64' : 'mac', `${productName}.app`),
     ];
   }
   if (process.platform === 'win32') {

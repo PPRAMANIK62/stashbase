@@ -33,7 +33,15 @@ jobs:
     # pre-session context ("SecKeychainUnlock: The user name or passphrase
     # you entered is not correct"), where 26.5 accepted it. Lift the pin only
     # after a dispatched run on the newer image signs and notarizes.
-    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.os }}
     env:
       RELEASE_TAG: ${{ startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag) }}
       GITHUB_TOKEN: ${{ github.token }}
@@ -69,6 +77,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify native build architecture
+        run: test "$(node -p process.arch)" = "${{ matrix.arch }}"
+
       - uses: ./.github/actions/prepare-native-components
 
       - name: Prepare Apple signing credentials
@@ -100,11 +111,49 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
         run: pnpm build:extractor-component
 
-      - name: Build and upload macOS assets to draft release
+      - name: Build and verify macOS assets
         env:
           STASHBASE_SKIP_SIDECAR_BUILD: '1'
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-        run: node scripts/publish-github-release.mjs --require-draft
+        run: node scripts/publish-github-release.mjs --dry-run
+
+      # Each build produces latest-mac.yml. Merge both before uploading so
+      # neither architecture overwrites the other's update channel.
+      - uses: actions/upload-artifact@v6
+        with:
+          name: macos-${{ matrix.arch }}
+          if-no-files-found: error
+          path: |
+            release.nosync/StashBase-*
+            release.nosync/latest-mac.yml
+            release.nosync/stashbase-extract-*
+
+  publish-macos:
+    needs: macos-dmg
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ startsWith(inputs.tag, 'v') && inputs.tag || format('v{0}', inputs.tag) }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.5.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: macos-*
+          path: release.nosync/macos-builds
+      - name: Merge verified macOS update artifacts
+        run: node scripts/merge-macos-artifacts.mjs
+      - name: Upload both architectures to the draft release
+        run: node scripts/publish-github-release.mjs --skip-build --skip-smoke --require-draft

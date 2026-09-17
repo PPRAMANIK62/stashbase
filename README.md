@@ -25,8 +25,11 @@ with Claude Code and Codex, drawing on your own sources and past work.
 
 ## Get Started
 
-**macOS 12+ (Apple Silicon)** and **Windows 10+ (x64)** are the primary
+**macOS 12+ (Apple Silicon and Intel)** and **Windows 10+ (x64)** are the primary
 platforms. Linux x86_64 Debian 12+ / Ubuntu 22.04+ is community-supported.
+On Intel Macs, local search and PDF/image text extraction require macOS 15+;
+older supported systems can still open projects and edit files. Agent runtime
+requirements may vary. Intel installers are available starting with v2.9.4.
 
 On macOS, install with Homebrew:
 
@@ -39,6 +42,7 @@ Or [download the latest release](https://github.com/liliu-z/stashbase/releases/l
 | Platform | Download |
 |---|---|
 | macOS Apple Silicon | `StashBase-*-mac-arm64.dmg` |
+| macOS Intel | `StashBase-*-mac-x64.dmg` |
 | Windows x64 | `StashBase-*-win-x64.exe` |
 | Linux x86_64 | `StashBase-*-linux-amd64.deb` or `.AppImage` |
 

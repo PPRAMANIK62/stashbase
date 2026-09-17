@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as tar from 'tar';
+import { nativeComponentUnavailable } from './native-component-support.ts';
 import { extractorDownloadUrl, extractorManifestSchema, type ExtractorManifest } from '../shared/extractor-runtime.ts';
 
 import type { LocalComponentStatusWire } from '../shared/protocols/http/local-components.ts';
@@ -16,6 +17,7 @@ export interface ExtractorRuntimeOptions {
   root: string;
   platform?: NodeJS.Platform;
   arch?: string;
+  osRelease?: string;
   fetch?: typeof fetch;
   onFailure?: (error: unknown) => void;
 }
@@ -55,6 +57,7 @@ export async function unpackExtractor(archive: string, destination: string): Pro
 export function createExtractorRuntime(options: ExtractorRuntimeOptions) {
   const platform = options.platform ?? process.platform;
   const arch = options.arch ?? process.arch;
+  const unavailable = nativeComponentUnavailable(platform, arch, options.osRelease);
   const request = options.fetch ?? fetch;
   const requested = path.join(options.root, 'requested.json');
   let ready: string | undefined;
@@ -103,6 +106,10 @@ export function createExtractorRuntime(options: ExtractorRuntimeOptions) {
 
   function initialize(): Promise<void> {
     return initialized ??= (async () => {
+      if (unavailable) {
+        status = { status: 'failed', error: 'unsupported-system' };
+        return;
+      }
       try {
         ready = await installed(await readManifest());
         if (ready) status = { status: 'installed', error: null };
@@ -111,7 +118,7 @@ export function createExtractorRuntime(options: ExtractorRuntimeOptions) {
   }
 
   function startAttempt(background: boolean): void {
-    if (closed || ready) return;
+    if (closed || ready || unavailable) return;
     if (background) {
       componentDemand = true;
       if (active) active.background = true;
@@ -202,6 +209,7 @@ export function createExtractorRuntime(options: ExtractorRuntimeOptions) {
       await initialize();
       signal?.throwIfAborted();
       if (closed) throw new Error('Extractor runtime is closed');
+      if (unavailable) throw new Error(unavailable);
       if (ready && await fs.stat(ready).then((stat) => stat.isFile(), () => false)) return ready;
       signal?.throwIfAborted();
       ready = undefined;

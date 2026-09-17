@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { macCaskContent } from './packaging/macos-cask.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -10,7 +11,6 @@ const releaseDir = path.join(root, 'release.nosync');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has('--dry-run');
-const tag = `v${pkg.version}`;
 const repo = process.env.GITHUB_REPOSITORY || repositorySlug(pkg.repository?.url);
 const tap = process.env.HOMEBREW_TAP || 'liliu-z/stashbase';
 const tapGitUrl = process.env.HOMEBREW_TAP_GIT_URL || 'git@github.com:liliu-z/homebrew-stashbase.git';
@@ -80,33 +80,7 @@ function git(tapRepo, args, options = {}) {
   });
 }
 
-function caskContent({ url, checksum }) {
-  const productName = pkg.build?.productName || 'StashBase';
-  const appName = `${productName}.app`;
-
-  return `cask "${cask}" do
-  version "${pkg.version}"
-  sha256 "${checksum}"
-
-  url "${url}"
-  name "${productName}"
-  desc "${pkg.description}"
-  homepage "https://github.com/${repo}"
-
-  app "${appName}"
-
-  zap trash: [
-    "~/.stashbase",
-    "~/Library/Application Support/${productName}",
-    "~/Library/Logs/${productName}",
-    "~/Library/Preferences/${pkg.build?.appId || 'com.stashbase.app'}.plist",
-    "~/Library/Saved Application State/${pkg.build?.appId || 'com.stashbase.app'}.savedState",
-  ]
-end
-`;
-}
-
-function publishCask({ url, checksum }) {
+function publishCask(checksums) {
   const tapRepo = tapRepoPath();
   const casksDir = path.join(tapRepo, 'Casks');
   const caskPath = path.join(casksDir, `${cask}.rb`);
@@ -119,7 +93,8 @@ function publishCask({ url, checksum }) {
 
   git(tapRepo, ['pull', '--ff-only'], { stdio: 'inherit' });
 
-  const content = caskContent({ url, checksum });
+  const content = macCaskContent({ cask, version: pkg.version, productName: pkg.build?.productName || 'StashBase',
+    description: pkg.description, repo, appId: pkg.build?.appId || 'com.stashbase.app', checksums });
   if (dryRun) {
     console.log(`[homebrew] dry run: would write ${caskPath}`);
     console.log(content);
@@ -140,27 +115,16 @@ function publishCask({ url, checksum }) {
   git(tapRepo, ['push', 'origin', branch], { stdio: 'inherit' });
 }
 
-const dmgs = releaseFiles()
-  .filter((file) => path.basename(file).endsWith('.dmg'))
-  .filter((file) => path.basename(file).includes(pkg.version))
-  .sort();
-
-if (dmgs.length !== 1) {
-  throw new Error(
-    `Expected exactly one ${pkg.version} DMG in ${releaseDir}, found ${dmgs.length}:\n` +
-      dmgs.map((file) => `  ${path.basename(file)}`).join('\n'),
-  );
-}
+const productName = pkg.build?.productName || 'StashBase';
+const files = releaseFiles();
+const checksums = Object.fromEntries(['arm64', 'x64'].map((arch) => {
+  const name = `${productName}-${pkg.version}-mac-${arch}.dmg`;
+  const dmg = files.find((file) => path.basename(file) === name);
+  if (!dmg) throw new Error(`Homebrew requires ${name}`);
+  return [arch, sha256(dmg)];
+}));
 
 checkBrew();
 ensureTap();
-
-const dmg = dmgs[0];
-const name = path.basename(dmg);
-const url = `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(name)}`;
-const checksum = sha256(dmg);
-const caskRef = `${tap}/${cask}`;
-
-console.log(`[homebrew] ${caskRef} -> ${pkg.version}`);
-console.log(`[homebrew] ${url}`);
-publishCask({ url, checksum });
+console.log(`[homebrew] ${tap}/${cask} -> ${pkg.version} (arm64 + x64)`);
+publishCask(checksums);

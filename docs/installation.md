@@ -5,15 +5,24 @@ Download installers from the official
 
 ## macOS
 
-Apple Silicon Macs running macOS 12 or later can install with Homebrew:
+Macs running macOS 12 or later can open StashBase. Starting with v2.9.4,
+separate Apple Silicon and Intel installers are available; arm64 installers
+cannot run on Intel Macs. Homebrew selects the matching architecture:
 
 ```bash
 brew install --cask liliu-z/stashbase/stashbase
 ```
 
-Or download `StashBase-*-mac-arm64.dmg`, drag the app to **Applications**, and
+Or download `StashBase-*-mac-arm64.dmg` for Apple Silicon, or
+`StashBase-*-mac-x64.dmg` for Intel, drag the app to **Applications**, and
 open it there. Published macOS artifacts are signed with Apple Developer ID
 and notarized by Apple.
+
+On Intel Macs running macOS 12–14, project browsing and file editing remain
+available, while local search and PDF/image text extraction are unavailable.
+Those native components require macOS 15 or later. An unavailable component
+does not block app startup or saving a document. Agent providers have their own
+runtime requirements and may be unavailable on older systems.
 
 ## Windows
 
@@ -66,6 +75,10 @@ the error and Windows version in the
 [Discord community](https://discord.gg/zsRZH4PTq9).
 
 ### macOS blocks or rejects the app
+
+For “not supported on this Mac,” check **Apple menu → About This Mac** and
+download the DMG matching the chip: Intel needs x64; M-series chips need arm64.
+The Electron application itself requires macOS 12 or later.
 
 Delete that copy and download the current DMG again from the official Releases
 page. Do not bypass Gatekeeper for an artifact that still reports a signing or

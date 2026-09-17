@@ -207,6 +207,10 @@ Only the app's embedded version/platform/asset/size/hash manifest authorizes
 bytes. Verify before confined, bounded extraction and atomic versioned publication;
 validate links and never execute partial staging. Installed versions work offline.
 Signing and release publication belong to [Release Runbook](release-pipeline.md).
+Native component compatibility belongs to `server/native-component-support.ts`.
+An unsupported component rejects only its own operation; it must not block server
+readiness, project entry, or durable file saves. Unsupported extraction returns a
+stable status without download, retry, or a new durable demand latch.
 
 ## Agent Sessions and Permissions
 

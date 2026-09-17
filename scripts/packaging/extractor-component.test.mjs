@@ -48,7 +48,7 @@ test('every release platform publishes its immutable component before the coordi
   assert.match(packaging, /runScript\('build:extractor-component'\)/);
   assert.match(packaging, /manifest\.sha256/);
   const coordinator = await fs.readFile(new URL('.github/workflows/release.yml', root), 'utf8');
-  assert.match(coordinator, /darwin-arm64 win32-x64 linux-x64/);
+  assert.match(coordinator, /darwin-arm64 darwin-x64 win32-x64 linux-x64/);
   assert.ok(coordinator.indexOf('PDF/OCR component manifest') < coordinator.indexOf('gh release edit'));
 });
 

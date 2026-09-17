@@ -48,6 +48,22 @@ The map is navigation, not proof that every caller has been reviewed.
 
 ## J01: Onboarding
 
+**Intel entry (2026-09-17):** macOS build and source CI include native x64,
+with dual-architecture update metadata and Homebrew selection owned by the
+[Release Runbook](release-pipeline.md#macos-developer-id-distribution).
+`server/native-component-support.ts` limits native search/extraction on older
+Intel systems without raising the application's macOS 12 minimum.
+`indexer-mfs-path.test.ts` proves no daemon is spawned on an unsupported system;
+`extractor-runtime.test.ts` covers no download/demand/retry there and supported
+Intel offline reuse. Actual Intel packaged launch and old-OS editing remain
+release checks; controlled platform substitution does not establish those.
+A built-server pass with isolated app data and substituted Intel/macOS 12
+identity returns the unsupported component status, opens a real project, lists
+and reads its Markdown, saves revised content with a search warning, and reads
+the saved bytes back while health stays available. Provider CLI execution is
+disabled in this pass; it establishes service isolation, not Intel binary or
+Agent compatibility.
+
 **Settings organization (2026-09-16):** General owns preferences, Agents groups
 Default account/credits/connection, and Advanced owns optional connections.
 `renderer/src/features/settings/ui/managed-settings.tsx` owns routing;
@@ -331,6 +347,16 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`.
   expand script/network authority.
 
 ## J04: Preparation
+
+**Intel compatibility (2026-09-17):** unsupported-system status bypasses download
+and retry, while supported Intel component installation still verifies the
+architecture-specific manifest and works offline. `extractor-runtime.test.ts`
+owns those outcomes; `local-component-group.test.tsx` verifies the explanation
+and absence of a misleading Retry action. Native Intel OCR quality and signed
+component execution remain release checks.
+An isolated Electron render of the production recovery component and built
+styles confirms readable wrapped copy and no Retry control for unsupported
+systems. This checks the component composition, not a real Intel PDF journey.
 
 **Status persistence (2026-09-16):** SQLite failures reject reads/writes rather
 than reporting durable cancellation. Failed terminal writes remain pending in
