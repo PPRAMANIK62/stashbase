@@ -55,8 +55,10 @@ with dual-architecture update metadata and Homebrew selection owned by the
 Intel systems without raising the application's macOS 12 minimum.
 `indexer-mfs-path.test.ts` proves no daemon is spawned on an unsupported system;
 `extractor-runtime.test.ts` covers no download/demand/retry there and supported
-Intel offline reuse. Actual Intel packaged launch and old-OS editing remain
-release checks; controlled platform substitution does not establish those.
+Intel offline reuse. Hosted Intel macOS 15 packaged daemon, component, and OpenCode execution passed
+the [native release checks](release-pipeline.md#macos-developer-id-distribution).
+Actual desktop interaction and old-OS editing remain release checks; controlled
+platform substitution does not establish those.
 A built-server pass with isolated app data and substituted Intel/macOS 12
 identity returns the unsupported component status, opens a real project, lists
 and reads its Markdown, saves revised content with a search warning, and reads
@@ -352,8 +354,9 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`.
 and retry, while supported Intel component installation still verifies the
 architecture-specific manifest and works offline. `extractor-runtime.test.ts`
 owns those outcomes; `local-component-group.test.tsx` verifies the explanation
-and absence of a misleading Retry action. Native Intel OCR quality and signed
-component execution remain release checks.
+and absence of a misleading Retry action. Hosted Intel macOS 15 packaging passed
+signed/notarized component execution, fixture PDF/OCR, and offline reuse.
+Representative OCR quality and live release download remain release checks.
 An isolated Electron render of the production recovery component and built
 styles confirms readable wrapped copy and no Retry control for unsupported
 systems. This checks the component composition, not a real Intel PDF journey.

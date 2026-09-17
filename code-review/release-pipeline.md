@@ -221,19 +221,22 @@ checks both versions, architectures, payload hashes, and component manifests
 before creating one latest-mac.yml containing both ZIP/DMG pairs. Only the
 combined set is uploaded to the draft; parallel jobs must never upload competing
 metadata under the same name. Homebrew selects the DMG and checksum by CPU.
-Published Intel installation, oldest-OS editing, native components, signing, and
-N→N+1 updates remain unproven until the first release runs on both architectures.
-The Intel dependency resolution was checked for CPython 3.13/macOS 15 with uv
-and pip's target-platform dry run. This verifies available distributions, not
-native execution. Local artifact tests exercise checksum rejection and the
-installed electron-updater's architecture selection; the generated Homebrew
-cask also passes Ruby syntax validation.
-Local verification passed host types, release/toolchain/package/signing/update
-contracts, component/configuration/file-operation suites, and Electron boundary
-smokes. The renderer gate passed 11 stages; its first coverage run had timeout
-failures, then the complete coverage stage passed with two workers. The same
-renderer/service builds were reused for runtime checks. These local checks do
-not replace native Intel CI or signed-package verification.
+The v2.9.4 source commit passed [CI on all four native targets](https://github.com/liliu-z/stashbase/actions/runs/35249145365).
+[Coordinated packaging](https://github.com/liliu-z/stashbase/actions/runs/35253051281)
+passed both macOS architectures' signing, notarization, mounted-DMG checks,
+frozen daemon execution, independent PDF/OCR component installation and offline
+reuse, DOCX conversion, and the packaged OpenCode test turn. Windows and Linux
+packaged runtime checks also passed. That attempt remained unpublished because
+GitHub asset upload returned HTTP 500; passing package jobs do not establish
+successful release delivery.
+Local checks of the downloaded arm64 candidate passed strict/deep codesign,
+Gatekeeper, and stapler validation. About reported 2.9.4; the welcome screen,
+native folder-picker cancellation, and native menu quit were observed. Desktop
+automation failed while selecting a fixture folder, so editing was not verified
+in that package. Real Intel macOS 12–14 entry/editing, representative OCR quality,
+live release-component delivery, and N→N+1 updates remain release checks.
+Artifact tests exercise checksum rejection and the installed electron-updater's
+architecture selection; the generated Homebrew cask passes Ruby syntax validation.
 
 Published macOS apps use a Developer ID Application identity, Hardened Runtime,
 secure timestamps, Apple notarization, and a stapled ticket. Release packaging
