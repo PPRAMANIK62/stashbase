@@ -184,10 +184,23 @@ test('the packaging CLI validates component version and bytes before invoking th
   const archive = path.join(tmp, 'release.nosync', manifest.asset);
   fs.writeFileSync(archive, bytes);
   const manifestPath = path.join(sidecar, 'extractor-runtime.json');
-  const preload = `import cp from 'node:child_process'; import { syncBuiltinESMExports } from 'node:module';
-    cp.execFileSync = () => ''; syncBuiltinESMExports();`;
-  const run = () => spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(preload)}`,
-    path.join(tmp, 'scripts', 'package-desktop.mjs'), '--linux', '--skip-sidecar-build'], {
+  const preload = `import cp from 'node:child_process'; import { syncBuiltinESMExports, createRequire } from 'node:module';
+    import assert from 'node:assert/strict';
+    const require = createRequire(${JSON.stringify(path.join(tmp, 'package.json'))});
+    const { createYargs, configureBuildCommand } = require('electron-builder/out/builder.js');
+    cp.execFileSync = (_command, args) => {
+      if (args[0]?.endsWith('cli.js')) {
+        const options = configureBuildCommand(createYargs()).exitProcess(false).parse(args.slice(1));
+        if (options.win) {
+          assert.deepEqual(options.win, ['nsis', 'zip']);
+          assert.equal(options.x64, true);
+        }
+        console.log('builder arguments accepted');
+      }
+      return '';
+    }; syncBuiltinESMExports();`;
+  const run = (platform = '--linux') => spawnSync(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(preload)}`,
+    path.join(tmp, 'scripts', 'package-desktop.mjs'), platform, '--skip-sidecar-build'], {
     encoding: 'utf8', env: process.env,
   });
   fs.writeFileSync(manifestPath, JSON.stringify(manifest));
@@ -198,4 +211,15 @@ test('the packaging CLI validates component version and bytes before invoking th
   fs.writeFileSync(manifestPath, JSON.stringify(manifest));
   fs.writeFileSync(archive, 'corrupted');
   assert.match(run().stderr, /Extractor component archive does not match its embedded manifest/);
+
+  // Exercise the actual CLI argument consumer without building an installer.
+  // Placing --x64 between --win and its target list makes yargs reject nsis/zip.
+  fs.writeFileSync(path.join(sidecar, 'stashbase-daemon.exe'), Buffer.from('4d5a0000', 'hex'));
+  const windowsManifest = { ...manifest, platform: 'win32',
+    asset: `stashbase-extract-${pkg.version}-win32-x64.tar.gz` };
+  fs.writeFileSync(manifestPath, JSON.stringify(windowsManifest));
+  fs.writeFileSync(path.join(tmp, 'release.nosync', windowsManifest.asset), bytes);
+  const result = run('--win');
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /builder arguments accepted/);
 });

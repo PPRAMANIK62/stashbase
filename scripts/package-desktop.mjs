@@ -92,7 +92,7 @@ function runElectronBuilder() {
     ? resolveWindowsSigningConfiguration(process.env)
     : false;
   if (requireMacosSigning) assertMacosReleaseCredentials(process.env);
-  const builderArgs = [electronBuilderCli, `--${platform}`, `--${targetRuntime().arch}`, ...target, '--publish', 'never'];
+  const builderArgs = [electronBuilderCli, `--${platform}`, ...target, `--${targetRuntime().arch}`, '--publish', 'never'];
   if (requireMacosSigning) builderArgs.push('--config.forceCodeSigning=true');
   if (windowsSigningConfigured) builderArgs.push('--config.forceCodeSigning=true');
   try {
