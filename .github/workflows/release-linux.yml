@@ -89,5 +89,4 @@ jobs:
           find release.nosync -maxdepth 1 -type f -name '*.AppImage' -size +0c -print -quit | grep -q . || { echo "::error::Missing AppImage"; exit 1; }
           mapfile -t artifacts < <(find release.nosync -maxdepth 1 -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*.blockmap' -o -name '*.zsync' -o -name 'stashbase-extract-*.tar.gz' -o -name 'stashbase-extract-*.json' -o -name 'latest*.yml' \) -size +0c)
           test "${#artifacts[@]}" -gt 0 || { echo "::error::No Linux release assets found"; exit 1; }
-          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" = "true" || { echo "::error::Release $RELEASE_TAG must exist and remain a draft while assets are uploaded"; exit 1; }
-          gh release upload "$RELEASE_TAG" "${artifacts[@]}" --repo "$GITHUB_REPOSITORY"
+          node scripts/upload-release-assets.mjs "${artifacts[@]}"

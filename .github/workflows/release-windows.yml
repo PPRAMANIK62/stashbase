@@ -144,9 +144,5 @@ jobs:
           }
 
           $artifactPaths = @($artifacts | ForEach-Object { $_.FullName })
-          $release = gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json isDraft | ConvertFrom-Json
-          if (-not $release.isDraft) {
-            Write-Error "Release $env:RELEASE_TAG must exist and remain a draft while assets are uploaded"
-            exit 1
-          }
-          gh release upload $env:RELEASE_TAG @artifactPaths --repo $env:GITHUB_REPOSITORY
+          node scripts/upload-release-assets.mjs @artifactPaths
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

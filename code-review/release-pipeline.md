@@ -270,6 +270,30 @@ signing, the workflow checks every NSIS executable with
 verification contract. A build installed from that signed channel must not be
 downgraded to unsigned replacement updates.
 
+## Release Asset Upload
+
+Every platform Adapter uploads through `scripts/upload-release-assets.mjs`, so
+one Module owns the upload rules for macOS, Linux, and Windows. The draft
+lookup in `scripts/github-release-api.mjs` is the only place that decides a
+release may receive assets, and it accepts a draft alone.
+
+- Assets upload one at a time. An attempt that stalls is aborted after fifteen
+  minutes so it cannot hold a job open until the run is cancelled.
+- GitHub answers a large upload with `500 Error saving asset` intermittently,
+  and a save that fails that way can leave a placeholder asset record behind.
+  Each attempt therefore discards any record for that name that never reached
+  `uploaded`, then retries the same asset with a bounded backoff that tolerates
+  roughly twenty minutes of refusals before failing the job. A fault that
+  outlasts the budget is a GitHub outage, and the job fails rather than
+  publishing a partial update set.
+- An asset already stored at the size this build produced is kept, so a rerun
+  does not have to rebuild the draft. A stored asset of a different size stops
+  the release, because versioned assets are immutable.
+- A rejection GitHub will not reconsider is not retried.
+
+Assertions live in `scripts/github-release-api.test.mjs` behind
+`pnpm test:updates`.
+
 ## Maintainer Handoff
 
 Version choice, the standalone version-bump commit, tag creation, and dispatch
@@ -304,6 +328,7 @@ credential-free and does not run this probabilistic check.
 | Tag gate Interface | `.github/workflows/release-ci-gate.yml` and `scripts/require-green-ci.mjs` |
 | Publication coordinator | `.github/workflows/release.yml` |
 | Platform Adapters | `.github/workflows/release-macos.yml`, `release-linux.yml`, `release-windows.yml` |
+| Release asset upload Module | `scripts/upload-release-assets.mjs` over the draft lookup and upload rules in `scripts/github-release-api.mjs` |
 | Native build reuse | `.github/workflows/native-components.yml`, `.github/actions/prepare-native-components/action.yml`, `python/constraints.txt`, `scripts/lock-python.mjs`; contracts in `scripts/packaging/native-cache.test.mjs` |
 | Packaging Module | `scripts/package-desktop.mjs`, signing contracts, `scripts/sign-macos-app.cjs`, `scripts/update-artifact-contract.mjs`, `scripts/build-python-sidecar.mjs`, `scripts/after-pack-macos.cjs` |
 | Application icon | `scripts/icons/build.mjs` behind `pnpm build:icons`, rendering `build/icon.svg` in `scripts/icons/render.mjs` with the size table and containers in `scripts/icons/encode.mjs` |
