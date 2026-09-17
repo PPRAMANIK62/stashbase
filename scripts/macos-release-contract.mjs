@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -60,4 +61,9 @@ export function assertMacosReleaseCredentials(env, options = {}) {
   }
 
   return apiKey ? 'api-key' : appleId ? 'apple-id' : 'keychain';
+}
+
+/** lipo consumes every argument after -verify_arch as an architecture name. */
+export function assertMacosArchitecture(file, arch = process.arch) {
+  execFileSync('/usr/bin/lipo', [file, '-verify_arch', arch === 'x64' ? 'x86_64' : arch], { stdio: 'pipe' });
 }

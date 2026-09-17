@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { assertMacosReleaseCredentials } from './macos-release-contract.mjs';
+import { assertMacosArchitecture, assertMacosReleaseCredentials } from './macos-release-contract.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -211,4 +212,20 @@ test('macOS afterPack preserves the original CI bundle and rejects flattened fra
     /must remain a symbolic link before codesign/,
   );
   fs.rmSync(output, { recursive: true, force: true });
+});
+
+test('native Mach-O verification accepts the host architecture and rejects a different one', {
+  skip: process.platform !== 'darwin',
+}, (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'macos-architecture-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const hostArch = process.arch === 'x64' ? 'x86_64' : process.arch;
+  const architectures = execFileSync('/usr/bin/lipo', [process.execPath, '-archs'], { encoding: 'utf8' }).trim().split(/\s+/);
+  let executable = process.execPath;
+  if (architectures.length > 1) {
+    executable = path.join(root, 'node');
+    execFileSync('/usr/bin/lipo', [process.execPath, '-thin', hostArch, '-output', executable]);
+  }
+  assert.doesNotThrow(() => assertMacosArchitecture(executable));
+  assert.throws(() => assertMacosArchitecture(executable, process.arch === 'arm64' ? 'x64' : 'arm64'));
 });

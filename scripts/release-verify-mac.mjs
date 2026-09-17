@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertMacosArchitecture } from './macos-release-contract.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -88,7 +89,7 @@ function verifyMountedDmg(dmg) {
       'Contents/Resources/opencode/opencode.exe',
       'Contents/Resources/python/sidecar/stashbase-daemon/stashbase-daemon',
     ]) {
-      run('/usr/bin/lipo', ['-verify_arch', process.arch === 'x64' ? 'x86_64' : 'arm64', path.join(appPath, relative)]);
+      assertMacosArchitecture(path.join(appPath, relative));
     }
     run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--verbose=2', appPath]);
     verifyOpenCodeEntitlements(appPath);

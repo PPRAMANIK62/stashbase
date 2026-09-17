@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertMacosReleaseCredentials } from './macos-release-contract.mjs';
+import { assertMacosArchitecture, assertMacosReleaseCredentials } from './macos-release-contract.mjs';
 import { resolveWindowsSigningConfiguration } from './windows-release-contract.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -221,7 +221,7 @@ function sidecarIssue(file, label) {
   if (actual === expected) {
     if (expected === 'macho') {
       try {
-        execFileSync('/usr/bin/lipo', ['-verify_arch', process.arch === 'x64' ? 'x86_64' : 'arm64', file], { stdio: 'pipe' });
+        assertMacosArchitecture(file);
       } catch {
         return `${path.relative(root, file)} (${label}) does not contain the target ${process.arch} architecture`;
       }
