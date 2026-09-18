@@ -606,6 +606,16 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
   show Running and Denied respectively, and return focus to the heading. This
   verifies the rendered card and its controlled reply callback, not native
   Agent execution.
+  Clarifying questions (2026-09-18): focused renderer tests cover the question
+  card's answers keyed by question text, multi-select and typed answers joined
+  as the runtime reads them, Answer held until every question has one, Skip
+  denying, and answers kept on the settled call; the Claude adapter test proves
+  answers reach only the question tool's updated input, and the socket schema
+  accepts them. A built Storybook pass in Electron drives the card in light and
+  dark: single and multi-select choices, the Other line, Answer replacing the
+  controls with Running, and the settled row opening to the questions and
+  answers. This is the rendered card and its reply callback, not a live
+  Claude turn.
 - **AI Eval:** mechanics do not establish prompt adherence or writing quality;
   see J10 and J12.
 - **Release Check:** signed bundled OpenCode executability plus a fake-gateway

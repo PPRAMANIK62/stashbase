@@ -53,6 +53,9 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
 - Approval applies to its pending action only. Stop cancels unanswered approvals,
   retires model/tool work, and preserves transcripts and completed file edits.
   Cancellation is confirmed before reporting Stopped; it does not roll back edits.
+- A clarifying question is answered in place on its own pending request. Answers
+  return keyed by question text; Skip or Stop leaves it unanswered rather than
+  guessing on the reader's behalf.
 
 ## Failure and Recovery
 

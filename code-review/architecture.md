@@ -285,6 +285,8 @@ stable status without download, retry, or a new durable demand latch.
   identity. No catalog-order default or global CLI rewrite; active turns freeze
   changes. Skills use native invocation, not concatenated skill-file contents.
 - Pending approvals require the exact request id; abort/disposal denies them.
+  Clarifying-question answers ride that reply and become only the question
+  tool's updated input; every other tool runs on its original input.
   Read/orientation/reindex may use the low-risk path. Edit policy grants only its
   bounded writes; move/delete/commands/network/broader access require their own
   authority. `create_project` needs an explicit request or visible approval.

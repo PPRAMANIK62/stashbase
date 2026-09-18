@@ -17,8 +17,10 @@ Chat, Documents assistance, and runtimes.
    grouped per turn and collapsed. The group holding a running turn names the
    step in hand so long work visibly advances; a settled group states what it
    did. Approvals, turn failures, and file results remain individually
-   actionable. Tool-call failures do not appear in chat, including activity
-   summaries and expanded details. The Agent explains task outcomes; native
+   actionable. An Agent's clarifying questions appear as a card with its
+   options and a line for the reader's own answer; answering continues the
+   turn, and skipping tells the Agent no answer was given. Tool-call failures
+   do not appear in chat, including activity summaries and expanded details. The Agent explains task outcomes; native
    execution history retains the failed attempts.
    Only successful file operations contribute to changed-file results.
    New output preserves reading position.
