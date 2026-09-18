@@ -522,6 +522,15 @@ test('Claude model selection recovers visibly when the SDK rejects a discovered 
   assert.match(result.fallback ?? '', /could not be selected/);
 });
 
+test('Claude leaves the runtime on its own configured model when nothing is chosen', async () => {
+  let called = false;
+  const result = await selectClaudeModel(undefined, [{ id: 'native-model', label: 'Native model' }], async () => {
+    called = true;
+  }, false);
+  assert.deepEqual(result, {});
+  assert.equal(called, false, 'an SDK reset would replace the settings model with the CLI built-in default');
+});
+
 test('Claude applies a fresh idle model choice before the first prompt', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-model-'));
   await runWithWindowId('claude-model-window', () => openProjectFolder(folder));
@@ -563,10 +572,11 @@ test('Claude applies a fresh idle model choice before the first prompt', async (
 
   session.begin();
   await settle();
+  assert.deepEqual(selected, [], 'nothing chosen leaves the runtime on its own configured model');
   ws.emit('message', JSON.stringify({ t: 'set-model', model: 'native-model' }));
   await settle();
 
-  assert.deepEqual(selected, [undefined, 'native-model']);
+  assert.deepEqual(selected, ['native-model']);
   assert.deepEqual(
     ws.sent.map((value) => JSON.parse(value)).filter((event) => event.t === 'models').at(-1),
     {
@@ -575,6 +585,71 @@ test('Claude applies a fresh idle model choice before the first prompt', async (
       t: 'models',
     },
   );
+});
+
+test('Claude holds a model picked while the runtime is still starting and applies it with the catalog', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-early-model-'));
+  await runWithWindowId('claude-early-model-window', () => openProjectFolder(folder));
+  let finish!: () => void;
+  const finished = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  let releaseCatalog!: () => void;
+  const catalog = new Promise<void>((resolve) => {
+    releaseCatalog = resolve;
+  });
+  const selected: string[] = [];
+  const native = {
+    async *[Symbol.asyncIterator]() {
+      await finished;
+    },
+    supportedModels: async () => {
+      await catalog;
+      return [{ value: 'native-model', displayName: 'Native model' }];
+    },
+    supportedCommands: async () => [],
+    setModel: async (model: string) => {
+      selected.push(model);
+    },
+    setPermissionMode: async () => {},
+    interrupt: async () => {},
+  } as unknown as Query;
+  const ws = new FakeAgentWebSocket();
+  const session = new AgentSession(
+    ws as unknown as WebSocket,
+    'claude-early-model-window',
+    undefined,
+    undefined,
+    'default',
+    undefined,
+    undefined,
+    (() => native) as never,
+    () => '/fake/claude',
+  );
+  t.after(() => {
+    finish();
+    releaseCatalog();
+    session.dispose();
+    runWithWindowId('claude-early-model-window', () => clearCurrentFolder());
+    fs.rmSync(folder, { recursive: true, force: true });
+  });
+
+  session.begin();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'set-model', model: 'native-model' }));
+  await settle();
+  assert.deepEqual(selected, [], 'the pick waits for the catalog instead of being refused against an empty one');
+
+  releaseCatalog();
+  await settle();
+
+  assert.deepEqual(selected, ['native-model']);
+  const events = ws.sent.map((value) => JSON.parse(value));
+  assert.deepEqual(
+    events.filter((event) => event.t === 'models').at(-1),
+    { models: [{ id: 'native-model', label: 'Native model' }], t: 'models' },
+  );
+  assert.ok(events.some((event) => event.t === 'ready'), 'ready follows the applied choice');
 });
 
 test('Claude resume preserves the native model and waits for its init event', async () => {
@@ -588,6 +663,13 @@ test('Claude init-event model becomes the visible active model, including a runt
   const event = claudeActiveModelEvent([{ id: 'sonnet', label: 'Sonnet' }], 'claude-sonnet-native');
   assert.equal(event.activeModel, 'claude-sonnet-native');
   assert.deepEqual(event.models.at(-1), { id: 'claude-sonnet-native', label: 'claude-sonnet-native' });
+});
+
+test('Claude init-event model maps a resolved release name onto its catalog context variant', () => {
+  const models = [{ id: 'claude-fable-5[1m]', label: 'Fable' }, { id: 'claude-fable-5-1[1m]', label: 'Fable' }];
+  const event = claudeActiveModelEvent(models, 'claude-fable-5-1');
+  assert.equal(event.activeModel, 'claude-fable-5-1[1m]');
+  assert.deepEqual(event.models, models, 'no raw entry is added when the catalog already lists the model');
 });
 
 test('Claude catalog failure clears an unverifiable fresh selection with a visible fallback', () => {

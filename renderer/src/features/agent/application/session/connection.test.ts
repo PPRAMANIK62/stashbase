@@ -34,6 +34,10 @@ function harness(overrides: Partial<AgentSessionPort> = {}) {
     ...overrides,
   }).port;
 
+  const transition = (action: AgentSessionAction) => {
+    actions.push(action);
+    state = transitionAgentSession(state, action);
+  };
   const transport = createAgentTransport({
     disposed: () => false,
     onEvent: vi.fn(),
@@ -48,10 +52,7 @@ function harness(overrides: Partial<AgentSessionPort> = {}) {
     },
     signal: controller.signal,
     state: () => state,
-    transition: (action) => {
-      actions.push(action);
-      state = transitionAgentSession(state, action);
-    },
+    transition,
   });
 
   return {
@@ -65,6 +66,7 @@ function harness(overrides: Partial<AgentSessionPort> = {}) {
     port,
     sockets,
     state: () => state,
+    transition,
     transport,
   };
 }
@@ -162,6 +164,30 @@ describe('agent transport', () => {
 
     // The mode the socket already carries is not resent on ready.
     expect(test.sockets.at(-1)?.close).not.toHaveBeenCalled();
+  });
+
+  it('re-sends a model picked while the socket was still opening, once', () => {
+    let open = false;
+    const send = vi.fn(() => open);
+    const test = harness({
+      connect: vi.fn(() => ({ close: vi.fn(), send })),
+    });
+    test.transport.open();
+
+    // The pick lands before the socket is open: the frame is refused, and the
+    // choice lives only in session state until ready.
+    test.transition({ model: 'claude-fable-5-1[1m]', kind: 'set-model' });
+    expect(test.transport.applyModel('claude-fable-5-1[1m]')).toBe(false);
+
+    open = true;
+    test.transport.syncModel();
+    expect(send).toHaveBeenLastCalledWith({ kind: 'select-model', model: 'claude-fable-5-1[1m]' });
+
+    // A second ready, and a reopen whose URL already carries the model, send nothing more.
+    test.transport.syncModel();
+    test.transport.open();
+    test.transport.syncModel();
+    expect(send).toHaveBeenCalledTimes(2);
   });
 
   it('invalidates every generation so a late callback is ignored', () => {

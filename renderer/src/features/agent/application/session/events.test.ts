@@ -26,12 +26,14 @@ function harness(initial?: Partial<AgentSessionState>) {
   const actions: AgentSessionAction[] = [];
   const transport = {
     applyAccessMode: vi.fn(() => true),
+    applyModel: vi.fn(() => true),
     close: vi.fn(),
     expectClose: vi.fn(),
     invalidate: vi.fn(),
     open: vi.fn(),
     send: vi.fn(() => true),
     syncAccessMode: vi.fn(),
+    syncModel: vi.fn(),
   } satisfies AgentTransport;
   let blocks = 0;
   const context: AgentEventContext = {
@@ -81,6 +83,7 @@ describe('applyAgentSessionEvent', () => {
 
     expect(test.state().connection).toEqual({ kind: 'live', turn: null });
     expect(test.transport.syncAccessMode).toHaveBeenCalledOnce();
+    expect(test.transport.syncModel).toHaveBeenCalledOnce();
     expect(test.context.submit).toHaveBeenCalledWith(
       expect.objectContaining({ display: 'Go', wire: 'Go' }),
     );

@@ -96,6 +96,7 @@ export function applyAgentSessionEvent(context: AgentEventContext, event: AgentS
     case 'ready':
       transition(event);
       transport.syncAccessMode();
+      transport.syncModel();
       flushHeldPrompt(context);
       return;
     case 'models':

@@ -96,7 +96,7 @@ export function createSessionControls({
           : current.effort;
       transition({ model, kind: 'set-model' });
       if (nextEffort !== current.effort) transition({ effort: nextEffort, kind: 'set-effort' });
-      transport.send({ kind: 'select-model', model });
+      transport.applyModel(model);
     },
     setQueue(queue: Parameters<AgentSessionRuntime['setQueue']>[0]) {
       if (disposed()) return;

@@ -481,6 +481,18 @@ chat with High retained. The catalog/socket were controlled; this is not a live
 Codex provider run. Validation: all 12 renderer gates, 57 configuration tests,
 96 protocol tests, host types, service builds, and documentation checks passed.
 
+**Claude model choice (2026-09-18):** `server/agent.ts` applies a model only when
+one was chosen; with nothing chosen the runtime keeps the model the user's Claude
+settings name. Reproduced against Claude CLI 2.1.220 with its user settings naming
+Fable 5.1: a bare session ran Fable, the SDK's `setModel(undefined)` switched the
+session to Opus 5 with 1M context, and an explicit Fable id ran Fable. A pick made
+while the runtime is still starting is held for catalog discovery instead of being
+refused, and the init event's release name (`claude-fable-5-1`) maps onto the
+catalog's context variant so the composer keeps its label. Host tests cover the
+untouched runtime, the held pick, and the name mapping; the renderer transport
+re-sends a model picked while the socket was still opening. The reproduction was
+a scratch SDK script against the live CLI, not the packaged application.
+
 **Tool-attempt presentation (2026-09-16):** `ui/transcript/activity.tsx` omits failed
 tools from chat, including summaries and expanded details. Activity tests cover
 a subsequent running, successful, or failed call, empty-group suppression,

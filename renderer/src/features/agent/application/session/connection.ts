@@ -76,6 +76,10 @@ export interface AgentTransport {
   applyAccessMode(mode: AgentAccessMode): boolean;
   /** Re-applies a mode the user picked while the socket was still opening. */
   syncAccessMode(): void;
+  /** Sends a model choice and remembers it as the connected one. */
+  applyModel(model: string | null): boolean;
+  /** Re-applies a model the user picked while the socket was still opening. */
+  syncModel(): void;
 }
 
 export function createAgentTransport({
@@ -92,6 +96,7 @@ export function createAgentTransport({
   let closeExpected = false;
   let exitReceived = false;
   let appliedAccessMode: AgentAccessMode | null = null;
+  let appliedModel: string | null = null;
 
   const closeSocket = () => {
     closeExpected = true;
@@ -146,6 +151,8 @@ export function createAgentTransport({
     exitReceived = false;
     const session = state();
     appliedAccessMode = session.accessMode;
+    // The socket URL carries the model, so the open itself applies it.
+    appliedModel = session.model;
     transition({
       attempt: options.attempt ?? agentReconnectAttempt(session.connection),
       kind: 'connect',
@@ -190,6 +197,16 @@ export function createAgentTransport({
       const mode = state().accessMode;
       if (mode === appliedAccessMode) return;
       if (connection?.send?.({ kind: 'set-access-mode', mode })) appliedAccessMode = mode;
+    },
+    applyModel(model) {
+      const sent = connection?.send?.({ kind: 'select-model', model }) ?? false;
+      if (sent) appliedModel = model;
+      return sent;
+    },
+    syncModel() {
+      const model = state().model;
+      if (model === appliedModel) return;
+      if (connection?.send?.({ kind: 'select-model', model })) appliedModel = model;
     },
   };
 }

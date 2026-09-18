@@ -107,29 +107,45 @@ export function claudePermissionMode(access?: string): AgentAccessMode {
 }
 
 /** Validate and apply a requested model at the SDK boundary. The caller must
- * still wait for the SDK init event before presenting it as the active model. */
+ * still wait for the SDK init event before presenting it as the active model.
+ * With nothing requested the runtime is left alone: it starts on the model the
+ * user's own Claude settings name, and the SDK's `setModel(undefined)` does
+ * not keep that but replaces it with the CLI's built-in default. */
 export async function selectClaudeModel(
   requested: string | undefined,
   models: AgentModel[],
-  setModel: (model?: string) => Promise<void>,
+  setModel: (model: string) => Promise<void>,
   resume: boolean,
 ): Promise<{ fallback?: string }> {
-  if (resume) return {};
-  const selected = requested && models.some((entry) => entry.id === requested) ? requested : undefined;
-  if (requested && !selected) return { fallback: 'That model is no longer available; using the runtime default.' };
+  if (resume || !requested) return {};
+  if (!models.some((entry) => entry.id === requested)) return { fallback: 'That model is no longer available; using the runtime default.' };
   try {
-    await setModel(selected);
+    await setModel(requested);
     return {};
   } catch (err: unknown) {
     return { fallback: 'That model could not be selected; using the runtime default.' };
   }
 }
 
-export function claudeActiveModelEvent(models: AgentModel[], activeModel: string): Extract<AgentServerEvent, { t: 'models' }> {
+/** A model id without the context-window suffix the CLI's aliases carry
+ * (`opus[1m]`) and its reported release names may drop. */
+function claudeModelBaseName(id: string): string {
+  return id.replace(/\[[^\]]*\]$/, '');
+}
+
+/** The catalog entry the runtime's reported model names. The init event
+ * carries a resolved release name (`claude-fable-5-1`) where the catalog lists
+ * aliases and context variants (`claude-fable-5-1[1m]`), so an exact id wins,
+ * then the same name without its suffix; a name the catalog cannot place
+ * stays visible under its own id. */
+export function claudeActiveModelEvent(models: AgentModel[], reported: string): Extract<AgentServerEvent, { t: 'models' }> {
+  const listed =
+    models.find((entry) => entry.id === reported) ??
+    models.find((entry) => claudeModelBaseName(entry.id) === claudeModelBaseName(reported));
   return {
     t: 'models',
-    models: models.some((entry) => entry.id === activeModel) ? models : [...models, { id: activeModel, label: activeModel }],
-    activeModel,
+    models: listed ? models : [...models, { id: reported, label: reported }],
+    activeModel: listed?.id ?? reported,
   };
 }
 
@@ -276,6 +292,9 @@ export class AgentSession implements AttributedAgentSession {
   /** The folder this session is bound to, captured at start. */
   private cwd: string | null = null;
   private models: AgentModel[] = [];
+  /** Whether publishModels has run, so a model picked earlier is held for it
+   *  rather than refused against a catalog that is not read yet. */
+  private catalogPublished = false;
   private skills = new Set<string>();
   private pumpTask: Promise<void> | null = null;
   private retirementTask: Promise<void> | null = null;
@@ -456,6 +475,9 @@ export class AgentSession implements AttributedAgentSession {
       rememberAgentModels('claude', this.models);
       if (reading.defaultModel) rememberAgentDefaultModel('claude', reading.defaultModel);
       const selection = await selectClaudeModel(this.model, this.models, (model) => this.q!.setModel(model), Boolean(this.resume));
+      // A refused choice is not this session's model: the init event then
+      // names what the runtime runs, and the memory may learn it as the default.
+      if (selection.fallback) this.model = undefined;
       // A resume is intentionally never reconfigured, even if a stale UI
       // parameter appears on the URL. It preserves the runtime's session model.
       this.send({ t: 'models', models: this.models, ...(selection.fallback ? { fallback: selection.fallback } : {}) });
@@ -464,6 +486,8 @@ export class AgentSession implements AttributedAgentSession {
       // usable on older CLIs, with their configured default untouched.
       this.send(claudeModelCatalogFailureEvent(this.model, Boolean(this.resume)));
       log.debug(`could not discover Claude models: ${errorMessage(err)}`);
+    } finally {
+      this.catalogPublished = true;
     }
   }
 
@@ -506,8 +530,9 @@ export class AgentSession implements AttributedAgentSession {
     if (msg.type === 'system' && msg.subtype === 'init' && msg.model) {
       // With nothing chosen, the model the SDK started is the runtime's own
       // default, which its catalog does not flag.
-      if (!this.model) rememberAgentDefaultModel('claude', msg.model);
-      this.send(claudeActiveModelEvent(this.models, msg.model));
+      const active = claudeActiveModelEvent(this.models, msg.model);
+      if (!this.model) rememberAgentDefaultModel('claude', active.activeModel ?? msg.model);
+      this.send(active);
     }
     if (msg.type === 'system' && msg.subtype === 'commands_changed') this.publishSkillCommands(msg.commands);
     if (msg.type === 'system' && msg.subtype === 'api_retry') {
@@ -738,8 +763,15 @@ export class AgentSession implements AttributedAgentSession {
       case 'set-model': {
         // Claude can change the model only before a fresh conversation has
         // content. Resumed/populated sessions keep their native model.
-        if (this.turnActive || this.resume || !this.q) break;
+        if (this.turnActive || this.resume) break;
         const requested = typeof msg.model === 'string' && msg.model ? msg.model : undefined;
+        // A pick made while the runtime is still starting waits for
+        // publishModels, which applies it against the catalog before `ready`.
+        // Refusing it against a catalog not read yet would drop the choice.
+        if (!this.q || !this.catalogPublished) {
+          this.model = requested;
+          break;
+        }
         void selectClaudeModel(requested, this.models, (model) => this.q!.setModel(model), false)
           .then(({ fallback }) => {
             if (this.closed) return;
