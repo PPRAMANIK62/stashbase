@@ -4,6 +4,7 @@ import { SURFACE_FAILED } from '@/features/agent/application/failure-messages';
 import type { AgentCatalogPort, AgentInstructionsPort } from '@/features/agent/application/ports';
 import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import type { AgentScope } from '@/features/agent/domain/session';
+import type { AgentRevisionReview } from '@/features/agent/ui/transcript/revision-card';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { lazySurface } from '@/shared/runtime/lazy-surface';
 import { SurfaceBoundary } from '@/shared/runtime/surface-boundary';
@@ -27,6 +28,10 @@ export interface AgentWorkspaceProps {
   onOpenSource?: ((source: SourceReference) => void) | undefined;
   /** Restarts preparation for a bound source whose prepared text failed. */
   onReprocess?: ((source: SourceReference) => void) | undefined;
+  /** The review open on a document an agent proposed a revision to, by
+   *  folder-relative path. The documents feature owns that count, and the
+   *  composition layer is where the two features meet. */
+  revisionFor?: ((path: string, proposalId: string) => AgentRevisionReview | null) | undefined;
   runtime: AgentWorkspaceRuntime;
 }
 

@@ -37,7 +37,11 @@ import {
 } from './activity';
 import { AgentMarkdown } from './markdown';
 import { AgentQuestionCard } from './question-card';
+import { AgentRevisionCard, type AgentRevisionReview } from './revision-card';
+import { closingReplies } from './transcript-order';
 import { TurnFailure } from './turn-failure';
+
+export { closingReplies } from './transcript-order';
 
 const TRANSCRIPT_PAGE_SIZE = 200;
 
@@ -66,30 +70,6 @@ function CopyAction({ label, text }: { label: string; text: string }) {
       onClick={copy}
     />
   );
-}
-
-/** The reply that closes each settled turn — the last assistant block before
- *  the next prompt — mapped to when that turn's prompt was sent, so the row
- *  under it can say how long the turn took. The turn still streaming has
- *  none. */
-export function closingReplies(
-  blocks: AgentTranscriptBlock[],
-  activeTurn: boolean,
-): Map<string, number | undefined> {
-  const replies = new Map<string, number | undefined>();
-  let promptAt: number | undefined;
-  let lastReply: string | null = null;
-  for (const block of blocks) {
-    if (block.kind === 'user') {
-      if (lastReply) replies.set(lastReply, promptAt);
-      lastReply = null;
-      promptAt = block.at;
-    } else if (block.kind === 'assistant') {
-      lastReply = block.id;
-    }
-  }
-  if (lastReply && !activeTurn) replies.set(lastReply, promptAt);
-  return replies;
 }
 
 function DayDivider({ at, now }: { at: number; now: number }) {
@@ -148,6 +128,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   onPermission,
   onRetry,
   promptAt,
+  review,
   runtimeUpdate,
   transientFile,
 }: {
@@ -171,6 +152,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   onRetry(errorBlockId: string): boolean;
   /** When the prompt a closing reply answers was sent, for the duration. */
   promptAt: number | undefined;
+  review: AgentRevisionReview | null;
   runtimeUpdate?: AgentRuntimeUpdateView | undefined;
   transientFile?: ((path: string) => File | undefined) | undefined;
 }) {
@@ -264,6 +246,9 @@ const TranscriptBlock = memo(function TranscriptBlock({
       <p className="border-l border-border pl-3 text-caption text-muted-foreground">{block.text}</p>
     );
   }
+  if (block.kind === 'revision') {
+    return <AgentRevisionCard name={basePathName(block.path)} review={review} />;
+  }
   if (block.kind === 'error') {
     return <TurnFailure block={block} onRetry={onRetry} runtimeUpdate={runtimeUpdate} />;
   }
@@ -282,6 +267,7 @@ export const AgentTranscript = memo(function AgentTranscript({
   onOpenSource,
   onPermission,
   onRetry,
+  revisionFor,
   runtimeUpdate,
   sourceFor,
   transientFile,
@@ -302,6 +288,7 @@ export const AgentTranscript = memo(function AgentTranscript({
     decision?: AgentPermissionDecision,
   ): boolean;
   onRetry(errorBlockId: string): boolean;
+  revisionFor?: ((path: string, proposalId: string) => AgentRevisionReview | null) | undefined;
   /** The in-place update of the conversation's runtime, offered on a turn
    *  the runtime was too old for. Absent where nothing can run one. */
   runtimeUpdate?: AgentRuntimeUpdateView | undefined;
@@ -344,6 +331,11 @@ export const AgentTranscript = memo(function AgentTranscript({
       : null;
   const tail = blocks.at(-1);
   const narrated = liveGroup !== null || (tail?.kind === 'tool' && tail.status === 'awaiting');
+  const reviewFor = (block: AgentTranscriptBlock): AgentRevisionReview | null => {
+    if (block.kind !== 'revision') return null;
+    const source = sourceFor?.(block.path);
+    return source ? (revisionFor?.(source.path, block.proposalId) ?? null) : null;
+  };
 
   return (
     <>
@@ -384,6 +376,7 @@ export const AgentTranscript = memo(function AgentTranscript({
               onPermission={decide}
               onRetry={onRetry}
               promptAt={closing.get(group.id)}
+              review={reviewFor(group)}
               runtimeUpdate={runtimeUpdate}
               transientFile={transientFile}
             />

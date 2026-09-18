@@ -28,6 +28,7 @@ export {
  *  the composer, catalog and scope fields are edited in place. Selectors are
  *  the only way anything outside the domain asks a question about a session,
  *  so the union's shape stays an implementation detail of this module. */
+import { revisionProposalForTool } from './file-change';
 import {
   MAX_QUEUED_PROMPTS,
   type AgentActiveTurn,
@@ -41,8 +42,10 @@ import {
   appendToolOutput,
   finishTool,
   recordFileChange,
+  recordRevisionProposal,
   replyToolPermission,
   requestToolPermission,
+  settledToolName,
   settleErrorBlock,
   settlePendingTools,
   stampClosingReply,
@@ -216,10 +219,7 @@ export function transitionAgentSession(
         transcript: appendToolOutput(state.transcript, action.id, action.delta),
       };
     case 'tool-finished':
-      return {
-        ...state,
-        transcript: finishTool(state.transcript, action.id, action.content, action.isError),
-      };
+      return { ...state, transcript: finishedToolTranscript(state, action) };
     case 'file-changed':
       return sameTranscript(state, recordFileChange(state.transcript, action));
     case 'permission-requested':
@@ -335,6 +335,25 @@ export function transitionAgentSession(
       return unreachable;
     }
   }
+}
+
+/** What a settled tool leaves behind. A `suggest_edits` that parked a revision
+ *  also leaves one to decide inside the document, which its own answer is what
+ *  says. A tool that ended in error parks nothing. */
+function finishedToolTranscript(
+  state: AgentSessionState,
+  action: Extract<AgentSessionAction, { kind: 'tool-finished' }>,
+): AgentTranscriptBlock[] {
+  const name = settledToolName(state.transcript, action.id);
+  const settled = finishTool(state.transcript, action.id, action.content, action.isError);
+  const proposal = action.isError || !name ? null : revisionProposalForTool(name, action.content);
+  return proposal === null
+    ? settled
+    : recordRevisionProposal(settled, {
+        id: action.id,
+        path: proposal.path,
+        proposalId: proposal.id,
+      });
 }
 
 /** An edit a transcript helper declined to make leaves the state itself

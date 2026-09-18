@@ -64,6 +64,7 @@ function ChatWorkspace({
   onOpenExternal,
   onOpenSource,
   onReprocess,
+  revisionFor,
   runtime,
   active,
 }: Omit<AgentWorkspaceProps, 'catalog'> & {
@@ -205,6 +206,7 @@ function ChatWorkspace({
               onOpenSource={onOpenSource}
               onPermission={active.replyPermission}
               onRetry={active.retry}
+              revisionFor={revisionFor}
               runtimeUpdate={runtimeUpdate}
               sourceFor={sourceFor}
               transientFile={active.fileForTransient}
