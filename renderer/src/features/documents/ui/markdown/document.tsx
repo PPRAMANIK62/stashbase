@@ -14,7 +14,6 @@ import { listItem } from '@milkdown/crepe/feature/list-item';
 import { placeholder } from '@milkdown/crepe/feature/placeholder';
 import { table } from '@milkdown/crepe/feature/table';
 import { toolbar } from '@milkdown/crepe/feature/toolbar';
-import { editorViewCtx } from '@milkdown/kit/core';
 import { replaceAll } from '@milkdown/kit/utils';
 import { BookOpen, PenLine, RefreshCw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -34,20 +33,22 @@ import { writeToClipboard } from '@/shared/ui/clipboard';
 
 import { watchMarkdownChanges } from './changes';
 import { createMarkdownFindController } from './find-controller';
+import {
+  activeHeadingId,
+  applyHeadingIds,
+  currentEditorView,
+  documentScroller,
+  extractDocumentHeadings,
+  headingElementAtPosition,
+  headingsForView,
+  scrollOutlineToHeading,
+  type ProseMirrorDocument,
+} from './outline-adapter';
 
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame.css';
 import './document.css';
-import {
-  activeHeadingId,
-  applyHeadingIds,
-  documentScroller,
-  extractDocumentHeadings,
-  headingElementAtPosition,
-  scrollOutlineToHeading,
-  type HeadingNodeView,
-  type ProseMirrorDocument,
-} from './outline-adapter';
+import { useRevisionReview, type RevisionBinding } from './use-revision-review';
 
 type CreationState = 'creating' | 'failed' | 'ready';
 
@@ -63,6 +64,9 @@ export interface MarkdownDocumentProps {
   onOpenExternal(href: string): Promise<boolean>;
   navigation: DocumentNavigationRuntime;
   readOnly: boolean;
+  /** The review the document runtime holds, and what this surface reports
+   *  back to it. */
+  revision: RevisionBinding;
   source: SourceReference;
   tabId: string;
   value: string;
@@ -81,6 +85,7 @@ export function MarkdownDocument({
   onOpenExternal,
   navigation,
   readOnly,
+  revision,
   source,
   tabId,
   value,
@@ -108,6 +113,11 @@ export function MarkdownDocument({
   const [creationState, setCreationState] = useState<CreationState>('creating');
   const [headings, setHeadings] = useState<DocumentHeading[]>([]);
   const [linkFailure, setLinkFailure] = useState(false);
+  const {
+    active: reviewActive,
+    attach: attachReview,
+    bar: reviewBar,
+  } = useRevisionReview({ creationState, revision });
   const pendingAnchor = useStore(navigation.store, (state) =>
     state.pendingAnchor?.tabId === tabId ? state.pendingAnchor.id : null,
   );
@@ -148,6 +158,7 @@ export function MarkdownDocument({
       .addFeature(table)
       .addFeature(codeMirror, { copyText: 'Copy code', languages })
       .addFeature(latex);
+    const releaseReview = attachReview(editor);
     const updateHeadings = () => {
       const view = currentEditorView(editor);
       if (!view) {
@@ -186,12 +197,13 @@ export function MarkdownDocument({
 
     return () => {
       if (editorRef.current === editor) editorRef.current = null;
+      releaseReview();
       if (refreshHeadingsRef.current === updateHeadings) {
         refreshHeadingsRef.current = () => undefined;
       }
       stopCreation();
     };
-  }, [attempt, navigation, tabId]);
+  }, [attachReview, attempt, navigation, tabId]);
 
   useEffect(() => {
     editorRef.current?.setReadonly(readOnly);
@@ -199,7 +211,11 @@ export function MarkdownDocument({
 
   useEffect(() => {
     const editor = editorRef.current;
-    if (!editor || creationState !== 'ready' || dirty || observedValueRef.current === value) return;
+    // An open review holds the document against the version it was computed
+    // for, and nothing accepted yet leaves the buffer clean, so a background
+    // reconcile would otherwise replace the text the review describes.
+    if (!editor || creationState !== 'ready' || dirty || reviewActive) return;
+    if (observedValueRef.current === value) return;
     observedValueRef.current = value;
     const incoming = splitLeadingYamlFrontmatter(value);
     frontmatterRef.current = incoming.source;
@@ -210,7 +226,7 @@ export function MarkdownDocument({
       suppressChangeRef.current = false;
       refreshHeadingsRef.current();
     });
-  }, [creationState, dirty, value]);
+  }, [creationState, dirty, reviewActive, value]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -356,6 +372,7 @@ export function MarkdownDocument({
           </Button>
         </div>
       )}
+      {reviewBar}
       {linkFailure && (
         <div className="markdown-link-failure" role="alert">
           Could not open this link in your browser.
@@ -364,24 +381,4 @@ export function MarkdownDocument({
       <div className={cn('markdown-crepe', readOnly && 'markdown-crepe-readonly')} ref={hostRef} />
     </div>
   );
-}
-
-function currentEditorView(editor: CrepeBuilder | null): HeadingNodeView | null {
-  return (
-    (editor?.editor.action((context) => context.get(editorViewCtx)) as HeadingNodeView | null) ??
-    null
-  );
-}
-
-function headingsForView(
-  view: HeadingNodeView | null,
-  cache: {
-    current: { document: ProseMirrorDocument; headings: DocumentHeading[] } | null;
-  },
-): DocumentHeading[] {
-  if (!view) return [];
-  if (cache.current?.document === view.state.doc) return cache.current.headings;
-  const headings = extractDocumentHeadings(view.state.doc);
-  cache.current = { document: view.state.doc, headings };
-  return headings;
 }

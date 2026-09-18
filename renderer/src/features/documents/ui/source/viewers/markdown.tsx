@@ -21,7 +21,7 @@ export default function MarkdownViewer({
       sourceApi={sourceApi}
       status={status}
     >
-      {({ access, editor, markdownMode, onChange, readOnly, value }) => (
+      {({ access, editor, markdownMode, onChange, readOnly, revision, value }) => (
         <MarkdownDocument
           // Milkdown refuses outside text while the document is dirty, which is
           // right for a refetch and wrong for a restored draft; a restore remounts.
@@ -36,6 +36,11 @@ export default function MarkdownViewer({
           onNavigate={onNavigate}
           onOpenExternal={onOpenExternal}
           readOnly={readOnly || markdownMode === 'reading'}
+          revision={{
+            onControls: runtime.bindRevisionControls,
+            onPending: runtime.publishRevisionCount,
+            state: revision,
+          }}
           source={runtime.scope.source}
           tabId={runtime.scope.id}
           value={value}

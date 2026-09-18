@@ -1,3 +1,6 @@
+import type { CrepeBuilder } from '@milkdown/crepe/builder';
+import { editorViewCtx } from '@milkdown/kit/core';
+
 import { headingSlug, type DocumentHeading } from '@/features/documents/domain/outline';
 
 export interface ProseMirrorDocument {
@@ -121,4 +124,25 @@ export function applyHeadingIds(host: HTMLElement, entries: DocumentHeading[]): 
     const heading = entries[index];
     if (heading) element.id = heading.id;
   }
+}
+
+/** The live editor view, narrowed to what reading headings out of it needs. */
+export function currentEditorView(editor: CrepeBuilder | null): HeadingNodeView | null {
+  return (
+    (editor?.editor.action((context) => context.get(editorViewCtx)) as HeadingNodeView | null) ??
+    null
+  );
+}
+
+/** The headings of the document now on screen, reusing the last extraction
+ *  while the document node is the same one. */
+export function headingsForView(
+  view: HeadingNodeView | null,
+  cache: { current: { document: ProseMirrorDocument; headings: DocumentHeading[] } | null },
+): DocumentHeading[] {
+  if (!view) return [];
+  if (cache.current?.document === view.state.doc) return cache.current.headings;
+  const headings = extractDocumentHeadings(view.state.doc);
+  cache.current = { document: view.state.doc, headings };
+  return headings;
 }

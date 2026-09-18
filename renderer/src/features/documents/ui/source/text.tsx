@@ -17,6 +17,7 @@ import {
   type DocumentEditorState,
   type DocumentSaveState,
 } from '@/features/documents/domain/document';
+import type { DocumentRevision } from '@/features/documents/domain/revision';
 import { useDocumentSource } from '@/features/documents/hooks/use-document-source';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
@@ -36,6 +37,7 @@ interface TextSurfaceSlot {
   markdownMode: 'reading' | 'writer';
   onChange(value: string): void;
   readOnly: boolean;
+  revision: DocumentRevision;
   value: string;
 }
 
@@ -127,6 +129,7 @@ export function TextSurface({
     resolveConflict,
     restoreSource,
     retrySave,
+    revision,
     source,
   } = useDocumentSource(runtime, sourceApi, active);
 
@@ -204,6 +207,7 @@ export function TextSurface({
               access === 'read-only' ||
               editor === null ||
               (editor.save.kind === 'merging' && editor.save.finishing),
+            revision,
             value: editor?.value ?? source.data?.content ?? '',
           })}
         </Suspense>
