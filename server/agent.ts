@@ -176,12 +176,19 @@ function spawnClaudeCodeProcess(options: SpawnOptions): SpawnedProcess {
   });
 }
 
-// Only known reads, discovery, and app-owned reindex work bypass the callback's
-// approval round trip. New or renamed tools must never become implicitly safe.
+// Only known reads, discovery, app-owned reindex work, and proposals that reach
+// no file bypass the callback's approval round trip. New or renamed tools must
+// never become implicitly safe.
+//
+// `suggest_edits` belongs here because it writes nothing. It parks a proposed
+// document in memory for the reader, who accepts or rejects each change in the
+// document itself. That review is the approval; prompting first would ask the
+// same person the same question twice and freeze the turn for the length of
+// their read.
 const LOW_RISK_TOOLS = new Set([
   'Read', 'Glob', 'Grep', 'LS', 'ToolSearch',
   'ListMcpResourcesTool', 'ReadMcpResourceTool',
-  ...['list_projects', 'list_directory', 'read_file', 'search_project', 'reindex']
+  ...['list_projects', 'list_directory', 'read_file', 'search_project', 'reindex', 'suggest_edits']
     .map((name) => `mcp__stashbase__${name}`),
 ]);
 

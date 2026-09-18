@@ -113,6 +113,26 @@ export function isWorkspaceFileChange(
   return isPathWithinWorkspace(stringValue(params?.grantRoot), cwd);
 }
 
+/** A proposal reaches no file. The reader accepts or rejects each change in the
+ * document itself, and that review is the approval, so prompting first would ask
+ * the same person the same question twice and hold the turn open for the length
+ * of their read.
+ *
+ * Plan mode is the exception. Its contract is not "touches no file", it is "this
+ * turn leaves nothing for you to undo", and a parked proposal drops the reader's
+ * open document into a review state they have to clear.
+ *
+ * Containment is not rechecked here. The host refuses a proposal outside the
+ * calling session's own project, so repeating the rule would let the two drift. */
+export function isStashbaseProposal(
+  approval: { input: CodexJsonObject },
+  accessMode: string | undefined,
+): boolean {
+  return accessMode !== 'plan'
+    && stringValue(approval.input.server).toLowerCase() === 'stashbase'
+    && stringValue(approval.input.tool) === 'suggest_edits';
+}
+
 /** Edit mode accepts only ordinary StashBase write/edit tools in the folder. */
 export function isStashbaseWorkspaceEdit(
   approval: { input: CodexJsonObject },

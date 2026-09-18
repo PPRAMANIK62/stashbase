@@ -11,6 +11,7 @@ export {
 } from './codex-session-runtime.ts';
 export {
   codexAccessOptions,
+  isStashbaseProposal,
   isStashbaseWorkspaceEdit,
   isWorkspaceFileChange,
 } from './codex-approval.ts';
