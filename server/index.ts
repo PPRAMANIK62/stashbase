@@ -64,6 +64,7 @@ import { mount as mountUploadRoutes } from './routes/upload.ts';
 import { mount as mountAttachRoutes } from './routes/attach.ts';
 import { mount as mountIndexingRoutes } from './routes/indexing.ts';
 import { mount as mountProjectFileRoutes } from './routes/project-files.ts';
+import { mount as mountDocumentRevisionRoutes } from './routes/document-revisions.ts';
 import { mount as mountTerminalRoutes } from './routes/terminal.ts';
 import { mount as mountMcpRoutes } from './routes/mcp.ts';
 import { createMcpHttpService } from './mcp-http-service.ts';
@@ -315,6 +316,7 @@ mountFoldersRoutes(app);
 mountUploadRoutes(app);
 mountAttachRoutes(app);
 mountProjectFileRoutes(app);
+mountDocumentRevisionRoutes(app);
 mountTerminalRoutes(app);
 mountMcpRoutes(app, mcpHttpService);
 mcpHttpService.mountLoopback(app); // local POST /mcp; Docker listener is opt-in and MCP-only

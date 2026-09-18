@@ -3,6 +3,7 @@ import path from 'node:path';
 import { queueConvertibleSource } from './conversion-dispatch.ts';
 import { clearRecord } from './conversion-status.ts';
 import { deleteDerivedForSource } from './derived-store.ts';
+import { forgetProposal, remapProposalPath } from './document-revisions.ts';
 import { prepareFileOperation } from './file-operation-guard.ts';
 import { saveFileContent } from './file-save.ts';
 import {
@@ -20,6 +21,7 @@ import { contentSizeError, isRetrievalEligiblePath, shouldIndexFilePath } from '
 import {
   normalizeProjectFilePath,
   routeError,
+  validateProjectTextMutation,
   validateProjectWritableFolderRel,
 } from './project-file-access.ts';
 import { readProjectFile } from './project-file-reader.ts';
@@ -30,25 +32,6 @@ import { indexer } from './state.ts';
 import { noteTreeChanged } from './watcher.ts';
 
 const log = logger('project-file-mutations');
-
-/** Agent/file-tool writes are transport-independent text. C0 controls other
- * than normal text whitespace almost always mean a caller constructed Markdown
- * or LaTeX in an interpreted string literal (for example, `\frac` became form
- * feed + `rac`). Refuse the mutation instead of silently corrupting user data.
- */
-function validateProjectTextMutation(content: string): void {
-  const match = content.match(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u);
-  if (!match) return;
-  const codePoint = match[0].codePointAt(0) ?? 0;
-  const printable = `U+${codePoint.toString(16).toUpperCase().padStart(4, '0')}`;
-  throw routeError(
-    `content contains unsupported control character ${printable}. ` +
-    'This commonly happens when Markdown or LaTeX backslashes are interpreted by a JavaScript string. ' +
-    'Construct the value with String.raw or escape each backslash; no file was changed.',
-    400,
-    'INVALID_TEXT_CONTENT',
-  );
-}
 
 export async function writeProjectFile(
   rawPath: unknown,
@@ -148,6 +131,7 @@ export async function moveProjectFile(
       await renameOnDiskAsync(newTarget.folderRel, oldTarget.folderRel);
       throw routeError(`failed to update links in ${applied.failed.map((failure) => failure.name).join(', ')}`, 500);
     }
+    remapProposalPath(oldTarget.abs, newTarget.abs);
     noteTreeChanged();
 
     let indexWarning: string | undefined;
@@ -245,6 +229,7 @@ export async function deleteProjectFile(
     catch (err: unknown) { log.warn(`project delete: derived cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
     try { clearRecord(target.abs); }
     catch (err: unknown) { log.warn(`project delete: preparation status cleanup failed for ${target.abs}: ${errorMessage(err)}`); }
+    forgetProposal(target.abs);
     if (removed) {
       noteTreeChanged();
     }

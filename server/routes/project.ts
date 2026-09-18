@@ -27,6 +27,7 @@ import {
   setRecentFavorite,
 } from '../folder.ts';
 import { filesystemPath } from '../filesystem-path.ts';
+import { forgetFolderProposals } from '../document-revisions.ts';
 import { errorMessage, logger } from '../log.ts';
 import { cancelFolderSyncsAndWait, deleteFolderRuntimeState, indexer } from '../state.ts';
 import { clearRecordsUnder } from '../conversion-status.ts';
@@ -80,6 +81,7 @@ async function cleanupRemovedProjectFolder(abs: string): Promise<void> {
   await indexer.deletePathPrefix(abs);
   try { await indexer.unbindFolder(abs); }
   catch (err: unknown) { log.warn(`unbind on remove failed for ${abs}: ${errorMessage(err)}`); }
+  forgetFolderProposals(abs, retainedRoots);
   // Best-effort secondary-cache cleanup (conversions / runtime warnings).
   try { await deleteFolderRuntimeState(abs); }
   catch (err: unknown) { log.warn(`runtime-state cleanup failed for ${abs}: ${errorMessage(err)}`); }
