@@ -9,12 +9,14 @@
  * the build here rather than silently showing the wrong recovery.
  */
 import { JsonEditError } from '@/features/documents/domain/json-edit';
+import type { RevisionRefusal } from '@/features/documents/domain/revision';
 import {
   readFailure,
   type FailureView,
   type FeatureFailureKind,
 } from '@/shared/domain/feature-error';
 
+import type { RevisionPickupFailure } from './open-revision';
 import type {
   DocumentAssetFailureKind,
   DocumentSaveFailureKind,
@@ -85,6 +87,52 @@ export const GENERIC_PREVIEW_MESSAGES: Readonly<Record<GenericFilePreviewFailure
   unauthorized: 'This window can no longer inspect that file.',
   unavailable: 'The file could not be inspected. It has not been changed.',
 };
+
+/** Why a proposed revision could not be opened on the document in front of
+ *  the reader. */
+export const DOCUMENT_REVISION_MESSAGES: Readonly<Record<RevisionRefusal, string>> = {
+  'frontmatter-changed':
+    'That proposal changes Markdown frontmatter, which cannot be reviewed in place.',
+  'no-changes': 'That proposal matches the document already, so there is nothing to review.',
+  'not-editable': 'This document cannot be revised in place.',
+  'review-in-progress': 'Finish the review already open on this document first.',
+  'stale-version': 'The document has changed since that proposal was written.',
+};
+
+/** Why a proposal an agent parked never reached the reader. The host deletes
+ *  a proposal the moment it hands it over, so one of these sentences is the
+ *  only account of that work the reader will ever get, and each names the
+ *  document so they know what to ask the agent for again. */
+const DOCUMENT_REVISION_PICKUP_MESSAGES: Readonly<
+  Record<RevisionPickupFailure | 'outside-folder', (name: string) => string>
+> = {
+  'frontmatter-changed': (name) =>
+    `An agent revised ${name}, but its Markdown frontmatter cannot be reviewed in place.`,
+  'no-changes': (name) =>
+    `An agent revised ${name}, but the proposal matches the document already.`,
+  'not-editable': (name) => `An agent revised ${name}, which cannot be revised in place.`,
+  'not-opened': (name) => `An agent revised ${name}, but that document did not open here.`,
+  'not-verified': (name) =>
+    `An agent revised ${name}, but its current source could not be checked.`,
+  'outside-folder': (name) =>
+    `An agent revised ${name}, which is not in the folder this window has open.`,
+  'review-in-progress': (name) =>
+    `An agent revised ${name} again while its first review was still open.`,
+  'stale-version': (name) => `An agent revised ${name}, which has changed since that was written.`,
+};
+
+/** The one thing every pickup failure has to end on, because it is the part
+ *  the reader can act on. */
+const REVISION_NOT_KEPT = 'The proposal was not kept, so ask the agent for it again.';
+
+/** The sentence a reader sees when a proposal was taken from the host and
+ *  could not be shown. `name` is the document's own name, not a path. */
+export function documentRevisionPickupMessage(
+  failure: RevisionPickupFailure | 'outside-folder',
+  name: string,
+): string {
+  return `${DOCUMENT_REVISION_PICKUP_MESSAGES[failure](name)} ${REVISION_NOT_KEPT}`;
+}
 
 export function documentFailure<Extra extends string = never>(
   error: unknown,

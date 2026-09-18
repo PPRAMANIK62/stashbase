@@ -55,6 +55,7 @@ describe('document identity', () => {
       markdownMode: 'writer',
       pdfPage: 1,
       readingRequest: 0,
+      revision: { kind: 'idle' },
       scope,
     });
     expect(disposeDocumentState(disposed)).toBe(disposed);

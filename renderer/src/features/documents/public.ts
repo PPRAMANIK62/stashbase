@@ -14,11 +14,18 @@ export {
   type DocumentTabsRuntime,
 } from './application/tabs-runtime';
 export type { DocumentRuntime } from './application/document-runtime';
+export { documentRevisionPickupMessage } from './application/failure-messages';
+export { openDocumentRevision } from './application/open-revision';
+export type { DocumentRevisionProposal, DrainedRevisions } from './application/ports';
 export { createDocumentAdapters, type DocumentAdapters } from './infrastructure/adapters';
 export { useDocumentCommands } from './hooks/use-document-commands';
 export { useDocumentSaveBarrier } from './hooks/use-document-save-barrier';
 export { useHasOpenDocuments, useOpenDocumentSources } from './hooks/use-open-documents';
+export { useOpenRevisions, type OpenRevision } from './hooks/use-open-revisions';
 export { useNewTab, type NewTab } from './hooks/use-new-tab';
+export { useRevisionPreview } from './hooks/use-revision-preview';
+export { useRevisionProposals } from './hooks/use-revision-proposals';
+export { RevisionPreview } from './ui/workspace/revision-preview';
 export { NewTabPage } from './ui/workspace/new-tab';
 export { DocumentTabs } from './ui/workspace/tabs';
 export { DocumentHistoryButtons } from './ui/workspace/history-buttons';
