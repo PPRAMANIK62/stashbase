@@ -221,20 +221,20 @@ checks both versions, architectures, payload hashes, and component manifests
 before creating one latest-mac.yml containing both ZIP/DMG pairs. Only the
 combined set is uploaded to the draft; parallel jobs must never upload competing
 metadata under the same name. Homebrew selects the DMG and checksum by CPU.
-The v2.9.6 source commit passed [CI on all four native targets](https://github.com/liliu-z/stashbase/actions/runs/35316552174),
-and its [coordinated release](https://github.com/liliu-z/stashbase/actions/runs/35317523400)
+The v2.9.7 source commit passed [CI on all four native targets](https://github.com/liliu-z/stashbase/actions/runs/35344187959),
+and its [coordinated release](https://github.com/liliu-z/stashbase/actions/runs/35345369681)
 passed both macOS architectures' signing, notarization, and mounted-DMG checks,
 the Windows and Linux packaged runtime checks, the complete update-set
 verification, publication, and the Homebrew cask update. Every platform asset,
 all three latest metadata files with their blockmaps, and the four extractor
-archives with manifests are on the public release; the retried asset upload
-delivered where the 2.9.4 attempt had stopped on HTTP 500.
+archives with manifests are on the public release; the Windows set is the NSIS
+installer, its blockmap, and latest.yml, which lists the installer alone.
 Local checks of the downloaded arm64 DMG matched the cask's checksum, reported
-2.9.6, and passed strict/deep codesign, Gatekeeper's notarized Developer ID
+2.9.7, and passed strict/deep codesign, Gatekeeper's notarized Developer ID
 assessment, and stapler validation; that package was not launched from the
 release session. Real Intel macOS 12–14 entry/editing, representative OCR
 quality, live release-component delivery, the packaged in-app runtime update,
-and N→N+1 updates remain release checks.
+a packaged Windows installer launch, and N→N+1 updates remain release checks.
 Artifact tests exercise checksum rejection and the installed electron-updater's
 architecture selection; the generated Homebrew cask passes Ruby syntax validation.
 
