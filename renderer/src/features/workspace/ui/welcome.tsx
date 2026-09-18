@@ -327,7 +327,9 @@ export function ProjectWelcome({
         {gallery && (
           <section className="mt-10 w-full max-w-5xl">
             <h2 className="text-title font-medium">Or start from a project in the Gallery</h2>
-            <p className="mt-1 max-w-lg text-body leading-relaxed text-muted-foreground">
+            {/* The tagline's measure, so a sentence of this length stays on one
+             * line instead of folding under the title. */}
+            <p className="mt-1 max-w-2xl text-body leading-relaxed text-muted-foreground">
               Explore how people organize files and write with agents. Find ideas for your own
               workflow.
             </p>
