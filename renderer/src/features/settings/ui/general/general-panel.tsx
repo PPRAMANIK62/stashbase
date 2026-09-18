@@ -4,6 +4,7 @@ import type { AppearancePort } from '@/features/settings/application/ports';
 import type { TelemetryPort } from '@/features/settings/application/telemetry-port';
 import { AppearancePanel } from '@/features/settings/ui/appearance/appearance-panel';
 import {
+  Disclosure,
   SettingsGroup,
   SettingsList,
   SettingsPane,
@@ -16,6 +17,7 @@ import { TelemetryGroup } from './telemetry-group';
 
 export interface GeneralPanelProps {
   appearanceApi?: AppearancePort | undefined;
+  revisionPreview?: ReactNode;
   telemetryApi?: TelemetryPort | undefined;
   onOpenExternal?: ((href: string) => void) | undefined;
   /** Null where the build has no updater, and then the group is not shown. */
@@ -24,6 +26,7 @@ export interface GeneralPanelProps {
 
 export function GeneralPanel({
   appearanceApi,
+  revisionPreview,
   softwareUpdate,
   telemetryApi,
   onOpenExternal,
@@ -74,6 +77,12 @@ export function GeneralPanel({
           </SettingsList>
         </SettingsGroup>
       )}
+      {revisionPreview && (
+        <SettingsGroup title="Developer">
+          <Disclosure summary="Document revision review">{revisionPreview}</Disclosure>
+        </SettingsGroup>
+      )}
     </SettingsPane>
   );
 }
+import type { ReactNode } from 'react';

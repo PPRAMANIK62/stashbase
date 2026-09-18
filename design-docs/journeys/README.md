@@ -139,8 +139,8 @@ save → continue the conversation.
 ### Required Results
 
 Writing creates ordinary local content without stealing document focus. Discussion is
-not publication or authorization for unrelated changes. Current comparisons do not imply
-pending inline prose suggestions.
+not publication or authorization for unrelated changes. A proposed Markdown revision
+waits for individual or whole-set review in the document; accepting uses ordinary saving.
 
 ### Failure and Recovery
 

@@ -12,9 +12,9 @@ An empty project is valid; references, search, and wiki building are optional.
   scope and search namespace; the product has no global Library.
 
 Local file handling, preparation, indexing, retrieval, and Agent-assisted writing
-are implemented. **Document-specific inline prose diff is coming soon**; existing
-file diffs and save-conflict comparisons do not implement it. Defects and missing
-evidence are not additional planned features.
+are implemented, including inline prose revision. Existing file diffs and
+save-conflict comparisons are separate. Defects and missing evidence are not
+additional planned features.
 
 Search UI says **By keyword / By meaning**; grep/hybrid are implementation strategies.
 

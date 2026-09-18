@@ -209,6 +209,21 @@ test('Claude permission callback asks for mutations and unknown tools, and settl
   assert.equal(redirect.behavior, 'deny');
   if (redirect.behavior === 'deny') assert.match(redirect.message, /read_file/);
   assert.equal((await nativeRead()).behavior, 'allow', 'the source redirect is only a one-time hint');
+  // A parked proposal reaches no file, and the reader's own accept or reject is
+  // the approval. Prompting would ask them the same question twice and freeze
+  // the turn for the length of their read.
+  const beforeProposal = permissionEvents().length;
+  let proposalSettled = false;
+  const proposal = canUseTool!(
+    'mcp__stashbase__suggest_edits',
+    { path: '/project/note.md' },
+    { signal: new AbortController().signal, toolUseID: 'suggest' },
+  );
+  void proposal.then(() => { proposalSettled = true; });
+  await settle();
+  assert.equal(proposalSettled, true, 'a proposal never waits on a human');
+  assert.equal((await proposal).behavior, 'allow');
+  assert.equal(permissionEvents().length, beforeProposal, 'a proposal raises no approval prompt');
   for (const name of ['mcp__stashbase__edit_file', 'mcp__stashbase__move_file', 'mcp__stashbase__write_file', 'mcp__stashbase__delete_file', 'Bash', 'new_tool', 'mcp__other__read_file']) {
     let settled = false;
     const input = { path: '/project/note.md' };

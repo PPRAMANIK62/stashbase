@@ -19,9 +19,24 @@ with Claude and Codex, drawing on your own sources and past work.
 
 ## Product Preview
 
-![StashBase design prototype: reviewing suggested inline document revisions alongside Agent chat](assets/readme/product-preview.png)
+![StashBase: reviewing suggested inline document revisions alongside Agent chat](assets/readme/product-preview.png)
 
-*Design prototype. Inline document revisions are coming soon.*
+*Reviewing an Agent's suggested revisions inside the document.*
+
+## Document Diff
+
+Review suggested edits directly in the document as you read it. Paragraphs and
+formatting stay in place, deleted words and phrases are struck through in red, and
+additions are highlighted in green. Revisions appear within the surrounding prose
+rather than as a line-by-line code patch.
+
+Accept or reject individual changes, or use **Accept All** and **Reject All** to take
+the whole set. Rejecting everything leaves the file exactly as it was. Ask your Agent
+to revise an open Markdown document and it proposes rather than overwrites, so nothing
+reaches the file until you accept a change.
+
+Agent file diffs and editor save-conflict comparisons are separate features and still
+work the way they did.
 
 ## Get Started
 
@@ -62,6 +77,8 @@ troubleshooting.
    refine it.
 
 Choose between **Chat** and **Documents** modes to suit the task at hand.
+You can write and revise this way, and use the [document diff](#document-diff) to
+review fine edits inside the prose.
 
 See [Using StashBase](docs/using-stashbase.md) for everyday document and search workflows.
 

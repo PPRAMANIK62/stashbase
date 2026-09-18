@@ -3,6 +3,7 @@ import type { SourceReference } from '@/shared/domain/source-reference';
 import { basePathName } from '@/shared/utils/file-path';
 
 import type { DocumentTextFormat } from './document-format';
+import type { DocumentRevision } from './revision';
 
 export interface DocumentScope {
   readonly generation: number;
@@ -19,6 +20,9 @@ export interface DocumentState {
   mutationPending: boolean;
   pdfPage: number;
   readingRequest: number;
+  /** The inline revision review, if one is open. Its transitions live in
+   *  `./revision`; `editor.revision` below is an edit counter, not this. */
+  revision: DocumentRevision;
   scope: DocumentScope;
 }
 
@@ -74,6 +78,8 @@ export type DocumentSaveState =
 
 export interface DocumentEditorState {
   baseline: string;
+  /** How many edits this buffer has taken, so a save that lands late knows
+   *  whether the text it wrote is still on screen. Not the review above. */
   revision: number;
   save: DocumentSaveState;
   value: string;
@@ -150,6 +156,7 @@ export function createDocumentState(scope: DocumentScope, access: DocumentAccess
     markdownMode: access === 'editable' ? 'writer' : 'reading',
     pdfPage: 1,
     readingRequest: 0,
+    revision: { kind: 'idle' },
     scope,
   };
 }
@@ -197,6 +204,7 @@ export function reconcileDocumentSource(
 ): DocumentState {
   if (state.lifecycle === 'disposed' || state.access !== 'editable' || state.mutationPending)
     return state;
+  if (state.revision.kind !== 'idle') return state;
   const baseline = documentEditorText(source.content);
   const editor = state.editor;
   if (editor && (isDocumentDirty(editor) || editor.save.kind === 'saving')) return state;
@@ -306,5 +314,6 @@ export function rejectDocumentSave(state: DocumentState, message: string): Docum
 }
 
 export function disposeDocumentState(state: DocumentState): DocumentState {
-  return state.lifecycle === 'disposed' ? state : { ...state, lifecycle: 'disposed' };
+  if (state.lifecycle === 'disposed') return state;
+  return { ...state, lifecycle: 'disposed', revision: { kind: 'idle' } };
 }

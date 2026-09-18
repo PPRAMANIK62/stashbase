@@ -20,17 +20,30 @@ export interface WorkspaceNotice {
  * The notice strip the window shows for things the reader did not ask about
  * directly.
  *
- * Two owners can raise one: a preparation command the shell ran on the
- * reader's behalf, which they may dismiss, and the host disagreeing about
- * which folder this window is on, which only resolves when the host answers
- * again. Nothing here offers setup: the strip carries only what happened to
- * the reader's own work, never an invitation to turn something on.
+ * Three owners can raise one: a preparation command the shell ran on the
+ * reader's behalf, which they may dismiss; the host disagreeing about which
+ * folder this window is on, which only resolves when the host answers again;
+ * and a revision an agent parked that could not be shown. Nothing here offers
+ * setup: the strip carries only what happened to the reader's own work, never
+ * an invitation to turn something on.
  */
-export function useWorkspaceNotices(
-  preparationFailure: FailureView | null,
-  dismissPreparationFailure: () => void,
-  hostFailure: string | null,
-): readonly WorkspaceNotice[] {
+export function useWorkspaceNotices({
+  dismissPreparationFailure,
+  dismissRevisionFailure,
+  hostFailure,
+  preparationFailure,
+  revisionFailures,
+}: {
+  dismissPreparationFailure: () => void;
+  /** Drops one revision notice by its sentence, which is what the strip keys
+   *  on. */
+  dismissRevisionFailure: (message: string) => void;
+  hostFailure: string | null;
+  preparationFailure: FailureView | null;
+  /** Proposals that were drained and could not be shown. The host has already
+   *  forgotten them, so the strip is the reader's only account of them. */
+  revisionFailures: readonly string[];
+}): readonly WorkspaceNotice[] {
   return useMemo(() => {
     const notices: WorkspaceNotice[] = [];
     if (preparationFailure) {
@@ -53,6 +66,23 @@ export function useWorkspaceNotices(
         tone: 'capability',
       });
     }
+    // A revision nobody asked for is StashBase failing to show what was
+    // offered, not the reader's own request refused.
+    for (const message of revisionFailures) {
+      notices.push({
+        action: null,
+        dismissLabel: 'Dismiss',
+        message,
+        onDismiss: () => dismissRevisionFailure(message),
+        tone: 'capability',
+      });
+    }
     return notices;
-  }, [dismissPreparationFailure, hostFailure, preparationFailure]);
+  }, [
+    dismissPreparationFailure,
+    dismissRevisionFailure,
+    hostFailure,
+    preparationFailure,
+    revisionFailures,
+  ]);
 }

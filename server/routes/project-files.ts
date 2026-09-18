@@ -12,9 +12,10 @@ import { indexer } from '../state.ts';
 import { sendError } from '../http.ts';
 import {
   requireProjectStatusFolder,
+  routeError,
 } from '../project-file-access.ts';
 import { agentContextFile, parseProjectFileLineBound } from '../project-file-reader.ts';
-import { AGENT_SESSION_ID_HEADER } from '../agent-session-registry.ts';
+import { AGENT_SESSION_ID_HEADER, attributedRequestSession } from '../agent-session-registry.ts';
 import { createProjectOperations, type ProjectOperations } from '../project-operations/index.ts';
 import {
   parseSearchMode,
@@ -232,6 +233,36 @@ export function mount(app: express.Express, operations: ProjectOperations = crea
       const newText = req.body?.new_text;
       const baseVersion = typeof req.body?.baseVersion === 'string' ? req.body.baseVersion : undefined;
       res.json(await operations.edit({ path: filePath, oldText, newText, replaceAll: req.body?.replace_all === true, baseVersion }));
+    } catch (err: unknown) {
+      sendError(res, err);
+    }
+  });
+
+  // Park a whole-document revision instead of writing it. The reader accepts or
+  // rejects each change inside the open document; the agent is never blocked on
+  // that decision. Because nothing prompts a human first, the caller's own
+  // project is resolved here and the handler refuses anything outside it. This
+  // uses the same attribution as search, which also covers an older MCP host
+  // that forwards only the window id and so installs no request scope.
+  app.post('/api/project/file/suggest-edits', async (req, res) => {
+    try {
+      const session = attributedRequestSession(
+        req.header(AGENT_SESSION_ID_HEADER),
+        req.header('x-stashbase-window-id'),
+      );
+      const suppliedSessionId = req.header(AGENT_SESSION_ID_HEADER);
+      const explicitFolder = req.body?.folder;
+      const withinFolder = suppliedSessionId == null && typeof explicitFolder === 'string'
+        ? explicitFolder
+        : session?.boundFolder();
+      if (!withinFolder) {
+        throw routeError('suggest_edits needs a live project session or an explicit folder.', 409, 'SESSION_UNAVAILABLE');
+      }
+      res.json(await operations.suggestEdits({
+        path: req.body?.path,
+        content: req.body?.content,
+        withinFolder,
+      }));
     } catch (err: unknown) {
       sendError(res, err);
     }

@@ -12,6 +12,7 @@
 import { useCallback, useRef, useState } from 'react';
 
 import { useBootProgress } from '@/app/bootstrap/use-boot-progress';
+import type { RevisionPickup } from '@/app/composition/folder/use-revision-pickup';
 import {
   useWorkspaceNotices,
   type WorkspaceNotice,
@@ -89,6 +90,7 @@ export function useWorkspaceCommands({
   hostFailure,
   project,
   preparation,
+  revisions,
   session,
   workspace,
 }: {
@@ -96,6 +98,7 @@ export function useWorkspaceCommands({
   hostFailure: string | null;
   project: ProjectRegistrySnapshot | null;
   preparation: Pick<PreparationCommands, 'dismissFailure' | 'failure'>;
+  revisions: RevisionPickup;
   session: WorkspaceSessionController;
   workspace: WorkspaceRuntime | null;
 }): WorkspaceCommands {
@@ -137,7 +140,13 @@ export function useWorkspaceCommands({
     memberCount,
     settled: session.status.kind === 'ready' && project !== null,
   });
-  const notices = useWorkspaceNotices(preparation.failure, preparation.dismissFailure, hostFailure);
+  const notices = useWorkspaceNotices({
+    dismissPreparationFailure: preparation.dismissFailure,
+    dismissRevisionFailure: revisions.dismiss,
+    hostFailure,
+    preparationFailure: preparation.failure,
+    revisionFailures: revisions.failures,
+  });
 
   return {
     navigator: {

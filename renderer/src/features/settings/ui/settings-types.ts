@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import type { EmbedderPort } from '@/features/settings/application/embedder-port';
 import type {
   AgentRuntimePort,
@@ -17,6 +19,8 @@ export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 export type SettingsTarget = SettingsSectionId | 'search' | 'mcp';
 
 export interface SettingsProps {
+  /** Optional app-composed development surfaces; absent in production. */
+  revisionPreview?: ReactNode;
   telemetryApi?: TelemetryPort;
   agentRuntimeApi: AgentRuntimePort;
   appearanceApi?: AppearancePort;

@@ -80,6 +80,7 @@ test("entry mutations honor an explicit folder that names the active folder and 
     assert.ok(fs.existsSync(path.join(root, "drafts")));
     assert.equal(fs.existsSync(path.join(root, "Foreign.md")), false);
     assert.equal(fs.existsSync(path.join(other, "Foreign.md")), false);
+
   } finally {
     await server.close();
     clearCurrentFolder();
@@ -111,9 +112,19 @@ test('a lost rename response can be confirmed without repeating its filesystem w
   const operation = `${server.origin}/api/files/source.bin${query}&operationId=rename-once`;
   try {
     await assert.rejects(fetch(operation, { method: 'PATCH', headers: { 'content-type': 'application/json', 'x-lose-response': 'true' }, body: JSON.stringify({ new_name: 'target.bin' }) }));
+    let receipt: Response | null = null;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const response = await fetch(`${server.origin}/api/file-operations/rename-once${query}`);
+      if (response.status === 200) {
+        receipt = response;
+        break;
+      }
+      assert.equal(response.status, 202, 'the operation remains in progress until its result is recorded');
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.ok(receipt, 'the route eventually records the lost response');
     assert.equal(fs.existsSync(path.join(root, 'source.bin')), false);
     assert.equal(fs.readFileSync(path.join(root, 'target.bin'), 'utf8'), 'original bytes');
-    const receipt = await fetch(`${server.origin}/api/file-operations/rename-once${query}`);
     assert.equal(receipt.status, 200);
     assert.equal(((await receipt.json()) as { body: { name: string } }).body.name, 'target.bin');
     // A replay cannot rename a newly created source at the original path.

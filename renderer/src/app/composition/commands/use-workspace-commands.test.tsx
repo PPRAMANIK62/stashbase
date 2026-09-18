@@ -25,6 +25,7 @@ function mountCommands() {
         hostFailure: null,
         project: null,
         preparation: { dismissFailure: vi.fn(), failure: null },
+        revisions: { dismiss: vi.fn(), failures: [] },
         session,
         workspace: null,
       });

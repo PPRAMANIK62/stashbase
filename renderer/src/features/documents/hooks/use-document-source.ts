@@ -19,6 +19,7 @@ export function useDocumentSource(
   const mutationPending = useStore(runtime.store, (state) => state.mutationPending);
   const editor = useStore(runtime.store, (state) => state.editor);
   const markdownMode = useStore(runtime.store, (state) => state.markdownMode);
+  const revision = useStore(runtime.store, (state) => state.revision);
   const source = useQuery(documentSourceQuery(api, runtime.scope));
   const { isFetching, isPending, refetch } = source;
   const wasActive = useRef(false);
@@ -42,6 +43,7 @@ export function useDocumentSource(
     finishMerge: () => runtime.finishMerge(api),
     markdownMode,
     mutationPending,
+    revision,
     resolveConflict: (resolution: DocumentConflictResolution) =>
       runtime.resolveConflict(api, resolution),
     restoreSource: () => runtime.restore(api),

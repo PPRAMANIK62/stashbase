@@ -33,6 +33,27 @@
   right: 5px;
 }
 
+.markdown-review-bar {
+  position: absolute;
+  z-index: 3;
+  top: 6px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 10px;
+  background: color-mix(in oklab, var(--surface-3) 94%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--shape-input-radius, 8px);
+  box-shadow: var(--shadow-4);
+}
+
+.markdown-review-count {
+  color: var(--muted-foreground);
+  font-size: var(--fs-caption, 12px);
+  white-space: nowrap;
+}
+
 .markdown-link-failure {
   position: absolute;
   z-index: 3;
@@ -263,4 +284,192 @@
     padding: 72px 20px;
     font-size: calc(var(--reading-font-size, 15px) - 1px);
   }
+}
+
+/* The review's red and green are the app's own diff tokens, the same pair the
+   Agent's file diff reads, so one change never renders as two greens. Crepe
+   derives every diff background, text and control colour from these two
+   properties by color-mix, so remapping them is the whole theme. The
+   two-class selector outranks Crepe's own `.milkdown` rule whatever order the
+   stylesheets land in. */
+.markdown-crepe .milkdown {
+  --crepe-color-diff-added: var(--diff-add);
+  --crepe-color-diff-removed: var(--diff-remove);
+  /* Crepe fills a changed run at 12% and then mixes its text 40% back toward
+     the page, which reads as a slab of colour carrying grey words. A reviewer
+     is reading prose, so the words take the colour and the fill drops to a
+     wash behind them. */
+  --crepe-color-diff-added-bg: color-mix(in oklab, var(--diff-add) 9%, transparent);
+  --crepe-color-diff-added-text: var(--diff-add);
+  --crepe-color-diff-removed-bg: color-mix(in oklab, var(--diff-remove) 8%, transparent);
+  --crepe-color-diff-removed-text: color-mix(in oklab, var(--diff-remove) 78%, var(--foreground));
+}
+
+/* A changed block is marked the way this app marks a changed region anywhere
+   else: a rule down its edge and a wash behind it. Crepe outlines it in 2px
+   dashes at 45% opacity, which reads as a failed embed rather than prose
+   somebody proposed removing, and a reviewer has to be able to read the words
+   they are about to delete. The dashed outline carries `!important`
+   upstream, so ending it needs one back. */
+.markdown-crepe .milkdown .milkdown-diff-removed-block {
+  outline: none !important;
+  border-left: 2px solid color-mix(in oklab, var(--diff-remove) 70%, transparent);
+  border-radius: 0 6px 6px 0;
+  padding: 2px 10px;
+  opacity: 0.8;
+}
+
+.markdown-crepe .milkdown .milkdown-diff-added-block {
+  border-left: 2px solid color-mix(in oklab, var(--diff-add) 70%, transparent);
+  border-radius: 0 6px 6px 0;
+  padding: 2px 10px;
+}
+
+/* The block the card lands on opens a gutter for it, so the card covers none
+   of the prose being reviewed and none of the paragraph after it. Only that
+   block does. A list with one item deleted holds its card inside itself
+   rather than after it, which is the second relative selector. */
+.markdown-crepe
+  .milkdown
+  :is(.milkdown-diff-removed-block, .milkdown-diff-added-block):has(
+    + .milkdown-diff-controls-block,
+    > .milkdown-diff-controls-block
+  ) {
+  padding-bottom: 32px;
+}
+
+/* The per-change Accept and Reject.
+
+   The diff plugin builds these two buttons itself, as plain DOM inside a
+   ProseMirror decoration, and its config carries only their labels, so the
+   React `Button` cannot be mounted here. What they can share is the kit.
+   Every value below is a token that primitive reads, and the glyphs are the
+   same Lucide check and x the app draws everywhere else, carried as a mask
+   because a widget built from text has nowhere to put an icon.
+
+   The card floats rather than sitting in the sentence. Inline controls in the
+   flow push the words they belong to sideways, and with a change every few
+   lines the page fills with chrome and stops reading as prose. So the card
+   leaves the flow, overlaps what follows, and appears for the change under the
+   pointer. Its shadow says it is above the page rather than part of it. */
+.markdown-crepe .milkdown .ProseMirror {
+  /* The card is positioned out of the flow, so it needs a containing block
+     inside the scroller. Without one it would anchor to the page and stay put
+     while the document scrolls under it. */
+  position: relative;
+}
+
+.markdown-crepe .milkdown .milkdown-diff-controls {
+  position: absolute;
+  z-index: 2;
+  gap: 2px;
+  margin: 0 0 0 3px;
+  padding: 3px;
+  border-radius: var(--shape-input-radius, 8px);
+  background: var(--surface-3);
+  box-shadow: var(--shadow-4);
+  opacity: 0;
+  visibility: hidden;
+  /* The card is a target a short travel away from the change that summons it,
+     so leaving the change must not take it away at once. It holds for 400ms,
+     which is long enough to cross the gap at a reading pace and short enough
+     that a card you have moved away from is gone before you reach the next
+     line. Visibility rather than pointer-events, because visibility can carry
+     the same delay, and a card lingering under the pointer has to stay
+     clickable for the dwell to be worth anything. */
+  transition:
+    opacity var(--motion-fast) ease 400ms,
+    visibility 0s linear calc(400ms + var(--motion-fast));
+  user-select: none;
+}
+
+/* `revision-hover.ts` marks the card whose change the pointer is on. A sibling
+   rule cannot: the card follows the last paragraph of a multi-paragraph
+   change, so hovering any earlier one reached nothing. */
+.markdown-crepe .milkdown .milkdown-diff-controls[data-revision-hover],
+.markdown-crepe .milkdown .milkdown-diff-controls:hover,
+.markdown-crepe .milkdown .milkdown-diff-controls:focus-within {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity var(--motion-fast) ease,
+    visibility 0s linear;
+}
+
+/* A block change puts its card in the gutter the block opened, at the bottom
+   right. It hides like the inline one: a proposal that rewrites five
+   paragraphs in a row is five cards down the page, which is the pile this
+   design exists to avoid. The header bar is what tells a reader changes are
+   waiting; hovering one is what offers the two decisions about it. */
+.markdown-crepe .milkdown .milkdown-diff-controls-block {
+  /* Relative, not static, and this is the whole reason deletions behaved
+     differently from insertions. Crepe positions a deleted block
+     (`position: relative`, for the node-level overlay it draws on custom node
+     views) and leaves an inserted one in normal flow. Positioned elements
+     paint after in-flow blocks, so a static card painted underneath the
+     deleted block it belongs to and was covered by the block's own tint,
+     while the same card over an inserted block painted on top and showed.
+     Positioning the card puts it in that later phase too, after its block in
+     tree order. */
+  position: relative;
+  z-index: 1;
+  /* Crepe makes this one a block-level flex row, so without a width it takes
+     the column and the card becomes a bar across the page. It shrinks to the
+     two buttons, sits in the gutter the block opened above, and costs no row
+     of its own. */
+  width: fit-content;
+  margin: -30px 10px 0 auto;
+  gap: 2px;
+}
+
+.markdown-crepe .milkdown .milkdown-diff-controls button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border: none;
+  /* Concentric with the card: the inner corner is the outer one less the 3px
+     of padding between them, so the two curves stay parallel. */
+  border-radius: calc(var(--shape-input-radius, 8px) - 3px);
+  background: transparent;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: calc(var(--fs-caption, 12px) - 1px);
+  font-weight: 500;
+  line-height: 1;
+  transition: background-color var(--motion-fast) ease;
+}
+
+.markdown-crepe .milkdown .milkdown-diff-controls button::before {
+  content: '';
+  flex: none;
+  width: 12px;
+  height: 12px;
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+}
+
+.markdown-crepe .milkdown .milkdown-diff-controls button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--focus-ring);
+}
+
+.markdown-crepe .milkdown .milkdown-diff-accept::before {
+  background-color: var(--diff-add);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+}
+
+.markdown-crepe .milkdown .milkdown-diff-reject::before {
+  background-color: var(--diff-remove);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 6 6 18M6 6l12 12'/%3E%3C/svg%3E");
+}
+
+.markdown-crepe .milkdown .milkdown-diff-accept:hover {
+  background: var(--diff-add-line);
+}
+
+.markdown-crepe .milkdown .milkdown-diff-reject:hover {
+  background: var(--diff-remove-line);
 }

@@ -40,6 +40,6 @@ retrieval, MCP, and Gallery support that work without creating a separate store.
 ## Feature Status
 
 Project entry, discussion, drafting, editing, preparation, indexing, and retrieval
-are implemented. **Document-specific diff is coming soon**; its scope is in
+and document-specific diff are implemented; its scope is in
 [Project Files](capabilities/project-files.md#document-specific-diff). Known limitations and missing evidence
 remain in the owning designs and [Journey Coverage](../code-review/journey-coverage.md).

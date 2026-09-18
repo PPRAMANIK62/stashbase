@@ -135,6 +135,25 @@ export async function normalizeProjectDirectoryPath(
   return { abs: filesystemPath.join(folderRoot, folderRel), folderRoot, folderRel };
 }
 
+/** Agent/file-tool writes are transport-independent text. C0 controls other
+ * than normal text whitespace almost always mean a caller constructed Markdown
+ * or LaTeX in an interpreted string literal (for example, `\frac` became form
+ * feed + `rac`). Refuse the mutation instead of silently corrupting user data.
+ */
+export function validateProjectTextMutation(content: string): void {
+  const match = content.match(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u);
+  if (!match) return;
+  const codePoint = match[0].codePointAt(0) ?? 0;
+  const printable = `U+${codePoint.toString(16).toUpperCase().padStart(4, '0')}`;
+  throw routeError(
+    `content contains unsupported control character ${printable}. ` +
+    'This commonly happens when Markdown or LaTeX backslashes are interpreted by a JavaScript string. ' +
+    'Construct the value with String.raw or escape each backslash; no file was changed.',
+    400,
+    'INVALID_TEXT_CONTENT',
+  );
+}
+
 export function validateProjectWritableFolderRel(folderRel: string): void {
   try {
     normalizeFolderRelativePath(folderRel, { writable: true, allowQuotes: true });

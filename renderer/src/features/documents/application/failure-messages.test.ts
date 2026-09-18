@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import {
   documentFailure,
+  documentRevisionPickupMessage,
   DOCUMENT_ASSET_MESSAGES,
   DOCUMENT_OVERWRITE_MESSAGES,
   DOCUMENT_SAVE_MESSAGES,
@@ -9,6 +10,7 @@ import {
   DOCX_PREVIEW_MESSAGES,
   GENERIC_PREVIEW_MESSAGES,
 } from './failure-messages';
+import type { RevisionPickupFailure } from './open-revision';
 import { DocumentSaveError, DocumentSourceError, DocumentAssetError } from './ports';
 
 const FAMILIES = [
@@ -70,5 +72,27 @@ describe('documents failure messages', () => {
     expect(documentFailure(other, 'DocumentSaveError', DOCUMENT_SAVE_MESSAGES).message).toBe(
       DOCUMENT_SAVE_MESSAGES.unavailable,
     );
+  });
+
+  it('names the document in every reason a parked revision was not shown', () => {
+    const failures: Array<RevisionPickupFailure | 'outside-folder'> = [
+      'frontmatter-changed',
+      'no-changes',
+      'not-editable',
+      'not-opened',
+      'not-verified',
+      'outside-folder',
+      'review-in-progress',
+      'stale-version',
+    ];
+
+    for (const failure of failures) {
+      const sentence = documentRevisionPickupMessage(failure, 'Quarterly plan.md');
+      expect(sentence).toContain('Quarterly plan.md');
+      expect(sentence).toContain('ask the agent for it again');
+    }
+    expect(
+      new Set(failures.map((failure) => documentRevisionPickupMessage(failure, 'a.md'))).size,
+    ).toBe(failures.length);
   });
 });

@@ -39,9 +39,9 @@ old presentation. Unconfirmed external-product analogies are not specifications.
   engineering invariant bullets have this meaning.
 - **Known Gap:** Required behavior is contradicted or unproven; name the
   limitation and evidence needed, rather than relabelling intent as Shipping.
-- **Direction:** agreed product work not yet complete. Document-specific diff
-  is the remaining feature; defects and evidence gaps are not a feature roadmap.
-- **Next:** maintenance within an existing capability or the agreed diff work.
+- **Direction:** agreed product work not yet complete. Defects and evidence gaps
+  are not a feature roadmap.
+- **Next:** maintenance within an existing capability.
 - **Coordinate First / Not Planned:** a decision is required, or work is outside
   scope. These are not automatically implementation tasks.
 

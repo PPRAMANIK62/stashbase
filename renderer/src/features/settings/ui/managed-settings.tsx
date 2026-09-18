@@ -15,6 +15,7 @@ export default function ManagedSettings({
   onOpenExternal,
   onSectionChange,
   open,
+  revisionPreview,
   section,
   softwareUpdate = null,
   telemetryApi,
@@ -30,6 +31,7 @@ export default function ManagedSettings({
           appearanceApi={appearanceApi}
           telemetryApi={telemetryApi}
           onOpenExternal={onOpenExternal}
+          revisionPreview={revisionPreview}
           softwareUpdate={softwareUpdate}
         />
       ),

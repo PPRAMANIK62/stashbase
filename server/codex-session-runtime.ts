@@ -32,6 +32,7 @@ import {
   codexAccessOptions,
   commandApprovalInput,
   fileChangeApprovalInput,
+  isStashbaseProposal,
   isStashbaseWorkspaceEdit,
   isWorkspaceFileChange,
   mcpToolApprovalFromElicitation,
@@ -702,7 +703,9 @@ export class CodexSession implements AttributedAgentSession {
       case 'mcpServer/elicitation/request': {
         const approval = mcpToolApprovalFromElicitation(params);
         if (approval) {
-          if (this.accessMode === 'acceptEdits' && isStashbaseWorkspaceEdit(approval, this.activeCwd())) {
+          const proposalOrEdit = isStashbaseProposal(approval, this.accessMode)
+            || (this.accessMode === 'acceptEdits' && isStashbaseWorkspaceEdit(approval, this.activeCwd()));
+          if (proposalOrEdit) {
             this.respond(id, { action: 'accept', content: {}, _meta: null });
             break;
           }

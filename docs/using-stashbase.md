@@ -49,9 +49,9 @@ instructions. StashBase stores the setting without creating or rewriting
 `AGENTS.md` or `CLAUDE.md` in your folders.
 
 Drafting, editing, Agent file-change reports, and save-conflict comparisons are
-available now. [Document diff — Coming soon](../design-docs/capabilities/project-files.md#document-specific-diff)
-will add inline suggested revisions in the prose with individual and whole-set
-accept/reject; those controls are not currently available.
+available, and so is the [document diff](../README.md#document-diff): an Agent can
+propose a revision to an open Markdown document, and you accept or reject each change
+in the prose or take the whole set at once.
 
 Some files can be listed without being searchable or editable. Muted files
 are excluded from Search and automatic Chat context. Preview, editing,

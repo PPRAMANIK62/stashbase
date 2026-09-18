@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import { callTool } from './__tests__/mcp-call.ts';
+
 const isolatedEnvNames = [
   'HOME',
   'USERPROFILE',
@@ -150,11 +152,16 @@ $$`;
     baseVersion: created.version,
   });
   assert.ok(updated.version);
-  const exact = await callTool(base, token, 'search_project', {
-    query: 'version two',
-    mode: 'keyword',
-    folder: root,
-  });
+  const exact = await callTool<{ mode: string; hits: { content?: string; fileName?: string }[] }>(
+    base,
+    token,
+    'search_project',
+    {
+      query: 'version two',
+      mode: 'keyword',
+      folder: root,
+    },
+  );
   assert.equal(exact.mode, 'keyword');
   assert.equal(exact.hits[0]?.fileName, source.replace(/\\/g, '/'));
   assert.match(exact.hits[0]?.content ?? '', /version two/);
@@ -330,35 +337,3 @@ $$`;
   assert.equal(fs.existsSync(hiddenAudioTarget), true);
   assert.equal(folder.getCurrentFolder(), null);
 });
-
-async function callTool(
-  base: string,
-  token: string,
-  name: string,
-  args: Record<string, unknown>,
-): Promise<Record<string, any>> {
-  const response = await fetch(`${base}/mcp`, {
-    method: 'POST',
-    headers: {
-      accept: 'application/json, text/event-stream',
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: `${name}-${Date.now()}`,
-      method: 'tools/call',
-      params: { name, arguments: args },
-    }),
-  });
-  const body = await response.json() as any;
-  if (!response.ok || body.error) {
-    throw new Error(`MCP ${name} failed: ${response.status} ${JSON.stringify(body.error ?? body)}`);
-  }
-  const result = body.result;
-  const text = result?.content?.find((item: any) => item?.type === 'text')?.text;
-  if (result?.isError || typeof text !== 'string') {
-    throw new Error(`MCP ${name} failed: ${typeof text === 'string' ? text : JSON.stringify(result)}`);
-  }
-  return JSON.parse(text) as Record<string, any>;
-}

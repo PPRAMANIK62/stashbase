@@ -117,7 +117,7 @@ test('HTTP transport enforces the live Settings token and preserves the shared t
 
     const listed = await post(base, listRequest, token);
     assert.equal(listed.status, 200);
-    assert.equal(listed.body.result.tools.length, 10);
+    assert.equal(listed.body.result.tools.length, 11);
     const searchTool = listed.body.result.tools.find((tool: any) => tool.name === 'search_project');
     assert.deepEqual(
       searchTool.inputSchema.properties.types.items.enum,
