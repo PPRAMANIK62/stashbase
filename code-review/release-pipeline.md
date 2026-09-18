@@ -221,21 +221,20 @@ checks both versions, architectures, payload hashes, and component manifests
 before creating one latest-mac.yml containing both ZIP/DMG pairs. Only the
 combined set is uploaded to the draft; parallel jobs must never upload competing
 metadata under the same name. Homebrew selects the DMG and checksum by CPU.
-The v2.9.5 source commit passed [CI on all four native targets](https://github.com/liliu-z/stashbase/actions/runs/35262909836).
-[Coordinated packaging](https://github.com/liliu-z/stashbase/actions/runs/35253051281)
-of the earlier 2.9.4 candidate, which shares this packaging source, passed both
-macOS architectures' signing, notarization, mounted-DMG checks,
-frozen daemon execution, independent PDF/OCR component installation and offline
-reuse, DOCX conversion, and the packaged OpenCode test turn. Windows and Linux
-packaged runtime checks also passed. That attempt remained unpublished because
-GitHub asset upload returned HTTP 500; passing package jobs do not establish
-successful release delivery.
-Local checks of that downloaded arm64 candidate passed strict/deep codesign,
-Gatekeeper, and stapler validation. About reported its own 2.9.4 version; the welcome screen,
-native folder-picker cancellation, and native menu quit were observed. Desktop
-automation failed while selecting a fixture folder, so editing was not verified
-in that package. Real Intel macOS 12–14 entry/editing, representative OCR quality,
-live release-component delivery, and N→N+1 updates remain release checks.
+The v2.9.6 source commit passed [CI on all four native targets](https://github.com/liliu-z/stashbase/actions/runs/35316552174),
+and its [coordinated release](https://github.com/liliu-z/stashbase/actions/runs/35317523400)
+passed both macOS architectures' signing, notarization, and mounted-DMG checks,
+the Windows and Linux packaged runtime checks, the complete update-set
+verification, publication, and the Homebrew cask update. Every platform asset,
+all three latest metadata files with their blockmaps, and the four extractor
+archives with manifests are on the public release; the retried asset upload
+delivered where the 2.9.4 attempt had stopped on HTTP 500.
+Local checks of the downloaded arm64 DMG matched the cask's checksum, reported
+2.9.6, and passed strict/deep codesign, Gatekeeper's notarized Developer ID
+assessment, and stapler validation; that package was not launched from the
+release session. Real Intel macOS 12–14 entry/editing, representative OCR
+quality, live release-component delivery, the packaged in-app runtime update,
+and N→N+1 updates remain release checks.
 Artifact tests exercise checksum rejection and the installed electron-updater's
 architecture selection; the generated Homebrew cask passes Ruby syntax validation.
 
