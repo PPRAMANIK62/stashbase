@@ -1,4 +1,4 @@
-import claudeCodeMark from '@lobehub/icons-static-svg/icons/claudecode-color.svg?raw';
+import claudeMark from '@lobehub/icons-static-svg/icons/claude-color.svg?raw';
 import codexMark from '@lobehub/icons-static-svg/icons/codex-color.svg?raw';
 import { useId, useMemo } from 'react';
 
@@ -45,7 +45,7 @@ function brandIcon(source: string, displayName: string) {
   return BrandIcon;
 }
 
-export const ClaudeCodeIcon = brandIcon(claudeCodeMark, 'ClaudeCodeIcon');
+export const ClaudeIcon = brandIcon(claudeMark, 'ClaudeIcon');
 export const CodexIcon = brandIcon(codexMark, 'CodexIcon');
 
 /** The bundled Agent wears StashBase's own mark: it is the runtime the app
@@ -55,8 +55,8 @@ export const CodexIcon = brandIcon(codexMark, 'CodexIcon');
  *  for it to sit beside the vendor marks. Its box is recentred on the mark's
  *  own bounds, which sit low and left of the 512-unit square, so the glyph
  *  lands at about 11.5px of a 16px icon — between Codex's 10.3px square and
- *  Claude Code's 13.7 by 8.6px wordmark. And its strokes, 1px at that size,
- *  thicken a quarter to the 1.25px the marks around them carry.
+ *  Claude's 13.7px starburst. And its strokes, 1px at that size, thicken a
+ *  quarter to the 1.25px the marks around them carry.
  *
  *  Like the vendor marks it ignores `strokeWidth`: the two weights are part
  *  of the drawing, and a caller's icon stroke is not the mark's to take. */

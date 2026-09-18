@@ -96,7 +96,7 @@ function resolveClaudeExecutable(): string | null {
   return resolveAgentCli({
     name: 'claude',
     envNames: ['STASHBASE_CLAUDE_BIN', 'CLAUDE_CODE_BIN'],
-    logLabel: 'Claude Code',
+    logLabel: 'Claude',
   });
 }
 

@@ -30,7 +30,7 @@ describe('agent composer provider control', () => {
         .getAllByRole('menuitemradio', { checked: true })
         .map((option) => option.getAttribute('aria-label')),
     ).toEqual(['Default']);
-    for (const name of ['Codex', 'Claude Code']) {
+    for (const name of ['Codex', 'Claude']) {
       expect(screen.getByRole('menuitemradio', { name })).not.toBeNull();
     }
     await user.click(screen.getByRole('menuitemradio', { name: 'Codex' }));

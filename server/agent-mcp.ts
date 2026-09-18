@@ -3,7 +3,7 @@
  *
  * Owns the platform launcher script under `~/.stashbase/bin`, the
  * per-process launcher used by OpenQuill, and idempotent config writes
- * for the bring-your-own Chat runtimes (Claude Code, Codex). Only Agent
+ * for the bring-your-own Chat runtimes (Claude, Codex). Only Agent
  * readiness calls `ensureAgentMcp`; every other
  * MCP-compatible client configures itself from the standard config that
  * Settings → MCP exposes read-only.

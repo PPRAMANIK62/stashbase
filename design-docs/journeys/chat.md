@@ -37,7 +37,7 @@ If the selected Agent is unavailable, Send presents its access prompt before
 starting login, installation, or a session:
 
 - Default offers Sign in for free Agent credits.
-- A native Agent offers Connect Codex or Connect Claude Code.
+- A native Agent offers Connect Codex or Connect Claude.
 - Not now keeps the request. Another Agent can be selected from the draft.
 
 The prompt is about the selected Agent. On explicit confirmation, keep the request

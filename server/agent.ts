@@ -91,12 +91,12 @@ function resolveClaudeBinary(): string | null {
   return resolveAgentCli({
     name: 'claude',
     envNames: ['STASHBASE_CLAUDE_BIN', 'CLAUDE_CODE_BIN'],
-    logLabel: 'Claude Code',
+    logLabel: 'Claude',
   }, (message) => log.warn(message));
 }
 
 function missingClaudeMessage(): string {
-  return 'Claude CLI not found. Install Claude Code or set STASHBASE_CLAUDE_BIN to the claude executable.';
+  return 'Claude CLI not found. Install Claude or set STASHBASE_CLAUDE_BIN to the claude executable.';
 }
 
 /** Map the Shared Agent Contract's Access value to the native Claude SDK
@@ -149,7 +149,7 @@ export function claudeModelCatalogFailureEvent(
 function spawnClaudeCodeProcess(options: SpawnOptions): SpawnedProcess {
   const command = resolveClaudeBinary() ?? options.command;
   if (command !== options.command) {
-    log.info(`spawning Claude Code via ${command}`);
+    log.info(`spawning Claude via ${command}`);
   }
   return spawn(command, options.args, {
     cwd: options.cwd,
@@ -399,7 +399,7 @@ export class AgentSession implements AttributedAgentSession {
           // Apply the shared Access choice when the native session starts.
           // Later changes still use the SDK's live setPermissionMode API.
           permissionMode: this.access,
-          // Preserve Claude Code's native preset, then append the resolved
+          // Preserve Claude's native preset, then append the resolved
           // user-visible Agent Instructions plus StashBase's internal project
           // routing policy. The policy is never stored in the editable text.
           systemPrompt: {

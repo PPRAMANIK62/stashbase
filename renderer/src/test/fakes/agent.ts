@@ -58,7 +58,7 @@ export const CODEX_AGENT = agentDefinition({
 export const CLAUDE_AGENT = agentDefinition({
   abilities: nativeAbilities,
   id: 'claude',
-  label: 'Claude Code',
+  label: 'Claude',
 });
 
 export interface FakeAgentSession {

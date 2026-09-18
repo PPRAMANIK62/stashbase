@@ -168,7 +168,7 @@ export function ProjectWelcome({
             <h1 className="text-display font-semibold tracking-tight">StashBase</h1>
           </div>
           <p className="mt-3 text-body leading-relaxed text-muted-foreground">
-            Turn your local files into a wiki, then write with Claude Code and Codex using your own
+            Turn your local files into a wiki, then write with Claude and Codex using your own
             sources.
           </p>
         </div>

@@ -358,7 +358,7 @@ test('Claude install runs the official installer and verifies the discovered exe
     ? [
       '$null = [System.IO.Directory]::CreateDirectory((Split-Path -Parent ' + `'${installed.replaceAll("'", "''")}'))`,
       `Set-Content -LiteralPath '${installed.replaceAll("'", "''")}' -Value 'installed Claude'`,
-      'Write-Output "Setting up Claude Code..."',
+      'Write-Output "Setting up Claude..."',
       '',
     ].join('\n')
     : `#!/bin/bash
@@ -367,7 +367,7 @@ set -eu
 mkdir -p "${path.dirname(installed)}"
 : > "${installed}"
 chmod +x "${installed}"
-echo "Setting up Claude Code..."
+echo "Setting up Claude..."
 `;
   mock.method(globalThis, 'fetch', async () => new Response(fixture));
   let verified = false;
@@ -380,12 +380,12 @@ echo "Setting up Claude Code..."
       verifyExecutable: (executable, label) => {
         verified = true;
         assert.equal(executable, installed);
-        assert.equal(label, 'Claude Code');
+        assert.equal(label, 'Claude');
       },
     });
     assert.equal(verified, true);
-    assert.ok(updates.some((message) => /Setting up Claude Code/.test(message)));
-    assert.equal(updates.at(-1), 'Claude Code installed.');
+    assert.ok(updates.some((message) => /Setting up Claude/.test(message)));
+    assert.equal(updates.at(-1), 'Claude installed.');
   } finally {
     mock.restoreAll();
     if (previousRoot === undefined) delete process.env.STASHBASE_LOCAL_DATA_ROOT;
@@ -462,8 +462,8 @@ test('Agent executable verification reports the native exit code and stderr', {
   fs.chmodSync(executable, 0o755);
   try {
     assert.throws(
-      () => verifyAgentExecutable(executable, 'Claude Code'),
-      /Claude Code.*exited with code 23.*blocked by policy/i,
+      () => verifyAgentExecutable(executable, 'Claude'),
+      /Claude.*exited with code 23.*blocked by policy/i,
     );
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
@@ -479,8 +479,8 @@ test('Agent executable verification identifies a timeout', {
   fs.chmodSync(executable, 0o755);
   try {
     assert.throws(
-      () => verifyAgentExecutable(executable, 'Claude Code', process.env, 25),
-      /Claude Code.*timed out after 25ms/i,
+      () => verifyAgentExecutable(executable, 'Claude', process.env, 25),
+      /Claude.*timed out after 25ms/i,
     );
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

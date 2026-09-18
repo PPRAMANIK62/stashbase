@@ -308,7 +308,7 @@ export function mount(app: express.Express): void {
   // Lightweight status — full `pending` list (not a sample) so the
   // sidebar can grey out the right rows. Scoped to the current folder.
   // `treeVersion` bumps on every external fs event, covering writes
-  // from Claude Code / `touch` that wouldn't move `pending`
+  // from Claude / `touch` that wouldn't move `pending`
   // (non-indexable files, empty dirs). Also surfaces in-flight PDF
   // conversions for the conversion indicator.
   app.get('/api/index-status', async (req, res) => {

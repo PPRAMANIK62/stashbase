@@ -3,7 +3,7 @@
  *
  * Preparation is per-runtime, so everything about it is keyed by agent id: the
  * abort lane a command runs in, whether that command is still open, and the
- * sentence its refusal reads as. Installing Claude Code therefore neither
+ * sentence its refusal reads as. Installing Claude therefore neither
  * aborts an install of Codex already running nor overwrites the failure Codex
  * left on its own row — both of which a single lane and a single mutation's
  * `variables` could not keep apart.

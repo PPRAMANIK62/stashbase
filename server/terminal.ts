@@ -1,5 +1,5 @@
 /**
- * Agent CLI registry. The supported CLIs (Claude Code, Codex) are
+ * Agent CLI registry. The supported CLIs (Claude, Codex) are
  * enumerated here with their install hints; the chat panel surfaces
  * them via `/api/terminal/clis`.
  *
@@ -33,7 +33,7 @@ export interface CliDef {
 export const CLIS: Record<string, CliDef> = {
   claude: {
     id: 'claude',
-    label: 'Claude Code',
+    label: 'Claude',
     vendor: 'Anthropic',
     bin: 'claude',
     installHint: claudeInstallHint(),

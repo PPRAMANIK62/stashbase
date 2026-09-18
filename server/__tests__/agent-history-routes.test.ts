@@ -38,7 +38,7 @@ test('shared replay adds metadata without changing messages responses', async ()
   };
   registerAgentAdapter({
     id: 'claude',
-    label: 'Claude Code',
+    label: 'Claude',
     vendor: 'Anthropic',
     capabilities: {
       connection: true, prompts: true, interrupt: true, transcript: true,

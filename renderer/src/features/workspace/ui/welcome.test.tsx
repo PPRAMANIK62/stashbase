@@ -95,7 +95,7 @@ describe('project welcome', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'StashBase' })).not.toBeNull();
     expect(
       screen.getByText(
-        'Turn your local files into a wiki, then write with Claude Code and Codex using your own sources.',
+        'Turn your local files into a wiki, then write with Claude and Codex using your own sources.',
       ),
     ).not.toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: 'Recent' })).not.toBeNull();

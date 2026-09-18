@@ -21,7 +21,7 @@ const codex: AgentRuntime = {
 
 const claude: AgentRuntime = {
   id: 'claude',
-  label: 'Claude Code',
+  label: 'Claude',
   installed: true,
   ownership: 'system',
   preparation: { kind: 'ready' },

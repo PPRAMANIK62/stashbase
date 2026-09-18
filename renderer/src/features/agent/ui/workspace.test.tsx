@@ -89,7 +89,7 @@ describe('Agent workspace', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Provider: Default' }));
     const codexOption = await screen.findByRole('menuitemradio', { name: 'Codex' });
-    const claudeOption = screen.getByRole('menuitemradio', { name: 'Claude Code' });
+    const claudeOption = screen.getByRole('menuitemradio', { name: 'Claude' });
     // The provider marks are aria-hidden, injected third-party SVG markup (`@lobehub/icons-static-svg`);
     // their internal shape is the contract here.
     const codexMark = codexOption.querySelector('svg[viewBox="-2 -2 28 28"]'); // dom-contract: see comment above

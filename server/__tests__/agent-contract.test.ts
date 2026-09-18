@@ -23,7 +23,7 @@ const REQUIRED_SHARED_CAPABILITIES = [
 test('every built-in runtime declares the fundamental Shared Agent Contract behavior', () => {
   assert.deepEqual(BUILT_IN_AGENT_ADAPTERS.map((adapter) => [adapter.id, adapter.label]), [
     ['codex', 'Codex'],
-    ['claude', 'Claude Code'],
+    ['claude', 'Claude'],
     ['stashbase', 'Default'],
   ]);
   for (const adapter of BUILT_IN_AGENT_ADAPTERS) {

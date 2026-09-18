@@ -8,7 +8,7 @@ const log = logger('agent-rules');
 /** Claude gates each session cwd behind its folder-trust dialog. A
  *  headless SDK session can never show that dialog — it just hangs at
  *  "working" until the user runs `claude` in a terminal and accepts —
- *  and Claude Code offers no trust flag or env override (the only
+ *  and Claude offers no trust flag or env override (the only
  *  narrow mechanism is the per-project `hasTrustDialogAccepted` flag in
  *  `~/.claude.json`). Adding a folder to the StashBase project is the
  *  user's explicit trust act, so pre-accept trust for the session

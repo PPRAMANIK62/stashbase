@@ -57,7 +57,7 @@ test('agents response accepts a mixed catalog of installed, mid-bootstrap, and f
       },
       {
         id: 'claude',
-        label: 'Claude Code',
+        label: 'Claude',
         vendor: 'Anthropic',
         installHint: 'curl -fsSL https://claude.ai/install.sh | bash',
         installed: true,

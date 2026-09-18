@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 /**
- * Stdio MCP server exposing the local project to Claude Desktop / Claude Code.
+ * Stdio MCP server exposing the local project to Claude Desktop and the Claude CLI.
  *
  * The tool surface and handlers live in `project-server.ts`, shared with the
  * Streamable HTTP transport mounted on the app server

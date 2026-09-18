@@ -196,7 +196,7 @@ describe('agent composer model-and-thinking control', () => {
     ).toBe(true);
   });
 
-  it('locks the model once a Claude Code conversation has started, and leaves the level open', async () => {
+  it('locks the model once a Claude conversation has started, and leaves the level open', async () => {
     const { user } = renderControl({
       activeAgent: CLAUDE_AGENT,
       state: sessionState({

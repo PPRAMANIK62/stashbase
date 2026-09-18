@@ -216,13 +216,13 @@ export class AgentBootstrapCoordinator {
 }
 
 function agentLabel(id: NativeAgentId): string {
-  return id === 'codex' ? 'Codex' : 'Claude Code';
+  return id === 'codex' ? 'Codex' : 'Claude';
 }
 
 function agentCliSpec(id: NativeAgentId) {
   return id === 'codex'
     ? { name: 'codex', envNames: ['STASHBASE_CODEX_BIN', 'CODEX_CLI_BIN', 'CODEX_CLI_PATH'], logLabel: 'Codex' }
-    : { name: 'claude', envNames: ['STASHBASE_CLAUDE_BIN', 'CLAUDE_CODE_BIN'], logLabel: 'Claude Code' };
+    : { name: 'claude', envNames: ['STASHBASE_CLAUDE_BIN', 'CLAUDE_CODE_BIN'], logLabel: 'Claude' };
 }
 
 function resolveInstalledExecutable(id: NativeAgentId): string | null {
@@ -381,7 +381,7 @@ export async function installClaude(
   const runScript = dependencies.runInstallerScript ?? claudeInstallerScriptRunner;
   const resolveInstalled = dependencies.resolveInstalledExecutable
     ?? (() => resolveInstalledExecutable('claude'));
-  update({ message: 'Downloading the official Claude Code installer…' });
+  update({ message: 'Downloading the official Claude installer…' });
   const script = await fetchBoundedText(CLAUDE_INSTALLER, signal, 2_000_000);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -395,17 +395,17 @@ export async function installClaude(
   const executable = resolveInstalled();
   if (!executable) {
     throw new Error(
-      "The official Claude Code installer exited successfully but no 'claude' executable "
+      "The official Claude installer exited successfully but no 'claude' executable "
       + 'was found in its standard install locations (such as ~/.local/bin). '
-      + 'Check whether security software quarantined Claude Code, then retry the installation.',
+      + 'Check whether security software quarantined Claude, then retry the installation.',
     );
   }
-  verifyExecutable(executable, 'Claude Code', agentCliEnv());
+  verifyExecutable(executable, 'Claude', agentCliEnv());
   // Unlike Codex's Windows installer, `claude.exe install` leaves its bin
   // dir off the user Path, so the CLI would be invisible to the user's own
   // terminal (StashBase discovery scans the directory and is unaffected).
   if (process.platform === 'win32') ensureWindowsClaudeOnUserPath(update);
-  update({ progress: 1, message: 'Claude Code installed.' });
+  update({ progress: 1, message: 'Claude installed.' });
 }
 
 const WINDOWS_LOCAL_BIN_RAW = '%USERPROFILE%\\.local\\bin';
@@ -452,7 +452,7 @@ function ensureWindowsClaudeOnUserPath(update: (next: ProgressUpdate) => void): 
   } else {
     // The install itself succeeded and StashBase can use it either way;
     // terminal visibility falls back to the manual step.
-    update({ message: 'Claude Code installed. To use it from a terminal, add %USERPROFILE%\\.local\\bin to your PATH.' });
+    update({ message: 'Claude installed. To use it from a terminal, add %USERPROFILE%\\.local\\bin to your PATH.' });
   }
 }
 

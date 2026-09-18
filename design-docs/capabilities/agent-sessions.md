@@ -3,7 +3,7 @@
 ## Scope
 
 Chat mode and the Agent pane in Documents share conversation identity, execution,
-and unfinished requests. Default, Codex, and Claude Code expose their actual
+and unfinished requests. Default, Codex, and Claude expose their actual
 capabilities through this common experience.
 
 ## Identity and Continuity

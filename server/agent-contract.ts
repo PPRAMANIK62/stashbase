@@ -219,7 +219,7 @@ const adapters = new Map<AgentId, AgentAdapter>();
 
 export function agentExecutableFor(id: Exclude<AgentId, 'stashbase'>): string | null {
   const config = id === 'claude'
-    ? { name: 'claude', envNames: ['STASHBASE_CLAUDE_BIN', 'CLAUDE_CODE_BIN'], logLabel: 'Claude Code' }
+    ? { name: 'claude', envNames: ['STASHBASE_CLAUDE_BIN', 'CLAUDE_CODE_BIN'], logLabel: 'Claude' }
     : { name: 'codex', envNames: ['STASHBASE_CODEX_BIN', 'CODEX_CLI_BIN', 'CODEX_CLI_PATH'], logLabel: 'Codex' };
   return resolveAgentCli(config, () => {});
 }

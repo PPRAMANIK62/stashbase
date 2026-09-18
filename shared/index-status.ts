@@ -93,7 +93,7 @@ export interface IndexStatus {
   /** Monotonic counter the server bumps on every external fs event
    *  (after self-write filtering). Renderer compares against its
    *  last-seen value and triggers `/api/files` on any change — picks
-   *  up writes from the chat panel (Claude Code, `touch`, …) even
+   *  up writes from the chat panel (Claude, `touch`, …) even
    *  for non-indexable files / empty dirs that don't move `pending`. */
   treeVersion: number;
   indexWarning: IndexWarning | null;

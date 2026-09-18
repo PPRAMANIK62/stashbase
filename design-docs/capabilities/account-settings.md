@@ -9,7 +9,7 @@ no account.
 | Capability | Access source |
 |---|---|
 | Default Agent | StashBase account and free Agent credits |
-| Codex / Claude Code | The native runtime's installation and authentication |
+| Codex / Claude | The native runtime's installation and authentication |
 | Search by meaning | User-supplied embedding key in Settings, billed independently |
 | External HTTP MCP | Current Settings token; separate opt-in for Docker access |
 

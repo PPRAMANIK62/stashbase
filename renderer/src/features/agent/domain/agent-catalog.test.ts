@@ -10,7 +10,7 @@ const READY = agentDefinition({ id: 'stashbase', ready: true });
 const PENDING_CODEX = agentDefinition({ id: 'codex', label: 'Codex', ready: false });
 const SIGN_IN_CLAUDE = agentDefinition({
   id: 'claude',
-  label: 'Claude Code',
+  label: 'Claude',
   models: [],
   needsSignIn: true,
   ready: false,

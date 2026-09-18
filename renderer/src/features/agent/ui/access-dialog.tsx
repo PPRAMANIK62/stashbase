@@ -3,7 +3,7 @@
  *
  *  The question is about the Agent this chat is already on, so the panel
  *  offers that one action rather than a menu of runtimes. Bringing your own
- *  Codex or Claude Code stays a choice in the composer's picker and a setup
+ *  Codex or Claude stays a choice in the composer's picker and a setup
  *  step in Settings, which owns runtimes; a gate that listed them too turned
  *  one decision into three and made every one of them look equally likely.
  *

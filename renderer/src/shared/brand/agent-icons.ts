@@ -10,10 +10,10 @@ import type { IconComponent } from '@/lib/icon-context';
  */
 import type { AgentId } from '@/shared/domain/agent-id';
 
-import { ClaudeCodeIcon, CodexIcon, StashBaseIcon } from './agent-marks';
+import { ClaudeIcon, CodexIcon, StashBaseIcon } from './agent-marks';
 
 export const AGENT_ICONS: Record<AgentId, IconComponent> = {
   stashbase: StashBaseIcon,
   codex: CodexIcon,
-  claude: ClaudeCodeIcon,
+  claude: ClaudeIcon,
 };

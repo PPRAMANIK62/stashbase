@@ -73,7 +73,7 @@ const BUILT_IN: AgentRuntimeEntry = { id: 'stashbase', label: 'Default' };
  *  chats and history lists present them. */
 const AGENT_RUNTIMES: readonly AgentRuntimeEntry[] = [
   { id: 'codex', label: 'Codex' },
-  { id: 'claude', label: 'Claude Code' },
+  { id: 'claude', label: 'Claude' },
   BUILT_IN,
 ];
 

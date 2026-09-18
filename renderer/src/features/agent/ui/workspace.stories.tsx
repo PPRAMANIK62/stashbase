@@ -25,7 +25,7 @@ const abilities: Agent['abilities'] = {
 
 const agents: Agent[] = [
   { abilities, id: 'codex', label: 'Codex', models: [], needsSignIn: false, ready: true },
-  { abilities, id: 'claude', label: 'Claude Code', models: [], needsSignIn: false, ready: true },
+  { abilities, id: 'claude', label: 'Claude', models: [], needsSignIn: false, ready: true },
   { abilities, id: 'stashbase', label: 'Default', models: [], needsSignIn: false, ready: true },
 ];
 

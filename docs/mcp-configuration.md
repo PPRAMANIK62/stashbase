@@ -1,6 +1,6 @@
 # MCP Configuration
 
-The Default Agent, Codex, and Claude Code connect to StashBase's tools
+The Default Agent, Codex, and Claude connect to StashBase's tools
 automatically when used in the built-in Chat.
 
 For an external MCP client, copy the configuration or URL access details from
@@ -16,7 +16,7 @@ The packaged MCP command is generated at:
 %USERPROFILE%\.stashbase\bin\stashbase-mcp.cmd  # Windows
 ```
 
-### Claude Code
+### Claude CLI
 
 ```bash
 claude mcp add stashbase -- ~/.stashbase/bin/stashbase-mcp
