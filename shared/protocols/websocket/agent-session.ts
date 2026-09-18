@@ -14,6 +14,7 @@ export const agentTurnFailureKindSchema = z.enum([
   "access-restricted",
   "auth-expired",
   "network",
+  "runtime-outdated",
 ]);
 
 export const agentTurnFailureSchema = z.object({ kind: agentTurnFailureKindSchema }).strict();

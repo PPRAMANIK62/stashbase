@@ -117,6 +117,30 @@ describe('AgentRuntimesPanel', () => {
     await waitFor(() => expect(screen.getByText(/Ready to chat/)).not.toBeNull());
   });
 
+  it('updates an installed runtime in place and shows the version it came back with', async () => {
+    const claude = agentRuntime({
+      id: 'claude',
+      installed: true,
+      label: 'Claude',
+      ownership: 'system',
+      preparation: { kind: 'ready' },
+      updatable: true,
+      version: '2.1.220',
+    });
+    const port = agentRuntimePort({
+      listAgents: vi.fn(async () => catalog([claude])),
+      prepareAgent: vi.fn(async () => catalog([{ ...claude, version: '2.1.276' }])),
+    });
+    renderPanel(port);
+    const user = userEvent.setup();
+
+    expect(await screen.findByText(/Installed on your system · 2\.1\.220/)).not.toBeNull();
+    await user.click(await screen.findByRole('button', { name: 'Update' }));
+
+    expect(port.prepareAgent).toHaveBeenCalledWith('claude', 'update', expect.anything());
+    await waitFor(() => expect(screen.getByText(/2\.1\.276/)).not.toBeNull());
+  });
+
   it('shows a quiet retry row when the allowance fails to load, never a stale number', async () => {
     const port = agentRuntimePort({
       listAgents: vi.fn(async () => catalog([agentRuntime()])),

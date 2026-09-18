@@ -23,8 +23,11 @@ Settings owns lasting preferences and connection configuration:
 
 - **General:** appearance, usage statistics, and updates.
 - **Agents:** group account, credit balance/refill, and connection state under
-  Default; manage Codex and Claude Code individually. Credits refresh automatically;
-  token accounting is not a user setting.
+  Default; manage Codex and Claude individually. An installed runtime shows its
+  version; a runtime whose own updater StashBase can run offers Update, which
+  runs that updater in place and never replaces a provider-owned installation
+  with a second copy. Credits refresh automatically; token accounting is not a
+  user setting.
 - **Advanced:** search by meaning and external apps (MCP). Search links directly
   to its configuration without discarding the current query. MCP reveals HTTP
   credentials only for that connection method; Docker details follow explicit
@@ -48,6 +51,10 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
   new attempts and sign-out retire prior local continuations across windows.
 - Network/provider failure preserves credentials. Clear a session only on explicit
   sign-out or confirmed invalidation; repair does not implicitly send or replay work.
+- A runtime too old for a chosen model is repaired where it failed: the turn
+  offers the runtime's update, the conversation reconnects on the updated
+  runtime, and the refused request is sent again. Settings offers the same
+  update without a conversation.
 - Instructions apply to new sessions; current sessions retain their guidance.
   They do not rewrite native instruction files or change permissions.
 - External MCP rotation invalidates the old token. Disable retires exposed access

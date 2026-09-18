@@ -13,9 +13,11 @@ import {
   type NativeAgentId,
 } from '../agent-runtime-paths.ts';
 import {
+  agentSupportsInAppUpdate,
   beginAgentBootstrap,
   loginAgentBootstrap,
   recheckAgentBootstrap,
+  updateAgentBootstrap,
 } from '../agent-runtime-installer.ts';
 import type { AgentId } from '../../shared/agent-protocol.ts';
 
@@ -108,6 +110,27 @@ export function mount(app: express.Express): void {
     }
     try {
       loginAgentBootstrap(id);
+      res.status(202).json(agentCatalogResponse());
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  /** Run the installed runtime's own updater in place. Offered where a chat
+   * reports the runtime too old for its model and on the Settings row; the
+   * runtime keeps ownership of its installation throughout. */
+  app.post('/api/terminal/clis/:id/update', (req, res) => {
+    const id = nativeAgentId(req.params.id);
+    if (!id) {
+      res.status(404).json({ error: 'Unsupported Agent runtime.' });
+      return;
+    }
+    if (!agentSupportsInAppUpdate(id)) {
+      res.status(400).json({ error: 'In-app update is not available for this Agent.' });
+      return;
+    }
+    try {
+      updateAgentBootstrap(id);
       res.status(202).json(agentCatalogResponse());
     } catch (error) {
       sendError(res, error);

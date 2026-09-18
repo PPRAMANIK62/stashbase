@@ -156,6 +156,39 @@ describe('describeRuntime', () => {
     });
   });
 
+  it('offers Update for an installed runtime whose own updater runs here, naming the installed version', () => {
+    const display = describeRuntime(
+      codex({
+        id: 'claude',
+        installed: true,
+        label: 'Claude',
+        ownership: 'system',
+        preparation: { kind: 'ready' },
+        updatable: true,
+        version: '2.1.220',
+      }),
+      false,
+    );
+    expect(display).toEqual({
+      description: 'Ready to chat · Installed on your system · 2.1.220',
+      stage: 'ready',
+      action: { kind: 'update', label: 'Update' },
+    });
+  });
+
+  it('withholds Update while the runtime has a command of its own in flight', () => {
+    const display = describeRuntime(
+      codex({
+        installed: true,
+        ownership: 'system',
+        preparation: { kind: 'ready' },
+        updatable: true,
+      }),
+      true,
+    );
+    expect(display.action).toBeNull();
+  });
+
   it.each([
     ['bundled', 'Included with StashBase'],
     ['system', 'Installed on your system'],

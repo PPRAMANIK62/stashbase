@@ -45,6 +45,10 @@ type ProgressUpdate = Pick<AgentBootstrapStatus, 'progress' | 'message'>;
 export interface AgentBootstrapDependencies {
   resolveExecutable(id: NativeAgentId, options?: { probeLoginShell?: boolean; signal?: AbortSignal }): string | null | Promise<string | null>;
   installRuntime(id: NativeAgentId, update: (next: ProgressUpdate) => void, signal: AbortSignal): Promise<void>;
+  /** Runs the installed runtime's own updater on the resolved executable. */
+  updateRuntime(
+    id: NativeAgentId, executable: string, update: (next: ProgressUpdate) => void, signal: AbortSignal,
+  ): Promise<void>;
   isAuthenticated(id: NativeAgentId, executable: string, signal?: AbortSignal): boolean | Promise<boolean>;
   login(id: NativeAgentId, executable: string, signal: AbortSignal): Promise<void>;
   configureMcp(id: NativeAgentId): void;
@@ -77,9 +81,16 @@ export class AgentBootstrapCoordinator {
     return this.start(id, 'connect', options);
   }
 
+  /** Runs an installed runtime's own updater in place, then the same
+   * authentication and MCP steps a fresh preparation runs, so a chat that
+   * reconnects afterwards spawns the newer executable at the same path. */
+  update(id: NativeAgentId): AgentBootstrapStatus {
+    return this.start(id, 'update', { probeLoginShell: true });
+  }
+
   private start(
     id: NativeAgentId,
-    action: 'prepare' | 'connect' | 'login',
+    action: 'prepare' | 'connect' | 'login' | 'update',
     options?: { probeLoginShell?: boolean },
   ): AgentBootstrapStatus {
     if (this.runs.has(id)) return this.status(id);
@@ -87,7 +98,7 @@ export class AgentBootstrapCoordinator {
     const { signal } = controller;
     this.controllers.set(id, controller);
     this.statuses.set(id, {
-      phase: action === 'login' ? 'authenticating' : 'configuring',
+      phase: action === 'login' ? 'authenticating' : action === 'update' ? 'installing' : 'configuring',
       message: `Checking ${agentLabel(id)}…`,
     });
     // Register ownership before calling any injected dependency. Discovery,
@@ -103,7 +114,7 @@ export class AgentBootstrapCoordinator {
             this.statuses.set(id, IDLE_STATUS);
             return;
           }
-          if (action === 'login') {
+          if (action === 'login' || action === 'update') {
             this.fail(id, 'discovery', 'runtime-unavailable', new Error(`${agentLabel(id)} is not installed.`));
             return;
           }
@@ -125,6 +136,21 @@ export class AgentBootstrapCoordinator {
             return;
           }
         }
+        if (action === 'update') {
+          stage = 'installation';
+          this.statuses.set(id, { phase: 'installing', progress: 0, message: `Updating ${agentLabel(id)}…` });
+          await this.dependencies.updateRuntime(id, executable, (next) => {
+            if (!signal.aborted) this.statuses.set(id, { phase: 'installing', ...next });
+          }, signal);
+          signal.throwIfAborted();
+          executable = await this.dependencies.resolveExecutable(id, { signal });
+          signal.throwIfAborted();
+          if (!executable) {
+            this.fail(id, stage, 'runtime-unavailable',
+              new Error(`${agentLabel(id)} update finished without a usable executable.`), 'install-command');
+            return;
+          }
+        }
         stage = 'authentication';
         if (action === 'login') {
           if (id !== 'codex') throw new Error('In-app login is not supported for this Agent.');
@@ -141,7 +167,7 @@ export class AgentBootstrapCoordinator {
       }
     }).finally(() => {
       if (action !== 'connect') telemetry.capture({ event: 'agent_setup_result', runtime: id,
-        stage: action === 'login' ? 'login' : 'prepare',
+        stage: action === 'login' ? 'login' : action === 'update' ? 'update' : 'prepare',
         outcome: signal.aborted ? 'cancelled' : this.status(id).phase === 'ready' ? 'success' : 'failed' });
       this.controllers.delete(id);
       this.runs.delete(id);
@@ -309,6 +335,7 @@ export const agentBootstrapCoordinator = new AgentBootstrapCoordinator({
     ? resolveAgentCliWithLoginShell(agentCliSpec(id), undefined, options.signal)
     : resolveInstalledExecutable(id),
   installRuntime: installNativeRuntime,
+  updateRuntime: updateNativeRuntime,
   isAuthenticated: agentIsAuthenticated,
   login: loginToAgent,
   configureMcp: (id) => { ensureAgentMcp(id); },
@@ -325,6 +352,18 @@ export function beginAgentBootstrap(id: NativeAgentId): AgentBootstrapStatus {
 
 export function loginAgentBootstrap(id: NativeAgentId): AgentBootstrapStatus {
   return agentBootstrapCoordinator.login(id);
+}
+
+/** Which runtimes ship an updater StashBase can run for the user: both do,
+ * each through its own `update` subcommand. */
+export function agentSupportsInAppUpdate(id: NativeAgentId): boolean {
+  return id === 'claude' || id === 'codex';
+}
+
+/** Explicit user recovery when the installed runtime is too old for what a
+ * chat asked of it: the runtime updates itself in place. */
+export function updateAgentBootstrap(id: NativeAgentId): AgentBootstrapStatus {
+  return agentBootstrapCoordinator.update(id);
 }
 
 /** Explicit user recovery after fixing an installation outside StashBase.
@@ -353,6 +392,96 @@ async function installNativeRuntime(
 ): Promise<void> {
   if (id === 'claude') return installClaude(update, signal);
   return installCodex(update, signal);
+}
+
+async function updateNativeRuntime(
+  id: NativeAgentId,
+  executable: string,
+  update: (next: ProgressUpdate) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  if (!agentSupportsInAppUpdate(id)) throw new Error(`In-app update is not available for ${agentLabel(id)}.`);
+  return updateAgentInPlace(id, executable, update, signal);
+}
+
+export interface AgentUpdateDependencies {
+  runCommand: typeof runAgentUpdateCommand;
+  verifyExecutable: typeof verifyAgentExecutable;
+}
+
+/** The runtime's own updater, run on the executable StashBase resolved. Each
+ * CLI knows whether it was installed natively or through npm and updates that
+ * installation, so the next session spawns the same path, newer. Running an
+ * official installer instead would leave a second copy in another directory
+ * that discovery might never prefer. Verified on npm installations of both:
+ * `claude update` moved 2.1.220 to the current release in place, and
+ * `codex update` moved 0.153.4 to 0.155.0 the same way. A session already
+ * open keeps its old process until it reconnects; a new one spawns the
+ * updated executable. */
+export async function updateAgentInPlace(
+  id: NativeAgentId,
+  executable: string,
+  update: (next: ProgressUpdate) => void,
+  signal: AbortSignal,
+  dependencies: Partial<AgentUpdateDependencies> = {},
+): Promise<void> {
+  const runCommand = dependencies.runCommand ?? runAgentUpdateCommand;
+  const verifyExecutable = dependencies.verifyExecutable ?? verifyAgentExecutable;
+  const label = agentLabel(id);
+  update({ message: `Checking for a newer ${label}…` });
+  await runCommand(executable, ['update'], agentCliEnv({}, [commandDir(executable)]), signal, (line) => {
+    const message = line.trim();
+    if (message) update({ message });
+  });
+  verifyExecutable(executable, label, agentCliEnv());
+  update({ progress: 1, message: `${label} is up to date.` });
+}
+
+/** Runs a provider CLI's own command, narrating its stdout line by line.
+ * Updaters explain themselves on stdout, so the tail of both streams is the
+ * failure message when the command exits with an error. */
+export async function runAgentUpdateCommand(
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  signal: AbortSignal,
+  onLine: (line: string) => void,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, {
+      env,
+      detached: process.platform !== 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+      shell: agentCliNeedsShell(command),
+    });
+    let tail = '';
+    let buffered = '';
+    const abort = () => terminateInstallerTree(child);
+    signal.addEventListener('abort', abort, { once: true });
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      tail = (tail + chunk).slice(-4000);
+      buffered += chunk;
+      const lines = buffered.split(/\r?\n/);
+      buffered = lines.pop() ?? '';
+      for (const line of lines) onLine(line);
+    });
+    child.stderr.on('data', (chunk: string) => { tail = (tail + chunk).slice(-4000); });
+    child.on('error', (error) => {
+      signal.removeEventListener('abort', abort);
+      reject(error);
+    });
+    child.on('close', (code) => {
+      signal.removeEventListener('abort', abort);
+      if (buffered.trim()) onLine(buffered);
+      const detail = tail.replace(/\s+/g, ' ').trim().slice(-800);
+      if (signal.aborted) reject(new Error('Agent update was cancelled.'));
+      else if (code === 0) resolve();
+      else reject(new Error(detail || `${path.basename(command)} ${args.join(' ')} exited with code ${code ?? 'unknown'}.`));
+    });
+  });
 }
 
 const CLAUDE_INSTALLER = process.platform === 'win32'

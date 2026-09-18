@@ -15,7 +15,20 @@ export type AgentTurnFailureReason =
   | 'allowance-exhausted'
   | 'access-restricted'
   | 'auth-expired'
-  | 'network';
+  | 'network'
+  | 'runtime-outdated';
+
+/** Whether a failed turn may be sent again as it is: a transient failure, or
+ *  a runtime too old for its model once that runtime's update ran. Anything
+ *  else needs its repair first, and a resend would only fail the same way. */
+export function agentTurnFailureIsRetryable(failure: AgentTurnFailureReason | undefined): boolean {
+  return (
+    failure === undefined ||
+    failure === 'network' ||
+    failure === 'rate-limit' ||
+    failure === 'runtime-outdated'
+  );
+}
 
 interface AgentTranscriptAttachment {
   path: string;

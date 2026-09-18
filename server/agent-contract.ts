@@ -7,8 +7,8 @@
  */
 import type { WebSocket } from 'ws';
 import { CLIS } from './terminal.ts';
-import { resolveAgentCli } from './agent-cli.ts';
-import { agentBootstrapStatus } from './agent-runtime-installer.ts';
+import { agentCliVersion, resolveAgentCli } from './agent-cli.ts';
+import { agentSupportsInAppUpdate, agentBootstrapStatus } from './agent-runtime-installer.ts';
 import { ensureAgentMcp } from './agent-mcp.ts';
 import { rememberedCatalogFor } from './agent-model-catalog.ts';
 import { filesystemPath } from './filesystem-path.ts';
@@ -209,6 +209,10 @@ export interface AgentRuntimeDescriptor {
   source: 'bundled' | 'system' | null;
   state: AgentRuntimeState;
   bootstrap: ReturnType<typeof agentBootstrapStatus>;
+  /** The installed executable's own version, when it reports one. */
+  version?: string | null;
+  /** Whether the runtime's own updater can be run from the app. */
+  updatable?: boolean;
   error?: string;
   capabilities: AgentCapabilities;
   /** The runtime's remembered model catalog, once one has been read. */
@@ -256,6 +260,8 @@ export function runtimeDescriptorFor(
     endpoint: '/ws/agent',
     installed,
     source: installed ? 'system' : null,
+    version: executable ? agentCliVersion(executable) : null,
+    updatable: installed && agentSupportsInAppUpdate(adapter.id),
     state,
     bootstrap: agentBootstrapStatus(adapter.id),
     capabilities: adapter.capabilities,

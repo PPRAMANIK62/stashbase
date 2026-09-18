@@ -104,6 +104,9 @@ export class CodexSession implements AttributedAgentSession {
   /** Explicit override for the next turn. Never derive this from the model
    * the runtime reports for a resumed/default session. */
   private selectedModel: string | undefined;
+  /** A pick made while the catalog was still being read, applied by
+   * `resolveModel` the way it applies the choice the URL carried. */
+  private heldModel: string | undefined;
   private activeModel: string | undefined;
   private models: AgentModel[] = [];
   private skills = new Map<string, { name: string; path: string }>();
@@ -446,21 +449,22 @@ export class CodexSession implements AttributedAgentSession {
       // Older app-servers can still run a normal default session even when
       // they do not expose the optional catalog method.
       this.modelResolved = true;
-      this.send({ t: 'models', models: [], ...(this.model ? { fallback: 'This Codex runtime cannot verify that model; using the runtime default.' } : {}) });
+      const asked = this.heldModel ?? this.model;
+      this.heldModel = undefined;
+      this.send({ t: 'models', models: [], ...(asked ? { fallback: 'This Codex runtime cannot verify that model; using the runtime default.' } : {}) });
       log.debug(`could not discover Codex models: ${errorMessage(err)}`);
       return undefined;
     }
-    if (this.resumeThreadId) {
-      this.send({ t: 'models', models: this.models });
-      this.modelResolved = true;
-      return undefined;
-    }
-    const selected = this.model && this.models.some((entry) => entry.id === this.model) ? this.model : undefined;
+    // A resumed thread stays on its native model whatever a stale URL says;
+    // only a pick made in this session while the catalog was read counts.
+    const requested = this.heldModel ?? (this.resumeThreadId ? undefined : this.model);
+    this.heldModel = undefined;
+    const selected = requested && this.models.some((entry) => entry.id === requested) ? requested : undefined;
     this.send({
       t: 'models',
       models: this.models,
       ...(this.activeModel ? { activeModel: this.activeModel } : {}),
-      ...(this.model && !selected ? { fallback: 'That model is no longer available; using the runtime default.' } : {}),
+      ...(requested && !selected ? { fallback: 'That model is no longer available; using the runtime default.' } : {}),
     });
     this.selectedModel = selected;
     this.modelResolved = true;
@@ -474,6 +478,13 @@ export class CodexSession implements AttributedAgentSession {
   private setModelForNextTurn(value: unknown): void {
     if (this.busy || (value !== undefined && typeof value !== 'string')) return;
     const requested = typeof value === 'string' && value ? value : undefined;
+    // The catalog is still being read: refusing the pick against an empty
+    // list would report it "no longer available" and drop it. Hold it for
+    // the read to validate.
+    if (!this.modelResolved) {
+      this.heldModel = requested;
+      return;
+    }
     if (requested && !this.models.some((entry) => entry.id === requested)) {
       this.send({
         t: 'models',

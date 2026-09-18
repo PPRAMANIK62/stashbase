@@ -47,7 +47,9 @@ retires that continuation. Standalone Settings setup never sends a draft.
 
 ## Failure and Return
 
-Show what was retained and the required next action. Repair setup/account failures
+Show what was retained and the required next action. A runtime too old for the
+selected model offers its update in the failed turn; after the update, the same
+request is sent again. Repair setup/account failures
 without losing the idea. Keep partial output and file results after a turn fails.
 A missing context item needs refresh, replacement, or deliberate removal.
 

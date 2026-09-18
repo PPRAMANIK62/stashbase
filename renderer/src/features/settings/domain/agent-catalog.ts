@@ -77,6 +77,10 @@ export interface AgentRuntime {
   /** Where staged preparation stands. A runtime the service has not reported
    *  a bootstrap for is `idle`. */
   readonly preparation: AgentPreparation;
+  /** The installed runtime's own version, or null when it reports none. */
+  readonly version: string | null;
+  /** Whether the runtime's own updater can be run from here. */
+  readonly updatable: boolean;
 }
 
 /** A one-shot simulated outcome for the next staged preparation. */

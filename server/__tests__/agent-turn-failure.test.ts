@@ -47,6 +47,15 @@ test('live provider messages classify by their vocabulary', () => {
   // Connectivity.
   assert.equal(classifyAgentTurnFailure('fetch failed: getaddrinfo ENOTFOUND api.openai.com'), 'network');
   assert.equal(classifyAgentTurnFailure('connect ECONNREFUSED 127.0.0.1:443'), 'network');
+  // Claude: the installed CLI predates the chosen model (observed live on
+  // 2.1.220 asked to run Fable 5.1). Its 400 must not read as a plain error,
+  // and the retry it invites is the runtime's own update.
+  assert.equal(
+    classifyAgentTurnFailure(
+      "API Error: 400 Claude Code 2.1.220 does not support this model; version 2.1.251 or newer is required. Run 'claude update', or update the Claude desktop app, then try again.",
+    ),
+    'runtime-outdated',
+  );
 });
 
 test('an unmatched message stays unclassified and adds no failure field', () => {

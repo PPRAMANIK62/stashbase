@@ -493,6 +493,29 @@ untouched runtime, the held pick, and the name mapping; the renderer transport
 re-sends a model picked while the socket was still opening. The reproduction was
 a scratch SDK script against the live CLI, not the packaged application.
 
+**Runtime update (2026-09-18):** `server/agent-turn-failure.ts` classifies a
+runtime too old for its model as `runtime-outdated` (observed live: Claude
+2.1.220 refusing Fable 5.1 with a 400 naming 2.1.251 as required).
+`server/agent-runtime-installer.ts` runs the runtime's own updater in place
+through the bootstrap coordinator, then re-verifies the executable and
+reconnects MCP; the updater was verified on an isolated npm-prefix copy of
+2.1.220, which moved to 2.1.276 with a clean exit. The listing carries the
+installed version and whether an in-app update exists. The failed turn offers
+Update Claude through `hooks/use-agent-runtime-update.ts`, which waits for the
+runtime to be ready, reconnects the conversation so the service spawns the
+updated executable, and resends the refused request; Settings → Agents shows
+the version and the same Update. Tests cover the coordinator's update paths, the
+updater command runner against a real shell, the classifier, the version cache,
+descriptor and schema fields, the hook's reconnect-and-resend and refused-update
+paths, the transcript's action swap, and the Settings action. Codex offers the
+same Settings update through its own update subcommand, verified on an isolated
+npm-prefix copy of 0.153.4 that moved to 0.155.0; its catalog comes from the
+installed app-server, so an old Codex hides newer models rather than refusing
+them, and the chat-side update action never triggers for it. A Codex model
+chosen while its catalog is still being read is now held for that read instead
+of being refused as unavailable. Not proven: the packaged application running
+a real update end to end.
+
 **Tool-attempt presentation (2026-09-16):** `ui/transcript/activity.tsx` omits failed
 tools from chat, including summaries and expanded details. Activity tests cover
 a subsequent running, successful, or failed call, empty-group suppression,

@@ -16,6 +16,8 @@ test('a runtime entry carries the catalog the service remembers for it, and noth
     installHint: '',
     installed: true,
     source: 'system',
+    version: '0.104.0',
+    updatable: false,
     bootstrap: { phase: 'ready' },
     launchCommand: 'codex',
     state: 'available',
@@ -30,6 +32,8 @@ test('a runtime entry carries the catalog the service remembers for it, and noth
   };
   const parsed = agentsResponseSchema.parse({ clis: [entry] });
   assert.deepEqual(parsed.clis[0]?.catalog, entry.catalog);
+  assert.equal(parsed.clis[0]?.version, '0.104.0');
+  assert.equal(parsed.clis[0]?.updatable, false);
   assert.throws(() => agentsResponseSchema.parse({ clis: [{ ...entry, catalog: { ...entry.catalog, stale: true } }] }));
 });
 

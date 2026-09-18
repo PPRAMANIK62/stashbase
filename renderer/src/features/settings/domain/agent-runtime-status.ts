@@ -13,7 +13,7 @@ import type { AgentRuntime, AgentRuntimeStage } from '@/features/settings/domain
 const PREPARATION_FAILED = 'Setup failed';
 const PREPARING = 'Preparing…';
 
-type AgentRuntimeActionKind = 'install' | 'login' | 'account' | 'retry';
+type AgentRuntimeActionKind = 'install' | 'login' | 'account' | 'retry' | 'update';
 
 export interface AgentRuntimeAction {
   readonly kind: AgentRuntimeActionKind;
@@ -79,10 +79,13 @@ export function describeRuntime(
     };
   }
 
+  // An installed runtime names its version beside its ownership, so an
+  // update the reader runs from here has a visible before and after.
   const label = ownershipLabel(runtime.ownership);
+  const detail = runtime.version ? `${label} · ${runtime.version}` : label;
   return {
-    description: preparation.kind === 'ready' ? `Ready to chat · ${label}` : label,
+    description: preparation.kind === 'ready' ? `Ready to chat · ${detail}` : detail,
     stage: 'ready',
-    action: null,
+    action: !busy && runtime.updatable ? { kind: 'update', label: 'Update' } : null,
   };
 }

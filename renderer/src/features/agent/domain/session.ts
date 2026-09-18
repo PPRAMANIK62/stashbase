@@ -65,7 +65,11 @@ export {
 
 import type { AgentTranscriptBlock } from './session-transcript';
 
-export { latestUserBlock, type AgentTranscriptBlock } from './session-transcript';
+export {
+  agentTurnFailureIsRetryable,
+  latestUserBlock,
+  type AgentTranscriptBlock,
+} from './session-transcript';
 
 /** Moves the turn inside a live connection. Any other connection has no turn
  *  to move, so turn actions arriving late are ignored rather than forging a

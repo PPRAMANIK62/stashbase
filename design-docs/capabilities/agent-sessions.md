@@ -57,8 +57,10 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
 ## Failure and Recovery
 
 Keep usable history, partial output, and unsent work. Distinguish setup/account
-repair, provider limits, transport loss, and turn failure so recovery addresses
-the actual cause. A failed history load never becomes an empty conversation.
+repair, an outdated runtime, provider limits, transport loss, and turn failure so
+recovery addresses the actual cause. An outdated runtime updates in place from
+the failed turn; the conversation reconnects on it and resends the refused
+request. A failed history load never becomes an empty conversation.
 
 Reconnect to the same session and establish uncertain outcomes before continuing.
 Retry uses the retained submission after checking context; Reuse message prepares

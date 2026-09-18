@@ -122,6 +122,8 @@ export const agentSchema = z
     installHint: z.string().max(2000),
     installed: z.boolean(),
     source: agentSourceSchema.nullable().optional(),
+    version: z.string().max(64).nullable().optional(),
+    updatable: z.boolean().optional(),
     bootstrap: agentBootstrapStatusSchema.optional(),
     launchCommand: z.string().max(2000),
     endpoint: z.string().max(2000).optional(),

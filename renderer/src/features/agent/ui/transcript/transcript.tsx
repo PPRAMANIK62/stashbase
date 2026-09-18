@@ -19,6 +19,7 @@ import {
   startOfLocalDay,
   transcriptDayBreaks,
 } from '@/features/agent/domain/time';
+import type { AgentRuntimeUpdateView } from '@/features/agent/hooks/use-agent-runtime-update';
 import { SentContextTiles } from '@/features/agent/ui/composer/context-tiles';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
@@ -33,6 +34,7 @@ import {
   type AgentActivityStep,
 } from './activity';
 import { AgentMarkdown } from './markdown';
+import { TurnFailure } from './turn-failure';
 
 const TRANSCRIPT_PAGE_SIZE = 200;
 
@@ -143,6 +145,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   onPermission,
   onRetry,
   promptAt,
+  runtimeUpdate,
   transientFile,
 }: {
   block: AgentTranscriptBlock;
@@ -160,6 +163,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   onRetry(errorBlockId: string): boolean;
   /** When the prompt a closing reply answers was sent, for the duration. */
   promptAt: number | undefined;
+  runtimeUpdate?: AgentRuntimeUpdateView | undefined;
   transientFile?: ((path: string) => File | undefined) | undefined;
 }) {
   const shape = useShape();
@@ -253,26 +257,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
     );
   }
   if (block.kind === 'error') {
-    return (
-      <section className={cn('border border-destructive/30 bg-destructive-light p-3', shape.panel)}>
-        <h3 className="text-caption font-medium text-foreground">The Agent could not finish</h3>
-        <p className="mt-1 text-caption text-muted-foreground">{block.text}</p>
-        <p className="mt-1 text-caption text-muted-foreground">
-          Partial output and completed file changes are kept. Retrying may repeat work.
-        </p>
-        {block.retryablePrompt !== undefined &&
-          (!block.failure || block.failure === 'network' || block.failure === 'rate-limit') && (
-            <Button
-              className="mt-2"
-              onClick={() => onRetry(block.id)}
-              size="compact"
-              variant="tertiary"
-            >
-              Try again
-            </Button>
-          )}
-      </section>
-    );
+    return <TurnFailure block={block} onRetry={onRetry} runtimeUpdate={runtimeUpdate} />;
   }
   return <AgentPermissionCard onReply={onPermission} tool={block} />;
 });
@@ -285,6 +270,7 @@ export const AgentTranscript = memo(function AgentTranscript({
   onOpenSource,
   onPermission,
   onRetry,
+  runtimeUpdate,
   sourceFor,
   transientFile,
 }: {
@@ -299,6 +285,9 @@ export const AgentTranscript = memo(function AgentTranscript({
   onOpenSource?: ((source: SourceReference) => void) | undefined;
   onPermission(toolUseId: string, permissionId: string, allow: boolean): boolean;
   onRetry(errorBlockId: string): boolean;
+  /** The in-place update of the conversation's runtime, offered on a turn
+   *  the runtime was too old for. Absent where nothing can run one. */
+  runtimeUpdate?: AgentRuntimeUpdateView | undefined;
   /** The workspace source behind a changed path, or null when it is not one. */
   sourceFor?: ((path: string) => SourceReference | null) | undefined;
   /** The File behind a sent upload, when this session still holds it. */
@@ -378,6 +367,7 @@ export const AgentTranscript = memo(function AgentTranscript({
               onPermission={decide}
               onRetry={onRetry}
               promptAt={closing.get(group.id)}
+              runtimeUpdate={runtimeUpdate}
               transientFile={transientFile}
             />
           </Fragment>

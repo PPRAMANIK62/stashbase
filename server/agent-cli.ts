@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -157,6 +158,53 @@ export async function resolveAgentCliWithLoginShell(
 
 export function agentCliNeedsShell(command: string): boolean {
   return process.platform === 'win32' && /\.(cmd|bat)$/i.test(command);
+}
+
+/** The version a CLI prints for `--version`, as a bare release number:
+ * `2.1.220 (Claude Code)` and `codex-cli 0.104.0` both read as their
+ * dotted number. Null when the output names none. */
+export function parseAgentCliVersion(output: string): string | null {
+  return /\b(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)\b/.exec(output)?.[1] ?? null;
+}
+
+const versionCache = new Map<string, { mtimeMs: number; version: string | null }>();
+
+/** What the installed executable says its version is, read once per file
+ * change: the listing is polled while a runtime prepares, and the binary a
+ * provider's updater replaces in place gets a new modification time, so the
+ * cache never outlives the install it describes. Any failure to run or read
+ * the executable reads as an unknown version, never as a missing runtime. */
+export function agentCliVersion(
+  executable: string,
+  read: (executable: string) => string | null = readAgentCliVersion,
+): string | null {
+  let mtimeMs: number;
+  try {
+    mtimeMs = fs.statSync(executable).mtimeMs;
+  } catch {
+    return null;
+  }
+  const cached = versionCache.get(executable);
+  if (cached && cached.mtimeMs === mtimeMs) return cached.version;
+  const version = read(executable);
+  versionCache.set(executable, { mtimeMs, version });
+  return version;
+}
+
+function readAgentCliVersion(executable: string): string | null {
+  try {
+    const result = spawnSync(executable, ['--version'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+      windowsHide: true,
+      shell: agentCliNeedsShell(executable),
+      env: agentCliEnv({}, [path.dirname(executable)]),
+    });
+    if (result.status !== 0) return null;
+    return parseAgentCliVersion(`${result.stdout}\n${result.stderr}`);
+  } catch {
+    return null;
+  }
 }
 
 export function commandDir(command: string): string {

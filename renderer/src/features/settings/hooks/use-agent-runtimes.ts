@@ -33,7 +33,7 @@ import { useRequestSignals } from '@/shared/runtime/use-request-signals';
 
 /** The commands a reader can aim at one runtime. Each opens a lane of its own
  *  per agent id, so two rows never share an abort. */
-type RuntimeCommand = 'install' | 'login';
+type RuntimeCommand = 'install' | 'login' | 'update';
 
 /** One command in flight, or one that refused, for a single runtime. */
 interface RuntimeCommandState {
@@ -74,6 +74,8 @@ export interface AgentRuntimesViewModel {
   failure(id: AgentId): FailureView | null;
   install(id: AgentId): void;
   login(id: AgentId): void;
+  /** Runs the runtime's own updater in place. */
+  update(id: AgentId): void;
   refreshAllowance(): void;
   refreshCatalog(): void;
   updateDebug(patch: AgentDebugPatch): void;
@@ -182,6 +184,7 @@ export function useAgentRuntimes(port: AgentRuntimePort): AgentRuntimesViewModel
     login: (id) => void run(id, 'login', (signal) => port.prepareAgent(id, 'login', signal)),
     refreshAllowance: () => void allowance.refetch(),
     refreshCatalog: () => void catalog.refetch(),
+    update: (id) => void run(id, 'update', (signal) => port.prepareAgent(id, 'update', signal)),
     updateDebug: (patch) => updateDebug.run(patch),
   };
 }

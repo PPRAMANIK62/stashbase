@@ -16,6 +16,8 @@ import {
   loginToAgent,
   resolveClaudeInstallerShell,
   resolveCodexInstallerShell,
+  runAgentUpdateCommand,
+  updateAgentInPlace,
   verifyAgentExecutable,
   windowsUserPathRepairScript,
   type AgentBootstrapDependencies,
@@ -40,6 +42,10 @@ function fakeDependencies(overrides: Partial<AgentBootstrapDependencies> = {}) {
       update({ progress: 0.5, message: 'Downloading… 50%' });
       await Promise.resolve();
       installed = true;
+    },
+    updateRuntime: async (_id, _executable, update) => {
+      update({ message: 'Successfully updated from 2.1.220 to version 2.1.276' });
+      await Promise.resolve();
     },
     isAuthenticated: () => authenticated,
     login: async () => { authenticated = true; },
@@ -886,4 +892,106 @@ test('CLI probes time out and cancel while unrelated event-loop work remains liv
   }), /cancelled/);
   controller.abort();
   await cancelled;
+});
+
+test('update runs the installed runtime updater in place, then authentication and MCP configuration', async () => {
+  const updates: Array<{ id: string; executable: string }> = [];
+  const narrated: string[] = [];
+  let configured = 0;
+  const fake = fakeDependencies({
+    resolveExecutable: () => '/system/claude',
+    updateRuntime: async (id, executable, update) => {
+      updates.push({ id, executable });
+      update({ message: 'Installing update...' });
+    },
+    configureMcp: () => { configured += 1; },
+  });
+  const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
+
+  const started = coordinator.update('claude');
+  assert.equal(started.phase, 'installing');
+  narrated.push(coordinator.status('claude').message ?? '');
+  const settled = await coordinator.wait('claude');
+
+  assert.equal(settled.phase, 'ready');
+  assert.deepEqual(updates, [{ id: 'claude', executable: '/system/claude' }]);
+  assert.equal(configured, 1, 'the updated runtime is reconnected to StashBase MCP like a fresh one');
+});
+
+test('update refuses a missing runtime without downloading or running anything', async () => {
+  let installs = 0;
+  let updates = 0;
+  const fake = fakeDependencies({
+    resolveExecutable: () => null,
+    installRuntime: async () => { installs += 1; },
+    updateRuntime: async () => { updates += 1; },
+  });
+  const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
+
+  coordinator.update('claude');
+  const status = await coordinator.wait('claude');
+
+  assert.equal(status.phase, 'failed');
+  assert.equal(status.failure?.stage, 'discovery');
+  assert.equal(status.failure?.code, 'runtime-unavailable');
+  assert.equal(installs, 0);
+  assert.equal(updates, 0);
+});
+
+test('a failing updater surfaces as an installation failure with the manual install route', async () => {
+  const fake = fakeDependencies({
+    resolveExecutable: () => '/system/claude',
+    updateRuntime: async () => { throw new Error('npm global folder is not writable'); },
+  });
+  const coordinator = new AgentBootstrapCoordinator(fake.dependencies);
+
+  coordinator.update('claude');
+  const status = await coordinator.wait('claude');
+
+  assert.equal(status.phase, 'failed');
+  assert.equal(status.failure?.stage, 'installation');
+  assert.equal(status.failure?.code, 'operation-failed');
+  assert.equal(status.failure?.manualRecovery, 'install-command');
+  assert.match(status.failure?.message ?? '', /not writable/);
+});
+
+test('an in-place update runs the executable\'s own update command, narrates it, and verifies the result', async () => {
+  for (const [id, executable, narrated] of [
+    ['claude', '/system/claude', 'Successfully updated from 2.1.220 to version 2.1.276'],
+    ['codex', '/system/codex', 'Update ran successfully! Please restart Codex.'],
+  ] as const) {
+    const messages: string[] = [];
+    const calls: Array<{ command: string; args: string[] }> = [];
+    let verified: string | null = null;
+    await updateAgentInPlace(
+      id,
+      executable,
+      (next) => { if (next.message) messages.push(next.message); },
+      new AbortController().signal,
+      {
+        runCommand: async (command, args, _env, _signal, onLine) => {
+          calls.push({ command, args });
+          onLine('Checking for updates to latest version...');
+          onLine(narrated);
+        },
+        verifyExecutable: (candidate) => { verified = candidate; },
+      },
+    );
+    assert.deepEqual(calls, [{ command: executable, args: ['update'] }], id);
+    assert.equal(verified, executable, id);
+    assert.deepEqual(messages.slice(-2), [narrated, `${id === 'codex' ? 'Codex' : 'Claude'} is up to date.`], id);
+  }
+});
+
+test('runAgentUpdateCommand streams stdout lines and reports a failing exit through its own output',
+  { skip: process.platform === 'win32' }, async () => {
+  const lines: string[] = [];
+  await runAgentUpdateCommand('/bin/sh', ['-c', 'echo one; echo two'], process.env,
+    new AbortController().signal, (line) => lines.push(line));
+  assert.deepEqual(lines, ['one', 'two']);
+  await assert.rejects(
+    runAgentUpdateCommand('/bin/sh', ['-c', 'echo npm folder is not writable; exit 3'], process.env,
+      new AbortController().signal, () => undefined),
+    /not writable/,
+  );
 });

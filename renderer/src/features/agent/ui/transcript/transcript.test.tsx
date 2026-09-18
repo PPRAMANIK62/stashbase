@@ -56,6 +56,39 @@ it('keeps a terminal turn failure visible while tool failures are omitted', () =
   expect(screen.queryByRole('button', { name: /Ran.*ls.*Failed/u })).toBeNull();
 });
 
+it('offers the runtime update instead of a retry on a turn the runtime was too old for, then a retry once it ran', async () => {
+  const update = vi.fn();
+  const refused: AgentTranscriptBlock[] = [
+    { id: 'u1', kind: 'user', text: 'Map the repo' },
+    {
+      id: 'too-old',
+      kind: 'error',
+      text: 'API Error: 400 Claude Code 2.1.220 does not support this model',
+      failure: 'runtime-outdated',
+      retryablePrompt: 'Map the repo',
+    },
+  ];
+  const view = (completedBlockId: string | null) => (
+    <AgentTranscript
+      activeTurn={false}
+      blocks={refused}
+      onOpenExternal={vi.fn()}
+      onPermission={vi.fn(() => true)}
+      onRetry={vi.fn(() => true)}
+      runtimeUpdate={{ busy: false, completedBlockId, failure: null, label: 'Claude', update }}
+    />
+  );
+  const rendered = render(view(null));
+
+  expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Update Claude' }));
+  expect(update).toHaveBeenCalledWith('too-old');
+
+  rendered.rerender(view('too-old'));
+  expect(screen.queryByRole('button', { name: 'Update Claude' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Try again' })).not.toBeNull();
+});
+
 it('keeps progress visible after a running tool fails and disappears', () => {
   const blocks: AgentTranscriptBlock[] = [
     ...turn.slice(0, 2),

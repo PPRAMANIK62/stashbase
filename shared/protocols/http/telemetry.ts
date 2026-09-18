@@ -14,7 +14,7 @@ export const telemetryEventSchema = z.discriminatedUnion('event', [
     duration: z.enum(['under_10s', '10s_to_60s', '1m_to_5m', 'over_5m']),
   }).strict(),
   z.object({ event: z.literal('document_write_result'), outcome: z.enum(['success', 'failed', 'conflict']) }).strict(),
-  z.object({ event: z.literal('agent_setup_result'), runtime, stage: z.enum(['prepare', 'login']), outcome }).strict(),
+  z.object({ event: z.literal('agent_setup_result'), runtime, stage: z.enum(['prepare', 'login', 'update']), outcome }).strict(),
 ]);
 export type TelemetryEvent = z.infer<typeof telemetryEventSchema>;
 export const telemetryPreferencesSchema = z.object({

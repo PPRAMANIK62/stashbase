@@ -86,6 +86,19 @@ export function agentLabel(id: AgentId): string {
   return AGENT_RUNTIMES.find((entry) => entry.id === id)?.label ?? id;
 }
 
+/** A runtime the catalog has not described yet: selectable by name, ready
+ *  for nothing, able to use nothing until the catalog answers for it. */
+export function undescribedAgent(id: AgentId): Agent {
+  return {
+    id,
+    label: agentLabel(id),
+    ready: false,
+    needsSignIn: false,
+    models: [],
+    abilities: { attachments: false, effort: false, models: false, modes: [], skills: false },
+  };
+}
+
 /**
  * What stands between this window and a sendable conversation.
  *

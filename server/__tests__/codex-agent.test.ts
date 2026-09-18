@@ -64,6 +64,9 @@ function catalogProcess(
     selectedTurnError?: string;
     interruptError?: string;
     turnIds?: string[];
+    /** Answers `model/list` only once this settles, so a test can act while
+     *  the catalog is still being read. */
+    catalogGate?: Promise<void>;
   } = {},
 ): { proc: FakeCodexProcess; requests: Array<{ method: string; params: Record<string, unknown> }> } {
   const proc = new FakeCodexProcess();
@@ -87,6 +90,8 @@ function catalogProcess(
       proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: options.selectedTurnError } })}\n`);
     } else if (request.method === 'turn/interrupt' && options.interruptError) {
       proc.stdout.write(`${JSON.stringify({ id: request.id, error: { code: -32000, message: options.interruptError } })}\n`);
+    } else if (request.method === 'model/list' && options.catalogGate) {
+      void options.catalogGate.then(() => proc.stdout.write(`${JSON.stringify({ id: request.id, result })}\n`));
     } else {
       proc.stdout.write(`${JSON.stringify({ id: request.id, result })}\n`);
     }
@@ -222,6 +227,35 @@ test('Codex keeps Agent Instructions user-visible while injecting hidden StashBa
   assert.match(String(developerInstructions), /read_file/);
   assert.match(String(developerInstructions), /Prefer primary research notes\./);
   assert.notEqual(developerInstructions, instructions);
+});
+
+test('Codex holds a model chosen while its catalog is still being read and applies it to the first turn', async (t) => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-hold-'));
+  await runWithWindowId('model-hold-window', () => openProjectFolder(folder));
+  t.after(() => { runWithWindowId('model-hold-window', () => clearCurrentFolder()); fs.rmSync(folder, { recursive: true, force: true }); });
+  const ws = new FakeWebSocket();
+  let releaseCatalog!: () => void;
+  const catalogGate = new Promise<void>((resolve) => { releaseCatalog = resolve; });
+  const native = catalogProcess([
+    { id: 'model-one', displayName: 'Model One', isDefault: true },
+    { id: 'model-two', displayName: 'Model Two' },
+  ], { catalogGate });
+  const session = new CodexSession(ws as unknown as WebSocket, 'model-hold-window', undefined, undefined, undefined, undefined, undefined, undefined, () => native.proc as unknown as ChildProcessWithoutNullStreams);
+  session.begin();
+  await settle();
+
+  ws.emit('message', JSON.stringify({ t: 'set-model', model: 'model-two' }));
+  await settle();
+  const refused = ws.sent.map((item) => JSON.parse(item) as { fallback?: string }).some((event) => event.fallback);
+  assert.equal(refused, false, 'a pick is not refused against a catalog that is not read yet');
+
+  releaseCatalog();
+  await settle();
+  ws.emit('message', JSON.stringify({ t: 'prompt', text: 'first turn' }));
+  await settle();
+
+  assert.equal(native.requests.find((request) => request.method === 'turn/start')?.params.model, 'model-two');
+  session.dispose();
 });
 
 test('Codex changes the model for the next turn without replacing its thread', async (t) => {

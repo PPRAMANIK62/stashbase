@@ -13,6 +13,8 @@ import {
   type FeatureFailureKind,
 } from '@/shared/domain/feature-error';
 
+import { AgentUpdateRefused } from './connect-agent';
+
 /** Refusals only the Agent's context resolution can meet: the file is gone, or
  *  its format is one the Agent cannot be given. */
 export type AgentContextExtra = 'not-found' | 'unsupported';
@@ -64,4 +66,28 @@ export function agentFailure(error: unknown): FailureView {
 export function agentAccessFailure(error: unknown): string {
   if (isFeatureError(error)) return agentFailure(error).message;
   return 'Could not connect. Your message was kept. Try again or check Agent settings.';
+}
+
+/** What an update that did not finish reads as: the service's own sentence
+ *  where it wrote one, since it names the exact step that stopped; the
+ *  transport ladder's sentence where the service could not be reached. */
+export function agentUpdateFailure(error: unknown): string {
+  if (error instanceof AgentUpdateRefused) {
+    const sentence = error.cause instanceof Error ? error.cause.message.trim() : '';
+    return sentence || UPDATE_FAILED;
+  }
+  if (isFeatureError(error)) return agentFailure(error).message;
+  return UPDATE_FAILED;
+}
+
+const UPDATE_FAILED = 'The update did not finish. Check Agent settings and try again.';
+
+/** The runtime is updated, but this conversation could not come back on it. */
+export function agentReconnectAfterUpdateFailure(
+  label: string,
+  outcome: 'settled' | 'timeout',
+): string {
+  return outcome === 'timeout'
+    ? `${label} is updated, but this conversation did not reconnect in time. Reconnect and try again.`
+    : `${label} is updated, but this conversation could not reconnect. Reconnect and try again.`;
 }

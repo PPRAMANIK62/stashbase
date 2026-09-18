@@ -26,7 +26,7 @@ export interface AgentRuntimePort {
   listAgents(signal: AbortSignal): Promise<AgentCatalog>;
   prepareAgent(
     id: AgentId,
-    action: 'check' | 'bootstrap' | 'login',
+    action: 'check' | 'bootstrap' | 'login' | 'update',
     signal: AbortSignal,
   ): Promise<AgentCatalog>;
   updateDebug(patch: AgentDebugPatch, signal: AbortSignal): Promise<AgentCatalog>;

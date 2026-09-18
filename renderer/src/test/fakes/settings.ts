@@ -98,6 +98,8 @@ export function agentRuntime(overrides: Partial<AgentRuntime> = {}): AgentRuntim
     label: 'Default',
     ownership: 'bundled',
     preparation: { kind: 'ready' },
+    updatable: false,
+    version: null,
     ...overrides,
   };
 }

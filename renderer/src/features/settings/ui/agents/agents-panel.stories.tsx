@@ -17,6 +17,8 @@ const codex: AgentRuntime = {
   installed: true,
   ownership: 'system',
   preparation: { kind: 'ready' },
+  updatable: true,
+  version: '0.155.0',
 };
 
 const claude: AgentRuntime = {
@@ -25,6 +27,8 @@ const claude: AgentRuntime = {
   installed: true,
   ownership: 'system',
   preparation: { kind: 'ready' },
+  updatable: true,
+  version: '2.1.276',
 };
 
 const stashbase: AgentRuntime = {
@@ -33,6 +37,8 @@ const stashbase: AgentRuntime = {
   installed: true,
   ownership: 'bundled',
   preparation: { kind: 'ready' },
+  updatable: false,
+  version: null,
 };
 
 function fakePort(): AgentRuntimePort {

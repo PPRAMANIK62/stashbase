@@ -23,6 +23,7 @@ function viewModel(overrides: Partial<AgentRuntimesViewModel> = {}): AgentRuntim
     failure: () => null,
     install: vi.fn(),
     login: vi.fn(),
+    update: vi.fn(),
     refreshAllowance: vi.fn(),
     refreshCatalog: vi.fn(),
     updateDebug: vi.fn(),

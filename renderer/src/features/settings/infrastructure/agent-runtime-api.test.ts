@@ -33,6 +33,8 @@ describe('agent runtime API', () => {
           label: 'Default',
           ownership: 'bundled',
           preparation: { kind: 'ready' },
+          updatable: false,
+          version: null,
         },
       ],
       debug: { nextSetupResult: 'none', nextTurnResult: 'none' },

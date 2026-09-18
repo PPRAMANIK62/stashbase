@@ -12,7 +12,7 @@ import type { QueuedMessage } from '@/components/ui/input-message';
 import type { AgentCatalogPort } from '@/features/agent/application/ports';
 import type { AgentSessionRuntime } from '@/features/agent/application/session-runtime';
 import { honoredAccessMode } from '@/features/agent/domain/access';
-import { agentGate, agentLabel, type Agent } from '@/features/agent/domain/agent-catalog';
+import { agentGate, undescribedAgent, type Agent } from '@/features/agent/domain/agent-catalog';
 import { changedSource } from '@/features/agent/domain/file-change';
 import {
   agentSkills,
@@ -25,6 +25,7 @@ import { EMPTY_CHAT_PROMPTS } from '@/features/agent/domain/starters';
 import { useAgentAccess } from '@/features/agent/hooks/use-agent-access';
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
 import { useAgentInstructions } from '@/features/agent/hooks/use-agent-instructions';
+import { useAgentRuntimeUpdate } from '@/features/agent/hooks/use-agent-runtime-update';
 import { useRenameConversation } from '@/features/agent/hooks/use-conversation-history';
 import { useRotatingPrompt } from '@/features/agent/hooks/use-rotating-prompt';
 import { cn } from '@/lib/utils';
@@ -101,14 +102,8 @@ function ChatWorkspace({
   const readyAgent = gate.kind === 'ready' ? gate.agent : null;
   const preferences = useStore(runtime.preferences);
   const preferencesUnavailable = preferences.loading || Boolean(preferences.failure);
-  const selectedAgent = catalog.agents.find((agent) => agent.id === state.agent) ?? {
-    id: state.agent,
-    label: agentLabel(state.agent),
-    ready: false,
-    needsSignIn: false,
-    models: [],
-    abilities: { attachments: false, effort: false, models: false, modes: [], skills: false },
-  };
+  const selectedAgent =
+    catalog.agents.find((agent) => agent.id === state.agent) ?? undescribedAgent(state.agent);
   const access = useAgentAccess({
     runtime,
     agents: catalog.agents,
@@ -116,6 +111,7 @@ function ChatWorkspace({
     onSignIn,
     onRefresh: catalog.refresh,
   });
+  const runtimeUpdate = useAgentRuntimeUpdate(active, catalogPort, catalog.refresh);
   const activeTurn = agentTurnIsActive(state.connection);
   const busy = agentSessionIsBusy(active.store.getState());
   const notice = connectionNotice(state.connection);
@@ -209,6 +205,7 @@ function ChatWorkspace({
               onOpenSource={onOpenSource}
               onPermission={active.replyPermission}
               onRetry={active.retry}
+              runtimeUpdate={runtimeUpdate}
               sourceFor={sourceFor}
               transientFile={active.fileForTransient}
             />

@@ -38,6 +38,7 @@ import {
   agentScopesEqual,
   agentSessionIsBusy,
   agentSessionIsBlank,
+  agentTurnFailureIsRetryable,
   agentTurnIsActive,
   createAgentSessionState,
   transitionAgentSession,
@@ -241,8 +242,7 @@ export function createAgentSessionRuntime({
       );
       if (failure?.kind !== 'error' || failure.retryablePrompt === undefined) return false;
       if (current.connection.kind !== 'live') return false;
-      if (failure.failure && failure.failure !== 'network' && failure.failure !== 'rate-limit')
-        return false;
+      if (!agentTurnFailureIsRetryable(failure.failure)) return false;
       usage.start();
       const turn = ledger.turnFor(errorBlockId);
       const stale = staleContext(

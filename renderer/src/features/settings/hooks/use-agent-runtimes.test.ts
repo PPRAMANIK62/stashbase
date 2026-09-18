@@ -103,6 +103,25 @@ describe('useAgentRuntimes', () => {
     );
   });
 
+  it('updates an agent through its own updater and writes the response into the shared catalog cache', async () => {
+    const updated = catalog([
+      codex({ id: 'claude', label: 'Claude', preparation: { kind: 'ready' }, version: '2.1.276' }),
+    ]);
+    const prepareAgent = vi.fn(async () => updated);
+    const { queryClient, view } = await mount(
+      agentRuntimePort({ listAgents: emptyCatalog(), prepareAgent }),
+    );
+
+    act(() => view.result.current.update('claude'));
+
+    await waitFor(() =>
+      expect(prepareAgent).toHaveBeenCalledWith('claude', 'update', expect.anything()),
+    );
+    await waitFor(() =>
+      expect(queryClient.getQueryData(settingsQueryKeys.agentCatalog)).toEqual(updated),
+    );
+  });
+
   it('logs in an agent and writes the response into the shared catalog cache', async () => {
     const signedIn = catalog([codex({ preparation: { kind: 'ready' } })]);
     const prepareAgent = vi.fn(async () => signedIn);

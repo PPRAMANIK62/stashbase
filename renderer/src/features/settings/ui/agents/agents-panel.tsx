@@ -90,6 +90,7 @@ export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps)
 
   const onAction = (action: AgentRuntimeAction, runtime: AgentRuntime) => {
     if (action.kind === 'login') runtimes.login(runtime.id);
+    else if (action.kind === 'update') runtimes.update(runtime.id);
     else if (action.kind === 'install' || action.kind === 'retry') runtimes.install(runtime.id);
     else account.signIn();
   };

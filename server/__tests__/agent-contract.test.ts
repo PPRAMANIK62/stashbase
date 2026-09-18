@@ -105,9 +105,12 @@ test('capability discovery reports installed and unavailable native runtimes wit
     assert.equal(available.state, 'available');
     assert.equal(available.source, 'system');
     assert.equal(available.bootstrap.phase, 'idle');
+    assert.equal(available.version, null, 'an executable that cannot report a version is still discovered');
+    assert.equal(available.updatable, true, 'both native runtimes ship a verified in-place updater');
     const unavailable = runtimeDescriptorFor(adapter, null);
     assert.equal(unavailable.state, 'unavailable');
     assert.equal(unavailable.source, null);
+    assert.equal(unavailable.updatable, false);
     assert.equal(unavailable.installHint, expectedInstallHints[adapter.id]);
   }
 

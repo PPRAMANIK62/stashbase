@@ -84,6 +84,11 @@ export interface Agent {
   /** Runtime ownership. `bundled` ships with StashBase, `system` is a provider-owned
    * installation discovered on the user’s machine. */
   source?: 'bundled' | 'system' | null;
+  /** The installed runtime's own version string, when its executable reports
+   * one; null for a runtime that is missing or does not say. */
+  version?: string | null;
+  /** Whether StashBase can run this runtime's own updater in place. */
+  updatable?: boolean;
   bootstrap?: AgentBootstrapStatus;
   /** Full shell command the panel feeds to the shell once it's ready
    *  (e.g. `claude --theme light`). Built by the server from the agent

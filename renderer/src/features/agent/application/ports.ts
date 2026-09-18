@@ -32,7 +32,7 @@ export interface AgentCatalogPort {
   listAgents(signal: AbortSignal): Promise<AgentCatalog>;
   prepareAgent(
     id: AgentId,
-    action: 'bootstrap' | 'login',
+    action: 'bootstrap' | 'login' | 'update',
     signal: AbortSignal,
   ): Promise<AgentCatalog>;
 }
