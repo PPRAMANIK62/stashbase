@@ -236,6 +236,45 @@ test('Claude permission callback asks for mutations and unknown tools, and settl
   assert.equal((await closing).behavior, 'deny');
 });
 
+test('Claude clarifying questions return the reader\'s answers as the question tool\'s input, and no other tool takes them', async (t) => {
+  const ws = new FakeAgentWebSocket();
+  let canUseTool: CanUseTool | undefined;
+  const session = new AgentSession(
+    ws as unknown as WebSocket, 'question-window', undefined, undefined, 'default', undefined, undefined,
+    ((request: { prompt: AsyncIterable<unknown>; options: { canUseTool: CanUseTool } }) => {
+      canUseTool = request.options.canUseTool;
+      return streamingClaudeQuery(request.prompt);
+    }) as never,
+    () => '/fake/claude', undefined, process.cwd(),
+  );
+  t.after(() => session.dispose());
+  session.begin();
+  await settle();
+  assert.ok(canUseTool);
+  const permissionEvents = () => ws.sent.map((s) => JSON.parse(s)).filter((event) => event.t === 'permission');
+  const questions = [{
+    question: 'Which format?', header: 'Format', multiSelect: false,
+    options: [{ label: 'Summary', description: 'Brief' }, { label: 'Detailed', description: 'Full' }],
+  }];
+  const answers = { 'Which format?': 'Summary' };
+  const asked = canUseTool('AskUserQuestion', { questions }, { signal: new AbortController().signal, toolUseID: 'ask' });
+  await settle();
+  const ask = permissionEvents().at(-1);
+  assert.equal(ask.name, 'AskUserQuestion');
+  assert.deepEqual(ask.input, { questions });
+  ws.emit('message', JSON.stringify({ t: 'permission-reply', id: ask.id, allow: true, answers }));
+  const answered = await asked;
+  assert.equal(answered.behavior, 'allow');
+  if (answered.behavior === 'allow') assert.deepEqual(answered.updatedInput, { questions, answers });
+  const command = canUseTool('Bash', { command: 'ls' }, { signal: new AbortController().signal, toolUseID: 'bash' });
+  await settle();
+  const run = permissionEvents().at(-1);
+  ws.emit('message', JSON.stringify({ t: 'permission-reply', id: run.id, allow: true, answers }));
+  const allowed = await command;
+  assert.equal(allowed.behavior, 'allow');
+  if (allowed.behavior === 'allow') assert.deepEqual(allowed.updatedInput, { command: 'ls' });
+});
+
 function claudeRetryMessage(): SDKMessage {
   return {
     type: 'system',

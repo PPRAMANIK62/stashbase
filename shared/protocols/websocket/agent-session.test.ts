@@ -17,6 +17,15 @@ test("agent socket schemas accept lifecycle, transcript, and scope-retirement ev
     assert.equal(agentServerEventSchema.safeParse(event).success, true);
   }
   assert.deepEqual(agentClientEventSchema.parse({ t: "close" }), { t: "close" });
+  assert.equal(
+    agentClientEventSchema.safeParse({
+      t: "permission-reply",
+      id: "ask-1",
+      allow: true,
+      answers: { "Which format?": "Summary, Detailed" },
+    }).success,
+    true,
+  );
 });
 
 test("agent socket schemas reject contradictory scope and unrecognized wire events", () => {
@@ -31,6 +40,15 @@ test("agent socket schemas reject contradictory scope and unrecognized wire even
   );
   assert.equal(agentServerEventSchema.safeParse({ t: "mystery" }).success, false);
   assert.equal(agentClientEventSchema.safeParse({ t: "close", extra: true }).success, false);
+  assert.equal(
+    agentClientEventSchema.safeParse({
+      t: "permission-reply",
+      id: "ask-1",
+      allow: true,
+      answers: { "Which format?": 1 },
+    }).success,
+    false,
+  );
   assert.equal(
     agentSessionConnectSchema.safeParse({ agent: "codex", access: "auto" }).success,
     false,

@@ -14,7 +14,7 @@
  * Wire protocol (line-delimited JSON over one ws):
  *   client → server:
  *     { t: "prompt", text }
- *     { t: "permission-reply", id, allow, always? }
+ *     { t: "permission-reply", id, allow, always?, answers? }  // answers = clarifying-question replies
  *     { t: "set-model", model? }                      // next-turn model where supported
  *     { t: "set-mode", mode }                           // switch permission mode live
  *     { t: "interrupt" }
@@ -189,6 +189,20 @@ function needsPrompt(name: string): boolean {
   return !LOW_RISK_TOOLS.has(name);
 }
 
+/** The SDK's clarifying-question tool: its `canUseTool` round trip is how the
+ *  reader's answers reach the model. */
+const QUESTION_TOOL = 'AskUserQuestion';
+
+/** Answers ride the allow reply as the question tool's updated input, keyed
+ *  by question text the way the SDK reads them. Only that tool takes them;
+ *  a reply carrying answers for any other tool runs it on its original input. */
+function answeredInput(p: Pending, answers: unknown): Record<string, unknown> {
+  if (p.name !== QUESTION_TOOL || !answers || typeof answers !== 'object' || Array.isArray(answers)) {
+    return p.input;
+  }
+  return { ...p.input, answers };
+}
+
 type AgentReadableDerivedFormat = 'pdf' | 'docx';
 
 function agentReadableDerivedFormat(format: string | null): AgentReadableDerivedFormat | null {
@@ -270,6 +284,7 @@ class Pushable<T> implements AsyncIterable<T> {
 
 interface Pending {
   resolve: (r: PermissionResult) => void;
+  name: string;
   input: Record<string, unknown>;
   suggestions?: PermissionUpdate[];
   cleanup?: () => void;
@@ -690,6 +705,7 @@ export class AgentSession implements AttributedAgentSession {
       opts.signal.addEventListener('abort', onAbort, { once: true });
       this.pending.set(id, {
         resolve,
+        name,
         input,
         suggestions: opts.suggestions,
         cleanup: () => opts.signal.removeEventListener('abort', onAbort),
@@ -740,7 +756,7 @@ export class AgentSession implements AttributedAgentSession {
         if (msg.allow) {
           p.resolve({
             behavior: 'allow',
-            updatedInput: p.input,
+            updatedInput: answeredInput(p, msg.answers),
             ...(msg.always && p.suggestions ? { updatedPermissions: p.suggestions } : {}),
           });
         } else {

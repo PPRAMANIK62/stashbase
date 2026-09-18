@@ -75,6 +75,7 @@ describe('conversation recovery and pending work', () => {
       id: 'permission',
       allow: false,
       always: null,
+      answers: null,
     });
     emit({ kind: 'turn-ended', isError: false });
     await Promise.resolve();

@@ -226,7 +226,17 @@ describe('Agent session API', () => {
       connection.send?.({
         allow: true,
         always: null,
+        answers: null,
         id: 'permission-1',
+        kind: 'reply-permission',
+      }),
+    ).toBe(true);
+    expect(
+      connection.send?.({
+        allow: true,
+        always: null,
+        answers: { 'Which format?': 'Summary' },
+        id: 'permission-2',
         kind: 'reply-permission',
       }),
     ).toBe(true);
@@ -264,6 +274,12 @@ describe('Agent session API', () => {
     ]);
     expect(sent).toEqual([
       JSON.stringify({ t: 'permission-reply', id: 'permission-1', allow: true }),
+      JSON.stringify({
+        t: 'permission-reply',
+        id: 'permission-2',
+        allow: true,
+        answers: { 'Which format?': 'Summary' },
+      }),
     ]);
   });
 });

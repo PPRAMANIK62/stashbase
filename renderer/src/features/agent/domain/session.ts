@@ -227,7 +227,12 @@ export function transitionAgentSession(
     case 'reply-permission':
       return {
         ...state,
-        transcript: replyToolPermission(state.transcript, action.toolUseId, action.allow),
+        transcript: replyToolPermission(
+          state.transcript,
+          action.toolUseId,
+          action.allow,
+          action.answers,
+        ),
       };
     case 'settle-turn':
       return {

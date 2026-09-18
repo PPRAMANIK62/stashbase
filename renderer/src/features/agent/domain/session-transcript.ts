@@ -222,15 +222,20 @@ export function requestToolPermission(
   return next;
 }
 
+/** The reader's decision on a pending call. Answers to a clarifying question
+ *  ride along on the call's input, the way the runtime carries them, so the
+ *  settled row can show what was answered. */
 export function replyToolPermission(
   transcript: readonly AgentTranscriptBlock[],
   toolUseId: string,
   allow: boolean,
+  answers?: Record<string, string>,
 ): AgentTranscriptBlock[] {
   return transcript.map((block) =>
     block.kind === 'tool' && block.id === toolUseId && block.status === 'awaiting'
       ? {
           ...block,
+          ...(answers ? { input: { ...block.input, answers } } : {}),
           permissionId: undefined,
           status: allow ? ('running' as const) : ('denied' as const),
         }

@@ -49,6 +49,8 @@ export const agentClientEventSchema = z.discriminatedUnion("t", [
       id: boundedText(512),
       allow: z.boolean(),
       always: z.boolean().optional(),
+      // Replies to an Agent's clarifying questions, keyed by question text.
+      answers: z.record(boundedText(4_000), boundedText(16_384)).optional(),
     })
     .strict(),
   z.object({ t: z.literal("interrupt") }).strict(),

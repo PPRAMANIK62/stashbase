@@ -9,6 +9,7 @@ import {
   CircleAlert,
   FileText,
   FolderOpen,
+  MessageCircleQuestionMark,
   Search,
   Terminal,
   Wrench,
@@ -27,6 +28,7 @@ import {
   fileChangesForTool,
   settledFileChanges,
 } from '@/features/agent/domain/file-change';
+import { agentQuestionAnswers, agentQuestions } from '@/features/agent/domain/question';
 import type { AgentTranscriptBlock } from '@/features/agent/domain/session';
 import { focusRing } from '@/lib/focus-ring';
 import { useShape } from '@/lib/shape-context';
@@ -34,7 +36,9 @@ import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { holdsTextSelection } from '@/shared/utils/click-intent';
 
+import { AgentDecisionCard, AgentDecisionStatus } from './decision-card';
 import { AgentChangedFiles, AgentFileChangeView } from './file-change';
+import { AgentQuestionSummary } from './question-card';
 import {
   agentActivitySummary,
   agentPermissionTitle,
@@ -42,6 +46,7 @@ import {
   agentToolPayload,
   agentToolResult,
   agentToolRow,
+  STATUS_LABELS,
   type AgentToolBlock,
 } from './tool-presentation';
 
@@ -50,15 +55,6 @@ type ToolIcon = ComponentType<{
   className?: string;
   strokeWidth?: number;
 }>;
-
-const STATUS_LABELS: Record<AgentToolBlock['status'], string> = {
-  awaiting: 'Waiting for approval',
-  cancelled: 'Cancelled',
-  denied: 'Denied',
-  done: 'Done',
-  error: 'Failed',
-  running: 'Running',
-};
 
 function iconFor(tool: AgentToolBlock): ToolIcon {
   switch (agentToolKind(tool)) {
@@ -69,6 +65,8 @@ function iconFor(tool: AgentToolBlock): ToolIcon {
       return FileText;
     case 'list':
       return FolderOpen;
+    case 'question':
+      return MessageCircleQuestionMark;
     case 'read':
       return FileText;
     case 'search':
@@ -85,7 +83,8 @@ function AgentToolPayload({ indent = true, tool }: { indent?: boolean; tool: Age
   const changes = fileChangesForTool(tool.name, tool.input).filter(
     (change) => change.text !== undefined || change.patch !== undefined,
   );
-  const payload = changes.length > 0 ? null : agentToolPayload(tool.input);
+  const questions = agentQuestions(tool.name, tool.input);
+  const payload = changes.length > 0 || questions ? null : agentToolPayload(tool.input);
   const result = tool.result ? agentToolResult(tool.result) : null;
   return (
     <div
@@ -97,6 +96,9 @@ function AgentToolPayload({ indent = true, tool }: { indent?: boolean; tool: Age
       {changes.map((change) => (
         <AgentFileChangeView change={change} key={fileChangeKey(change)} />
       ))}
+      {questions && (
+        <AgentQuestionSummary answers={agentQuestionAnswers(tool.input)} questions={questions} />
+      )}
       {payload !== null && (
         <pre
           aria-label={`${tool.name} arguments`}
@@ -287,7 +289,6 @@ export function AgentPermissionCard({
   tool: AgentToolBlock;
   onReply(toolUseId: string, permissionId: string, allow: boolean): boolean;
 }) {
-  const shape = useShape();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const permissionId = tool.permissionId;
   const reply = (allow: boolean) => {
@@ -295,48 +296,24 @@ export function AgentPermissionCard({
     requestAnimationFrame(() => headingRef.current?.focus());
   };
   return (
-    <div
-      className={cn(
-        'relative flex min-h-[60px] min-w-0 flex-col overflow-hidden border border-border bg-surface-2 pb-4',
-        shape.panel,
-      )}
+    <AgentDecisionCard
+      heading={agentPermissionTitle(tool)}
+      headingRef={headingRef}
+      icon={CircleAlert}
     >
-      <div className="p-3">
-        <div className="flex items-start gap-2">
-          <CircleAlert
-            aria-hidden
-            className="mt-0.5 size-4 shrink-0 text-decision"
-            strokeWidth={1.5}
-          />
-          <h3
-            className="text-[13px] font-medium text-foreground outline-none"
-            ref={headingRef}
-            tabIndex={-1}
-          >
-            {agentPermissionTitle(tool)}
-          </h3>
+      <AgentToolPayload indent={false} tool={tool} />
+      {permissionId ? (
+        <div className="mt-1 flex justify-end gap-2">
+          <Button leadingIcon={Ban} onClick={() => reply(false)} size="compact" variant="tertiary">
+            Reject
+          </Button>
+          <Button leadingIcon={Check} onClick={() => reply(true)} size="compact">
+            Allow
+          </Button>
         </div>
-        <AgentToolPayload indent={false} tool={tool} />
-        {permissionId ? (
-          <div className="mt-1 flex justify-end gap-2">
-            <Button
-              leadingIcon={Ban}
-              onClick={() => reply(false)}
-              size="compact"
-              variant="tertiary"
-            >
-              Reject
-            </Button>
-            <Button leadingIcon={Check} onClick={() => reply(true)} size="compact">
-              Allow
-            </Button>
-          </div>
-        ) : (
-          <p className="mt-1 text-right text-[12px] text-muted-foreground" role="status">
-            {STATUS_LABELS[tool.status]}
-          </p>
-        )}
-      </div>
-    </div>
+      ) : (
+        <AgentDecisionStatus status={tool.status} />
+      )}
+    </AgentDecisionCard>
   );
 }

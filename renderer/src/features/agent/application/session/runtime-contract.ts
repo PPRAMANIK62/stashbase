@@ -15,6 +15,7 @@ import type { AgentContextItem } from '@/features/agent/domain/context';
 import type { AgentHistoryEntry } from '@/features/agent/domain/conversation-history';
 import type { AgentModel } from '@/features/agent/domain/runtime-catalog';
 import type { AgentId, AgentScope, AgentSessionState } from '@/features/agent/domain/session';
+import type { AgentPermissionDecision } from '@/features/agent/domain/session-command';
 import type { CapturedScope } from '@/shared/runtime/scope-guard';
 
 import type { AgentSendResult, AgentSessionEnvironment } from './dispatch';
@@ -43,11 +44,14 @@ export interface AgentSessionRuntime {
   confirmOutcome(): void;
   changeAgent(agent: AgentId): boolean;
   editQueued(id: string): boolean;
+  /** Answers one pending request. `decision` adds what a reader can say
+   *  beyond allow or deny: remember the approval, or the replies to a
+   *  clarifying question. */
   replyPermission(
     toolUseId: string,
     permissionId: string,
     allow: boolean,
-    always?: boolean,
+    decision?: AgentPermissionDecision,
   ): boolean;
   rename(title: string): void;
   reconnect(): void;

@@ -59,6 +59,23 @@ describe('Agent transcript edits', () => {
     expect(late[0]).not.toHaveProperty('result');
   });
 
+  it('keeps the answers the reader gave on the call they answer', () => {
+    const asked = requestToolPermission([], {
+      id: 'perm-2',
+      input: { questions: [] },
+      name: 'AskUserQuestion',
+      title: null,
+      toolUseId: 'ask-1',
+    });
+    const answered = replyToolPermission(asked, 'ask-1', true, { 'Which?': 'This one' });
+
+    expect(answered[0]).toMatchObject({
+      input: { answers: { 'Which?': 'This one' }, questions: [] },
+      permissionId: undefined,
+      status: 'running',
+    });
+  });
+
   it('records a native diff once and keeps the same transcript on a repeat', () => {
     const change = {
       additions: 2,

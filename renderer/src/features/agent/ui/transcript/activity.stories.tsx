@@ -2,9 +2,11 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 
 import { AGENT_ACCESS_MODES, type AgentAccessMode } from '@/features/agent/domain/access';
+import { agentQuestions } from '@/features/agent/domain/question';
 import { AgentPermissionMode } from '@/features/agent/ui/composer/permission-mode';
 
 import { AgentActivityGroup, AgentPermissionCard } from './activity';
+import { AgentQuestionCard } from './question-card';
 import type { AgentToolBlock } from './tool-presentation';
 
 const tools: AgentToolBlock[] = [
@@ -165,6 +167,81 @@ function FileChangeHarness() {
   );
 }
 
+const questionAsk: AgentToolBlock = {
+  id: 'question-tool',
+  input: {
+    questions: [
+      {
+        header: 'Publish?',
+        multiSelect: false,
+        options: [
+          {
+            description: 'Move the draft into the blog folder, commit, and push.',
+            label: 'Publish now',
+          },
+          { description: 'Keep it in drafts until you have read it.', label: 'Hold the draft' },
+        ],
+        question: 'The post is written. Publish it to the site now?',
+      },
+      {
+        header: 'Sections',
+        multiSelect: true,
+        options: [
+          { description: 'A short lead-in.', label: 'Introduction' },
+          { description: 'A closing summary.', label: 'Conclusion' },
+          { description: 'Links and sources.', label: 'References' },
+        ],
+        question: 'Which sections should the post keep?',
+      },
+    ],
+  },
+  kind: 'tool',
+  name: 'AskUserQuestion',
+  permissionId: 'permission-3',
+  permissionRequested: true,
+  permissionTitle: null,
+  status: 'awaiting',
+};
+
+// The card while the reader answers, and the same call settled below it.
+function QuestionHarness() {
+  const [decision, setDecision] = useState<AgentToolBlock>(questionAsk);
+  return (
+    <div className="w-[34rem] space-y-5">
+      <AgentQuestionCard
+        onReply={(_toolUseId, _permissionId, allow, reply) => {
+          setDecision((tool) => ({
+            ...tool,
+            input: reply ? { ...tool.input, answers: reply.answers } : tool.input,
+            permissionId: undefined,
+            status: allow ? 'running' : 'denied',
+          }));
+          return true;
+        }}
+        questions={agentQuestions(questionAsk.name, questionAsk.input) ?? []}
+        tool={decision}
+      />
+      <AgentActivityGroup
+        steps={[
+          {
+            ...questionAsk,
+            id: 'question-answered',
+            input: {
+              ...questionAsk.input,
+              answers: {
+                'The post is written. Publish it to the site now?': 'Hold the draft',
+                'Which sections should the post keep?': 'Introduction, Conclusion',
+              },
+            },
+            permissionId: undefined,
+            status: 'done',
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
 function AgentActivityHarness({ compact = false }: { compact?: boolean }) {
   const [mode, setMode] = useState<AgentAccessMode>('auto');
   const [decision, setDecision] = useState<AgentToolBlock>(permission);
@@ -202,6 +279,10 @@ export const Standard: Story = {};
 
 export const FileChanges: Story = {
   render: () => <FileChangeHarness />,
+};
+
+export const Questions: Story = {
+  render: () => <QuestionHarness />,
 };
 
 export const FailedAttemptThenSuccess: Story = {

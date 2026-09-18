@@ -3,11 +3,30 @@
  *  permission ask, and the bounded arguments and result behind an opened row.
  *  Wording only — whether a call is shown at all, and which group is still
  *  live, are decided by the surfaces in `activity.tsx`. */
+import { agentQuestions, QUESTION_TOOL_NAME } from '@/features/agent/domain/question';
 import type { AgentTranscriptBlock } from '@/features/agent/domain/session';
 import { basePathName } from '@/shared/utils/file-path';
 
 export type AgentToolBlock = Extract<AgentTranscriptBlock, { kind: 'tool' }>;
-export type AgentToolKind = 'read' | 'list' | 'search' | 'command' | 'write' | 'edit' | 'other';
+export type AgentToolKind =
+  | 'read'
+  | 'list'
+  | 'search'
+  | 'command'
+  | 'write'
+  | 'edit'
+  | 'question'
+  | 'other';
+
+/** What a call's status reads as, on its row and on a decided card. */
+export const STATUS_LABELS: Record<AgentToolBlock['status'], string> = {
+  awaiting: 'Waiting for approval',
+  cancelled: 'Cancelled',
+  denied: 'Denied',
+  done: 'Done',
+  error: 'Failed',
+  running: 'Running',
+};
 
 const PAYLOAD_LINE_LIMIT = 14;
 const PAYLOAD_CHARACTER_LIMIT = 1_200;
@@ -32,6 +51,7 @@ function clipText(value: string, characterLimit: number): string {
 }
 
 export function agentToolKind(tool: AgentToolBlock): AgentToolKind {
+  if (tool.name === QUESTION_TOOL_NAME) return 'question';
   if (tool.name === 'Bash' || /command|shell|exec/i.test(tool.name)) return 'command';
   if (/read_file$/i.test(tool.name) || /^read$/i.test(tool.name)) return 'read';
   if (/write_file$/i.test(tool.name) || /^write$/i.test(tool.name)) return 'write';
@@ -76,6 +96,12 @@ export function agentToolRow(tool: AgentToolBlock): {
         target: typeof command === 'string' ? command.slice(0, 120) : undefined,
         verb: 'Ran',
       };
+    }
+    case 'question': {
+      const first = agentQuestions(tool.name, tool.input)?.[0];
+      return first
+        ? { target: first.question.slice(0, 120), verb: 'Asked' }
+        : { verb: 'Asked a question' };
     }
     case 'other':
       return { verb: tool.name };
@@ -164,6 +190,7 @@ export function agentActivitySummary(tools: AgentToolBlock[], active: boolean): 
       'Edited file',
       'Edited files',
     ),
+    countLabel(counts.get('question'), 'Asked a question', 'Asked questions'),
     countLabel(counts.get('other'), 'Used tool', 'Used tools'),
   ].filter((label): label is string => Boolean(label));
   const summary = labels.length > 0 ? labels.join(', ') : 'Worked';

@@ -68,7 +68,9 @@ test('Agent effort identifiers stay runtime-owned while the URL boundary remains
 test('Shared Agent Contract retains lifecycle, streaming, approval, session, and queue event vocabulary', () => {
   const clientEvents: AgentClientEvent[] = [
     { t: 'prompt', text: 'first', titleHint: 'Title' }, { t: 'steer', id: 'queued', text: 'follow-up' },
-    { t: 'permission-reply', id: 'approval', allow: true, always: true }, { t: 'interrupt' },
+    { t: 'permission-reply', id: 'approval', allow: true, always: true },
+    { t: 'permission-reply', id: 'question', allow: true, answers: { 'Which format?': 'Summary' } },
+    { t: 'interrupt' },
     { t: 'set-model', model: 'native-model' }, { t: 'set-mode', mode: 'plan' },
     { t: 'close' },
   ];
@@ -86,7 +88,7 @@ test('Shared Agent Contract retains lifecycle, streaming, approval, session, and
     { t: 'exit', message: 'runtime stopped unexpectedly' },
     { t: 'exit', reason: 'scope-removed', folder: '/Users/me/Projects/Research' },
   ];
-  assert.equal(clientEvents.length, 7);
+  assert.equal(clientEvents.length, 8);
 
 });
 

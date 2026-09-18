@@ -11,7 +11,9 @@ import { ChatMessage, ChatMessageAction } from '@/components/ui/chat-message';
 import { FileTypeIcon } from '@/components/ui/file-type-icon';
 import { ThinkingIndicator } from '@/components/ui/thinking-indicator';
 import { segmentFileMentions, type AgentContextItem } from '@/features/agent/domain/context';
+import { agentQuestions } from '@/features/agent/domain/question';
 import { latestUserBlock, type AgentTranscriptBlock } from '@/features/agent/domain/session';
+import type { AgentPermissionDecision } from '@/features/agent/domain/session-command';
 import {
   dayLabel,
   promptTimeLabel,
@@ -34,6 +36,7 @@ import {
   type AgentActivityStep,
 } from './activity';
 import { AgentMarkdown } from './markdown';
+import { AgentQuestionCard } from './question-card';
 import { TurnFailure } from './turn-failure';
 
 const TRANSCRIPT_PAGE_SIZE = 200;
@@ -159,7 +162,12 @@ const TranscriptBlock = memo(function TranscriptBlock({
   onOpenExternal(href: string): void;
   onOpenSource?: ((source: SourceReference) => void) | undefined;
   sourceFor?: ((path: string) => SourceReference | null) | undefined;
-  onPermission(toolUseId: string, permissionId: string, allow: boolean): boolean;
+  onPermission(
+    toolUseId: string,
+    permissionId: string,
+    allow: boolean,
+    decision?: AgentPermissionDecision,
+  ): boolean;
   onRetry(errorBlockId: string): boolean;
   /** When the prompt a closing reply answers was sent, for the duration. */
   promptAt: number | undefined;
@@ -259,6 +267,10 @@ const TranscriptBlock = memo(function TranscriptBlock({
   if (block.kind === 'error') {
     return <TurnFailure block={block} onRetry={onRetry} runtimeUpdate={runtimeUpdate} />;
   }
+  const questions = agentQuestions(block.name, block.input);
+  if (questions) {
+    return <AgentQuestionCard onReply={onPermission} questions={questions} tool={block} />;
+  }
   return <AgentPermissionCard onReply={onPermission} tool={block} />;
 });
 
@@ -283,7 +295,12 @@ export const AgentTranscript = memo(function AgentTranscript({
   /** Opens a file the Agent changed beside the chat, without selecting it
    *  on the Agent's behalf. */
   onOpenSource?: ((source: SourceReference) => void) | undefined;
-  onPermission(toolUseId: string, permissionId: string, allow: boolean): boolean;
+  onPermission(
+    toolUseId: string,
+    permissionId: string,
+    allow: boolean,
+    decision?: AgentPermissionDecision,
+  ): boolean;
   onRetry(errorBlockId: string): boolean;
   /** The in-place update of the conversation's runtime, offered on a turn
    *  the runtime was too old for. Absent where nothing can run one. */
@@ -298,9 +315,9 @@ export const AgentTranscript = memo(function AgentTranscript({
   // decided tool into the activity group that now holds it.
   const [decidedToolId, setDecidedToolId] = useState<string | null>(null);
   const decide = useCallback(
-    (toolUseId: string, permissionId: string, allow: boolean) => {
-      const accepted = onPermission(toolUseId, permissionId, allow);
-      if (accepted) setDecidedToolId(toolUseId);
+    (...decision: Parameters<typeof onPermission>) => {
+      const accepted = onPermission(...decision);
+      if (accepted) setDecidedToolId(decision[0]);
       return accepted;
     },
     [onPermission],

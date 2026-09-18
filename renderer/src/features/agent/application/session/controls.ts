@@ -43,7 +43,7 @@ export function createSessionControls({
   let stopTimer: ReturnType<typeof setTimeout> | undefined;
   return {
     replyPermission(
-      ...[toolUseId, permissionId, allow, always]: Parameters<
+      ...[toolUseId, permissionId, allow, decision]: Parameters<
         AgentSessionRuntime['replyPermission']
       >
     ) {
@@ -58,13 +58,17 @@ export function createSessionControls({
       ) {
         return false;
       }
+      const answers = decision?.answers ?? null;
       const sent = transport.send({
         allow,
-        always: always ?? null,
+        always: decision?.always ?? null,
+        answers,
         id: permissionId,
         kind: 'reply-permission',
       });
-      if (sent) transition({ allow, toolUseId, kind: 'reply-permission' });
+      if (sent) {
+        transition({ allow, toolUseId, kind: 'reply-permission', ...(answers ? { answers } : {}) });
+      }
       return sent;
     },
     setAccessMode(mode: Parameters<AgentSessionRuntime['setAccessMode']>[0]) {

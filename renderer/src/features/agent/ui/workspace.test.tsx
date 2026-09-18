@@ -203,6 +203,7 @@ describe('Agent workspace', () => {
     expect(sent.at(-1)).toEqual({
       allow: true,
       always: null,
+      answers: null,
       id: 'permission-1',
       kind: 'reply-permission',
     });

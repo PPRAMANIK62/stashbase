@@ -121,6 +121,7 @@ function clientEvent(command: AgentSessionCommand): AgentClientEvent {
         id: command.id,
         allow: command.allow,
         ...(command.always === null ? {} : { always: command.always }),
+        ...(command.answers === null ? {} : { answers: command.answers }),
       };
     case 'select-model':
       return { t: 'set-model', ...(command.model === null ? {} : { model: command.model }) };

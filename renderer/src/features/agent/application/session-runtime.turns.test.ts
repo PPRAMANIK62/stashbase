@@ -223,7 +223,7 @@ describe('AgentSessionRuntime turns', () => {
     expect(runtime.replyPermission('tool-1', 'permission-1', false)).toBe(true);
     expect(runtime.replyPermission('tool-1', 'permission-1', true)).toBe(false);
     expect(test.sent).toEqual([
-      { allow: false, always: null, id: 'permission-1', kind: 'reply-permission' },
+      { allow: false, always: null, answers: null, id: 'permission-1', kind: 'reply-permission' },
     ]);
     expect(runtime.store.getState().transcript).toEqual([
       expect.objectContaining({

@@ -234,7 +234,12 @@ type AgentSessionLocalAction =
     }
   | { kind: 'append-text'; id: string; delta: string }
   | { kind: 'append-thinking'; id: string; delta: string }
-  | { kind: 'reply-permission'; toolUseId: string; allow: boolean }
+  | {
+      kind: 'reply-permission';
+      toolUseId: string;
+      allow: boolean;
+      answers?: Record<string, string> | undefined;
+    }
   | { kind: 'append-notice'; id: string; message: string }
   | {
       /** The wire's turn end, stamped with when it settled so the reply that
