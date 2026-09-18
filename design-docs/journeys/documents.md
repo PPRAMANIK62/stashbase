@@ -15,6 +15,8 @@ source mutations, saving, and release guarantees.
    the current project and refreshes the list without taking document focus.
 3. Read/edit and move between documents, outline, search, and Agent assistance.
    Commands act on the visible surface. Opening a document never attaches it to Chat.
+   Review a proposed Markdown revision in the prose, accepting or rejecting each
+   change or the remaining set. The Chat card reflects the same review.
 4. Return to live work with edits, undo, selection, and reading position intact.
    Relaunch restores kept tabs from saved files and reports missing files individually.
 

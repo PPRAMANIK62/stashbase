@@ -98,6 +98,12 @@ preview, content editing, and rename/delete are separate permissions.
   Structured edits splice source ranges; replacements treat dollar sequences
   literally. Invalid UTF-8 is never rewritten lossily. Agent text writes reject
   unintended control bytes without consuming valid literal backslashes.
+- Proposals are host state, never disk state. Parking takes the source's transaction
+  so a proposal cannot be born against a version that already moved. File moves
+  remap pending paths; folder rename, deletion and project removal retire proposals
+  they orphan. A proposal is handed
+  to one window and forgotten, so delivery is at most once and a failed handoff is
+  reported to the reader rather than retried.
 - Rename/move/delete validate before cancelling work, await native-handle release,
   mutate, retire current AppData-derived/index identity, then rediscover and notify.
   Retired extraction filenames never authorize sibling-file migration or deletion. Generic
@@ -285,9 +291,15 @@ stable status without download, retry, or a new durable demand latch.
   identity. No catalog-order default or global CLI rewrite; active turns freeze
   changes. Skills use native invocation, not concatenated skill-file contents.
 - Pending approvals require the exact request id; abort/disposal denies them.
-  Clarifying-question answers ride that reply and become only the question
-  tool's updated input; every other tool runs on its original input.
-  Read/orientation/reindex may use the low-risk path. Edit policy grants only its
+  Read/orientation/reindex may use the low-risk path, and so does proposing a
+  revision, which reaches no file: the reader's per-change accept is the approval,
+  and prompting first would freeze the turn for the length of a human read. That
+  bypass buys its own guards, because the prompt was also the throttle. A proposal
+  is confined to the caller's own project by the handler rather than by any
+  transport. Built-in sessions use their bound folder; external MCP callers must
+  name an exact registered folder. A caller with neither is refused. Proposals are
+  bounded per folder by count, bytes and age. Codex excludes plan mode, whose promise is that the turn
+  leaves nothing to undo. Edit policy grants only its
   bounded writes; move/delete/commands/network/broader access require their own
   authority. `create_project` needs an explicit request or visible approval.
 - Codex modes use on-request approval with mode-specific sandbox/review policy;

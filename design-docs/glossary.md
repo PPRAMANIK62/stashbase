@@ -28,8 +28,8 @@ types. Format capabilities determine whether its body can be edited.
 
 ## Document-specific diff
 
-Inline prose revision with individually reviewable suggestions; **coming soon**.
-It is distinct from current file/conflict comparisons and Agent action approval.
+Inline prose revision with individually reviewable suggestions in Markdown.
+It is distinct from file/conflict comparisons and Agent action approval.
 See [Project Files](capabilities/project-files.md#document-specific-diff).
 
 ## Active-folder workspace

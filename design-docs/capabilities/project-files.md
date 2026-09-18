@@ -77,11 +77,24 @@ recoverable work. Rollback must not replace newer user or external changes.
 
 ## Document-specific Diff
 
-**Coming soon:** review prose suggestions inline while retaining document structure,
-with red strikethrough deletions, green additions, and individual or whole-set
-accept/reject. Current file diffs and save-conflict comparisons do not implement it.
-Supported formats, segmentation, suggestion persistence, and save/conflict
-integration remain undecided.
+An Agent can propose a revision to an existing Markdown document without writing
+it. The reader sees deletions struck through and additions highlighted in the
+document's prose. Each change has Accept and Reject; Accept all and Reject all
+resolve the remaining set. The conversation names the document and shows the
+same remaining count and whole-set actions as the document.
+
+The proposal is temporary document state. Rejecting every change leaves the
+source byte-identical. Accepting changes edits the live document and uses its
+ordinary versioned save path. A proposal against an older source version is
+refused after a fresh source check; a proposal handed to a window is consumed once, and failed pickup is
+reported rather than silently retried. A new proposal cannot replace a review
+already open on that document.
+
+Markdown frontmatter is outside the prose editor. A proposal that changes it is
+refused with a visible reason; its metadata is never silently omitted from a review.
+
+File diffs, save-conflict comparisons, and Agent tool approvals have their own
+flows. Other editable formats currently have no inline revision surface.
 
 ## Related Journeys
 

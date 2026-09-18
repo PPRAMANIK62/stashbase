@@ -17,8 +17,8 @@ Tests own fixtures and exact assertions. This is not a source inventory or a rev
 **Covered** requires decisive evidence for every Required result. **Partial**
 means some results lack it. **Release-dependent** reserves named external or
 packaged checks. **Gap** identifies contradicted or unproven behavior. These
-labels concern evidence, not feature completion; document-specific diff remains
-outside current completion claims. A broad command or passing count is not proof.
+labels concern evidence, not feature completion. A broad command or passing count is
+not proof.
 
 Format evidence follows the [Documents capability matrix](../design-docs/capabilities/project-files.md#format-capability-matrix):
 editable prose/structured text, preview-only text, prepared binary documents,
@@ -254,13 +254,17 @@ The [Documents design](../design-docs/journeys/documents.md) owns navigation, co
 and recovery behavior; the evidence below establishes its exercised paths.
 
 **Implementation:** Renderer: `renderer/src/features/documents/ui/source/registry.tsx`, `renderer/src/features/documents/application/document-runtime.ts`, `renderer/src/features/documents/ui/markdown/document.tsx`.
+Inline review: `renderer/src/features/documents/domain/revision.ts`,
+`renderer/src/features/documents/ui/markdown/use-revision-review.tsx`, and
+`renderer/src/features/documents/hooks/use-revision-proposals.ts`.
 A save refused against a version a deleted file no longer has, whose reload confirms
 the source is gone, enters the document's `detached` state and stops autosave.
 `application/draft-settlement.ts` turns a close or a release of such a tab into the
 question rendered by `ui/workspace/discard-draft-dialog.tsx`, and `document-runtime.ts`
 owns the explicit restore, which re-attempts the ordinary save before creating the file
 so a source that came back is compared instead of overwritten.
-Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`.
+Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
+`server/document-revisions.ts`, `server/routes/document-revisions.ts`.
 
 **Status:** Release-dependent.
 
@@ -292,6 +296,13 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`.
   rename rebinding, immediate Markdown publication, and undo after six other
   kept Markdown editors. No Agent/provider fixture was needed. The source files
   and visible editor contents were checked; this was not a packaged release.
+- **Inline revision runtime pass (2026-09-18):** the built renderer in Electron
+  opened an isolated Markdown project on the X11 display. A controlled
+  window-origin `suggest_edits` request left the Plan.md source unchanged on disk, then
+  its Documents tab showed one inline deletion/insertion and the whole-review
+  controls. The dark desktop composition was inspected by eye with both Chat
+  and Documents visible. Accept all saved the exact proposed text to disk.
+  This pass did not use a live Agent provider or a packaged build.
 - **AI Eval:** not required.
 - **Release Check:** representative complex PDF/DOCX/media in packaged viewers.
 - **Gap:** packaged multi-format viewer behavior and large-project resource
@@ -660,7 +671,8 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
 **Intent:** [J07](../design-docs/journeys/README.md#j07-converge-chat-into-a-document).
 
 **Implementation:** Renderer: `renderer/src/features/agent/application/session-runtime.ts`, `renderer/src/features/documents/application/document-runtime.ts`, `renderer/src/app/composition/layout/workspace-panes.tsx`.
-Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction.ts`.
+Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction.ts`,
+`server/document-revisions.ts`, `server/project-operations/index.ts`.
 
 **Status:** Release-dependent.
 
@@ -677,6 +689,9 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
   and real document services, clicks both Open and a local Markdown link from
   Chats. Both select Documents and display the file while retaining the same
   Agent session and unfinished follow-up.
+  The 2026-09-18 inline revision pass in J03 drove a controlled proposal through
+  the built desktop and accepted it to disk; a real Agent turn producing that
+  proposal and its matching Chat card remain unproven at runtime.
 - **AI Eval:** requested writing quality belongs to J10. Existing deterministic
   orchestration evidence is not document-specific diff evidence.
 - **Release Check:** real-runtime requested draft/revision followed by editor save.
@@ -758,7 +773,7 @@ Host/services: `assets/agent-instructions/default.md`; follow J02/J03/J05/J06/J0
   sources are used, not a prerequisite for every brainstorm. J05 is narrower.
 - **Release Check:** packaged empty-project discussion, requested draft,
   inspection/edit/save, and return; also a reference-assisted native-runtime task.
-  These verify current writing, not the unfinished document-specific diff.
+  These verify writing and revision, including a proposed revision reviewed inline.
 
 ## J11: Conversation to project
 
