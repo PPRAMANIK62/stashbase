@@ -221,20 +221,24 @@ checks both versions, architectures, payload hashes, and component manifests
 before creating one latest-mac.yml containing both ZIP/DMG pairs. Only the
 combined set is uploaded to the draft; parallel jobs must never upload competing
 metadata under the same name. Homebrew selects the DMG and checksum by CPU.
-The v2.9.7 source commit passed [CI on all four native targets](https://github.com/liliu-z/stashbase/actions/runs/35344187959),
-and its [coordinated release](https://github.com/liliu-z/stashbase/actions/runs/35345369681)
-passed both macOS architectures' signing, notarization, and mounted-DMG checks,
-the Windows and Linux packaged runtime checks, the complete update-set
-verification, publication, and the Homebrew cask update. Every platform asset,
-all three latest metadata files with their blockmaps, and the four extractor
-archives with manifests are on the public release; the Windows set is the NSIS
-installer, its blockmap, and latest.yml, which lists the installer alone.
-Local checks of the downloaded arm64 DMG matched the cask's checksum, reported
-2.9.7, and passed strict/deep codesign, Gatekeeper's notarized Developer ID
-assessment, and stapler validation; that package was not launched from the
-release session. Real Intel macOS 12–14 entry/editing, representative OCR
-quality, live release-component delivery, the packaged in-app runtime update,
-a packaged Windows installer launch, and N→N+1 updates remain release checks.
+The v2.9.8 source commit passed [CI on all four native targets](https://github.com/liliu-z/stashbase/actions/runs/35360236230).
+Its first [coordinated run](https://github.com/liliu-z/stashbase/actions/runs/35361625505)
+stopped when the Intel signing job received no timestamp for one nested Python
+binary; the incomplete draft was deleted and the
+[second run](https://github.com/liliu-z/stashbase/actions/runs/35362942755)
+from the same tag passed both macOS architectures' signing, notarization, and
+mounted-DMG checks, the Windows and Linux packaged runtime checks, the complete
+update-set verification, publication, and the Homebrew cask update. Every
+platform asset, all three latest metadata files with their blockmaps, and the
+four extractor archives with manifests are on the public release; the Windows
+set is the NSIS installer, its blockmap, and latest.yml, which lists the
+installer alone. Local checks of the downloaded arm64 DMG matched the cask's
+checksum, reported 2.9.8, and passed strict/deep codesign, Gatekeeper's
+notarized Developer ID assessment, and stapler validation; that package was not
+launched from the release session. Real Intel macOS 12–14 entry/editing,
+representative OCR quality, live release-component delivery, the packaged
+in-app runtime update, a packaged Windows installer launch, and N→N+1 updates
+remain release checks.
 Artifact tests exercise checksum rejection and the installed electron-updater's
 architecture selection; the generated Homebrew cask passes Ruby syntax validation.
 
@@ -439,6 +443,11 @@ Known macOS failures:
 - `Unable to find next certificate in the chain` means the Developer ID G2
   intermediate certificate is absent from the signing keychain. Install the
   Apple-published intermediate before exporting or using the identity.
+- `A timestamp was expected but was not found` from `codesign --timestamp` on
+  one nested binary means Apple's timestamp service did not answer that
+  request from the runner; nothing in the bundle or the identity is wrong.
+  Delete the incomplete draft and dispatch the coordinator again from the same
+  tag rather than signing without a timestamp, which notarization would reject.
 - A rejected notarization must stop publication. Retrieve the notary log,
   repair every unsigned nested Mach-O or invalid entitlement, and rebuild from
   source; never patch an already signed bundle.
