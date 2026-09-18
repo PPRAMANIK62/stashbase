@@ -124,7 +124,7 @@ jobs:
         shell: pwsh
         run: |
           $artifacts = Get-ChildItem -Path release.nosync -File |
-            Where-Object { $_.Name -match '(\.(exe|zip|blockmap)$|^latest.*\.ya?ml$|^stashbase-extract-.*\.(tar\.gz|json)$)' -and $_.Length -gt 0 }
+            Where-Object { $_.Name -match '(\.(exe|blockmap)$|^latest.*\.ya?ml$|^stashbase-extract-.*\.(tar\.gz|json)$)' -and $_.Length -gt 0 }
 
           if (-not ($artifacts | Where-Object { $_.Name -eq 'latest.yml' })) {
             Write-Error "Missing latest.yml Windows update metadata"
@@ -132,10 +132,6 @@ jobs:
           }
           if (-not ($artifacts | Where-Object { $_.Extension -eq '.exe' })) {
             Write-Error "Missing NSIS installer"
-            exit 1
-          }
-          if (-not ($artifacts | Where-Object { $_.Extension -eq '.zip' })) {
-            Write-Error "Missing Windows zip archive"
             exit 1
           }
           if (-not ($artifacts | Where-Object { $_.Extension -eq '.blockmap' })) {

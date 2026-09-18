@@ -15,7 +15,9 @@ test('packaging declares the official GitHub update channel', () => {
     owner: 'liliu-z',
     repo: 'stashbase',
   }]);
-  assert.ok(pkg.build.win.target.includes('nsis'));
+  // Windows publishes the NSIS installer alone: the updater consumes the
+  // installer plus its blockmap, and no user flow consumed the zip.
+  assert.deepEqual(pkg.build.win.target, ['nsis']);
   assert.ok(pkg.build.mac.target.includes('dmg'));
   assert.ok(pkg.build.linux.target.includes('AppImage'));
   assert.ok(pkg.build.linux.target.includes('deb'));
@@ -32,7 +34,7 @@ test('every platform release uploads electron-updater metadata', () => {
   assert.match(windows, /latest\.yml/);
   assert.match(windows, /blockmap/);
   assert.match(windows, /Missing NSIS installer/);
-  assert.match(windows, /Missing Windows zip archive/);
+  assert.doesNotMatch(windows, /zip/i);
   assert.match(windows, /Get-AuthenticodeSignature/);
   assert.match(windows, /publishing unsigned NSIS artifacts/);
   assert.doesNotMatch(windows, /STASHBASE_REQUIRE_WINDOWS_SIGNING/);

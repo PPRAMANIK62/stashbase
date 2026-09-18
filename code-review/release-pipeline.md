@@ -134,7 +134,7 @@ toolchain rather than the linter any gate runs.
   differential-download sidecars. Metadata and artifacts come from the same
   tagged build; clients never infer versions by scraping release tags.
 - Artifact upload gates fail closed unless macOS has DMG, ZIP, and metadata;
-  Windows has NSIS EXE, ZIP, blockmap, and metadata; and Linux has deb,
+  Windows has NSIS EXE, blockmap, and metadata; and Linux has deb,
   AppImage, and latest metadata carrying its embedded blockmap size.
   All four platform/architecture extractor archives and manifests must also exist before
   the coordinator publishes the release.
@@ -260,8 +260,11 @@ Windows releases do not require a signing certificate. Without both
 NSIS installer so packaging and the stable updater channel remain usable;
 initial installation can therefore show Windows' unknown-publisher warning.
 The updater still verifies the installer hash declared by the release-generated
-**latest.yml**. Never replace an artifact or metadata file under a published
-version.
+**latest.yml**. Windows publishes the NSIS installer with its blockmap and
+metadata only; there is no zip or portable build, because the updater consumes
+the installer and an extracted archive runs without an uninstall entry and
+fails outright when launched from inside the archive. Never replace an artifact
+or metadata file under a published version.
 
 Signing remains an optional fail-closed upgrade. If either signing secret is
 present, both are required; when both are present electron-builder forces
@@ -362,7 +365,7 @@ choice:
    and dispatch the coordinator again. Never use clobber or replace a versioned
    asset in place.
 8. After Actions finish, run `gh release view v<version>`. Verify macOS DMG/zip,
-   Linux deb/AppImage, Windows exe/zip, all three latest YAML update metadata
+   Linux deb/AppImage, Windows exe, all three latest YAML update metadata
    files and generated sidecars, and the tap update, then perform the
    residual packaged UI sanity checks, including a real N→N+1 update on every
    platform before calling the update path verified.

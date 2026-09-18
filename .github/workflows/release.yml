@@ -120,7 +120,6 @@ jobs:
           done
           require_asset 'latest.yml' 'Windows update metadata'
           require_asset "StashBase-${release_version}-win-*.exe" 'Windows installer'
-          require_asset "StashBase-${release_version}-win-*.zip" 'Windows archive'
           require_asset "StashBase-${release_version}-win-*.exe.blockmap" 'Windows blockmap'
           require_asset 'latest-linux.yml' 'Linux update metadata'
           require_asset "StashBase-${release_version}-linux-*.AppImage" 'Linux AppImage'

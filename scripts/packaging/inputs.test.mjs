@@ -192,7 +192,7 @@ test('the packaging CLI validates component version and bytes before invoking th
       if (args[0]?.endsWith('cli.js')) {
         const options = configureBuildCommand(createYargs()).exitProcess(false).parse(args.slice(1));
         if (options.win) {
-          assert.deepEqual(options.win, ['nsis', 'zip']);
+          assert.deepEqual(options.win, ['nsis']);
           assert.equal(options.x64, true);
         }
         console.log('builder arguments accepted');

@@ -20,7 +20,7 @@ const skipSidecarBuild = args.includes('--skip-sidecar-build') || process.env.ST
 const target = args.includes('--dir')
   ? ['dir']
   : platform === 'win'
-    ? ['nsis', 'zip']
+    ? ['nsis']
     : platform === 'linux'
       ? []
       : ['dmg', 'zip'];
