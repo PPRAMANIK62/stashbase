@@ -24,12 +24,14 @@ function isDeveloperShortcut(event: KeyboardEvent): boolean {
 export function WorkspaceDialogs({
   documents,
   quickOpen,
+  revisionPreview,
   settings,
   renderUpdatePreview,
   workspace,
 }: {
   documents: DocumentTabsRuntime | null;
   quickOpen: { close(): void; open: boolean };
+  revisionPreview?: ReactNode;
   settings: SettingsCommand;
   renderUpdatePreview?: (onClose: () => void) => ReactNode;
   workspace: WorkspaceRuntime | null;
@@ -73,6 +75,7 @@ export function WorkspaceDialogs({
         onOpenExternal={(href) => void dependencies.documents.openExternal(href)}
         onSectionChange={settings.onSectionChange}
         open={settings.open}
+        revisionPreview={revisionPreview}
         section={settings.section}
         softwareUpdate={dependencies.updates ? softwareUpdate : null}
       />

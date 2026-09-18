@@ -9,9 +9,12 @@ import { useEffect, useState } from 'react';
 
 import { useAgentWorkspaceRuntime } from '@/features/agent/public';
 import {
+  RevisionPreview,
   useDocumentCommands,
   useDocumentSaveBarrier,
   useNewTab,
+  useOpenRevisions,
+  useRevisionPreview,
 } from '@/features/documents/public';
 import { useFolderStatus } from '@/features/preparation/public';
 import { AccountProvider, useSearchKeyConfigured } from '@/features/settings/public';
@@ -41,6 +44,7 @@ import { useDocumentSources } from './composition/folder/use-document-sources';
 import { useDocumentWorkspace } from './composition/folder/use-document-workspace';
 import { useFolderReadiness } from './composition/folder/use-folder-readiness';
 import { useFolderRefresh } from './composition/folder/use-folder-refresh';
+import { useRevisionPickup } from './composition/folder/use-revision-pickup';
 import { useTreeFollowsDocument } from './composition/folder/use-tree-follows-document';
 import { useGalleryShop } from './composition/gallery/use-gallery-shop';
 import { WorkspaceDialogs } from './composition/layout/workspace-dialogs';
@@ -136,11 +140,22 @@ function WorkspaceWindow() {
   });
   useEffect(() => runtime.setScopeEnvironment(agent.environment), [agent.environment, runtime]);
 
+  // A proposal an agent parked is drained by the window that has its folder
+  // open, and the drain deletes what it returns, so whatever cannot be shown
+  // is said on the notice strip below.
+  const revisions = useRevisionPickup({
+    api: docs.adapters.revisions,
+    documents,
+    sourceApi: docs.adapters.source,
+    workspace,
+  });
+
   const chrome = useWorkspaceCommands({
     documents,
     hostFailure: sources.hostFailure,
     project,
     preparation,
+    revisions,
     session,
     workspace,
   });
@@ -168,6 +183,10 @@ function WorkspaceWindow() {
   );
   const updateNotice = useUpdateNotice(dependencies.updates);
   const updatePreview = useUpdatePreview(import.meta.env.DEV);
+  const revisionPreview = useRevisionPreview(import.meta.env.DEV, documents);
+  // The Agent panel's review card reads its count from here: the documents
+  // feature owns it, and composition is where the two features meet.
+  const openRevisions = useOpenRevisions(documents);
   // A new draft is the tree's to make, beside its selection, and its name is
   // typed in the tree, so the request brings the Files panel on screen
   // before the tree takes it up. It starts from the New tab's page; the
@@ -198,6 +217,14 @@ function WorkspaceWindow() {
             <WorkspaceDialogs
               documents={documents}
               quickOpen={chrome.quickOpen}
+              revisionPreview={
+                import.meta.env.DEV ? (
+                  <RevisionPreview
+                    onStart={revisionPreview.start}
+                    refusal={revisionPreview.refusal}
+                  />
+                ) : null
+              }
               settings={chrome.settings}
               renderUpdatePreview={(closeDeveloper) =>
                 import.meta.env.DEV ? (
@@ -230,6 +257,7 @@ function WorkspaceWindow() {
             onPrepare={preparation.prepare}
             onReprocess={refresh.reprocess}
             onShowDocuments={() => chrome.navigator.selectMode('documents')}
+            revisions={openRevisions}
             session={session}
             settings={chrome.settings}
             sources={sources}

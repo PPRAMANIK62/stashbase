@@ -53,6 +53,7 @@ vi.mock('@/features/documents/ui/markdown/changes', () => ({
 }));
 
 vi.mock('@milkdown/kit/utils', () => ({
+  $prose: () => ({}),
   replaceAll: (markdown: string) => ({ markdown }),
 }));
 
@@ -60,7 +61,12 @@ vi.mock('@milkdown/crepe/builder', () => ({
   CrepeBuilder: class FakeCrepeBuilder {
     readonly instance: FakeMarkdownEditor;
 
-    editor: { action: (payload: unknown) => unknown; status: string };
+    editor: {
+      action: (payload: unknown) => unknown;
+      config: () => unknown;
+      status: string;
+      use: () => unknown;
+    };
 
     constructor({ defaultValue, root }: { defaultValue: string; root: HTMLElement }) {
       const instance: FakeMarkdownEditor = {
@@ -78,9 +84,11 @@ vi.mock('@milkdown/crepe/builder', () => ({
           }
           return null;
         },
+        config: () => this.editor,
         get status() {
           return instance.status;
         },
+        use: () => this.editor,
       };
     }
 
