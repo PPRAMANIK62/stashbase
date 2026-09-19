@@ -13,6 +13,13 @@
  * The plugin holds the only authoritative count of changes still pending and
  * recomputes it on every transaction, so the watcher below reports that
  * number upward rather than anything recomputing it.
+ *
+ * `@milkdown/plugin-diff` is patched under `patches/`. Upstream keys a
+ * rejection by the span a change holds in the proposal, and a pure deletion
+ * holds none, so its own Reject left it pending and the click did nothing.
+ * The patch matches such a rejection by its point and by the text it removes,
+ * which `revision-engine.test.ts` proves; a Milkdown upgrade carries the patch
+ * until upstream resolves it.
  */
 import type { CrepeBuilder } from '@milkdown/crepe/builder';
 import { diffComponent, diffComponentConfig } from '@milkdown/kit/component/diff';

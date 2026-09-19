@@ -21,6 +21,7 @@ import {
   diffConfig,
   diffPluginKey,
   getPendingChanges,
+  rejectDiffRangeCmd,
   startDiffReviewCmd,
 } from '@milkdown/kit/plugin/diff';
 import { afterEach, describe, expect, it } from 'vite-plus/test';
@@ -36,12 +37,14 @@ const PROPOSAL = '# Title\n\nThe line.\n\nThe second sentence.\n';
 
 interface Probe {
   accepts(): HTMLButtonElement[];
+  changes(): Array<{ fromA: number; toA: number; fromB: number; toB: number }>;
   count(selector: string): number;
   destroy(): Promise<void>;
   editor: CrepeBuilder;
   host: HTMLElement;
   markdown(): string;
   pending(): number;
+  rejects(): HTMLButtonElement[];
   reviewing(): boolean;
   run(command: { key: unknown }, payload?: unknown): void;
   updates: string[];
@@ -85,6 +88,10 @@ async function openProbe(source = BASE): Promise<Probe> {
 
   const probe: Probe = {
     accepts: () => [...query<HTMLButtonElement>('.milkdown-diff-accept')],
+    changes: () => {
+      const state = diffState();
+      return state ? getPendingChanges(state) : [];
+    },
     count: (selector) => query(selector).length,
     destroy: async () => {
       await editor.destroy();
@@ -97,6 +104,7 @@ async function openProbe(source = BASE): Promise<Probe> {
       const state = diffState();
       return state ? getPendingChanges(state).length : 0;
     },
+    rejects: () => [...query<HTMLButtonElement>('.milkdown-diff-reject')],
     reviewing: () => diffState()?.active === true,
     run: (command, payload) =>
       editor.editor.action((context) => {
@@ -246,5 +254,66 @@ describe('the inline revision engine', () => {
     if (!heading) throw new Error('the document rendered no heading');
 
     expect(revisionCardFor(heading)).toBeNull();
+  });
+
+  it('drops a pure deletion from the review when its own card rejects it', async () => {
+    // A deletion occupies no span in the proposal, and upstream keys a
+    // rejection by that span alone, so the card's Reject used to leave the
+    // deletion pending and the click did nothing visible.
+    const probe = await openProbe();
+    probe.run(startDiffReviewCmd, PROPOSAL);
+    const reject = probe.rejects()[0];
+    if (!reject) throw new Error('Expected a reject control on the first change.');
+    reject.click();
+    await settleMarkdownListener();
+
+    expect(probe.pending()).toBe(1);
+    expect(probe.count('.milkdown-diff-controls')).toBe(1);
+    expect(probe.reviewing()).toBe(true);
+    expect(probe.updates).toEqual([]);
+
+    probe.run(acceptAllDiffsCmd);
+
+    expect(probe.markdown()).toBe('# Title\n\nThe first line.\n\nThe second sentence.\n');
+  });
+
+  it('keeps the neighbouring deletion open when one of two deleted blocks is rejected', async () => {
+    // Two consecutive deleted paragraphs share one point in the proposal, so
+    // a rejection keyed by that point alone would take both cards away and
+    // leave no way to accept the other.
+    const probe = await openProbe('# Title\n\nKeep.\n\nFirst gone.\n\nSecond gone.\n');
+    probe.run(startDiffReviewCmd, '# Title\n\nKeep.\n');
+    expect(probe.pending()).toBe(2);
+
+    // dom-contract: Milkdown's own diff decoration classes
+    const first = probe.host.querySelector<HTMLElement>('.milkdown-diff-removed-block');
+    if (!first) throw new Error('the review rendered no block deletion');
+    expect(first.textContent).toBe('First gone.');
+    const card = revisionCardFor(first);
+    const reject = card?.querySelector<HTMLButtonElement>('.milkdown-diff-reject');
+    if (!reject) throw new Error('the first deletion offered no reject control');
+    reject.click();
+
+    expect(probe.pending()).toBe(1);
+    expect(probe.reviewing()).toBe(true);
+
+    probe.run(acceptAllDiffsCmd);
+
+    expect(probe.markdown()).toBe('# Title\n\nKeep.\n\nFirst gone.\n');
+  });
+
+  it('rejects a range the way the card dispatches it', async () => {
+    const probe = await openProbe();
+    probe.run(startDiffReviewCmd, PROPOSAL);
+    const [deletion] = probe.changes();
+    if (!deletion) throw new Error('the review holds no change');
+    probe.run(rejectDiffRangeCmd, {
+      fromA: deletion.fromA,
+      toA: deletion.toA,
+      fromB: deletion.fromB,
+      toB: deletion.toB,
+    });
+
+    expect(probe.pending()).toBe(1);
   });
 });

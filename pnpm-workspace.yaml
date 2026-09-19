@@ -27,3 +27,5 @@ minimumReleaseAgeExclude:
   - opencode-windows-arm64@1.18.19
   - opencode-windows-x64-baseline@1.18.19
   - opencode-windows-x64@1.18.19
+patchedDependencies:
+  '@milkdown/plugin-diff@7.21.3': patches/@milkdown__plugin-diff@7.21.3.patch

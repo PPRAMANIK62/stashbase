@@ -1,0 +1,285 @@
+diff --git a/lib/index.js b/lib/index.js
+index d4320f52c1371e4f0da4e8c0e1d6d9261299a456..1a10c930ed772becc3f3871b63190f6bbfd35c4f 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -323,8 +323,40 @@ function recomputeChanges(doc, state, options) {
+ 		changes
+ 	};
+ }
++/**
++ * StashBase patch. Rejections are keyed by positions in the proposal, which
++ * never move. A pure deletion occupies no span there, so the half-open
++ * overlap test alone can never match it (`x < x` is false) and the deletion
++ * stayed pending after its own Reject. A point now matches a rejected point
++ * by identity, and, because consecutive deleted blocks share one point, by
++ * the span each removes from the reviewed document, which `apply` maps
++ * through every accept. A point inside a rejected span, or a span holding a
++ * rejected point, counts as rejected; touching at an edge does not, so a
++ * deletion beside a rejected insertion keeps its own card.
++ */
+ function isChangeRejected(change, rejectedRanges) {
+-	return rejectedRanges.some((r) => change.fromB < r.toB && change.toB > r.fromB);
++	return rejectedRanges.some((r) => {
++		const changeIsPoint = change.fromB === change.toB;
++		const rangeIsPoint = r.fromB === r.toB;
++		if (!changeIsPoint && !rangeIsPoint) return change.fromB < r.toB && change.toB > r.fromB;
++		if (changeIsPoint && rangeIsPoint) {
++			if (change.fromB !== r.fromB) return false;
++			if (r.fromA == null || r.toA == null || change.fromA == null || change.toA == null) return true;
++			return change.fromA < r.toA && change.toA > r.fromA;
++		}
++		const point = changeIsPoint ? change.fromB : r.fromB;
++		const span = changeIsPoint ? r : change;
++		return span.fromB < point && point < span.toB;
++	});
++}
++/** Keeps the reviewed-document span of each rejected deletion pointing at the
++ *  same text after an accept elsewhere moved it. */
++function mapRejectedRanges(rejectedRanges, mapping) {
++	return rejectedRanges.map((r) => r.fromA == null || r.toA == null ? r : {
++		...r,
++		fromA: mapping.map(r.fromA, 1),
++		toA: mapping.map(r.toA, -1)
++	});
+ }
+ function getPendingChanges(state) {
+ 	return state.changes.filter((c) => !isChangeRejected(c, state.rejectedRanges));
+@@ -350,7 +382,10 @@ var diffPlugin = $prose((ctx) => {
+ 					return null;
+ 				}
+ 				let state = value;
+-				if (tr.docChanged && state.active) state = recomputeChanges(newEditorState.doc, state, { ignoreAttrs: config.ignoreAttrs });
++				if (tr.docChanged && state.active) state = recomputeChanges(newEditorState.doc, {
++					...state,
++					rejectedRanges: mapRejectedRanges(state.rejectedRanges, tr.mapping)
++				}, { ignoreAttrs: config.ignoreAttrs });
+ 				if (!action) return state;
+ 				let result;
+ 				switch (action.type) {
+@@ -372,7 +407,9 @@ var diffPlugin = $prose((ctx) => {
+ 							...state,
+ 							rejectedRanges: [...state.rejectedRanges, {
+ 								fromB: action.fromB,
+-								toB: action.toB
++								toB: action.toB,
++								fromA: action.fromA,
++								toA: action.toA
+ 							}]
+ 						};
+ 						break;
+@@ -381,7 +418,9 @@ var diffPlugin = $prose((ctx) => {
+ 							...state,
+ 							rejectedRanges: [...state.rejectedRanges, {
+ 								fromB: action.range.fromB,
+-								toB: action.range.toB
++								toB: action.range.toB,
++								fromA: action.range.fromA,
++								toA: action.range.toA
+ 							}]
+ 						};
+ 						break;
+@@ -485,7 +524,9 @@ var rejectDiffChunkCmd = $command("RejectDiffChunk", () => {
+ 		if (dispatch) dispatch(state.tr.setMeta(diffPluginKey, {
+ 			type: "reject",
+ 			fromB: change.fromB,
+-			toB: change.toB
++			toB: change.toB,
++			fromA: change.fromA,
++			toA: change.toA
+ 		}));
+ 		return true;
+ 	};
+diff --git a/lib/types.d.ts b/lib/types.d.ts
+index b1d28a62d0c1482ae25ccb7e3ca245d004efed7b..8623555a5fb289d7ce6b7f1858b0bd7bfac4f522 100644
+--- a/lib/types.d.ts
++++ b/lib/types.d.ts
+@@ -10,6 +10,11 @@ export interface DiffState {
+     rejectedRanges: Array<{
+         fromB: number;
+         toB: number;
++        /** The span the rejected change removes from the reviewed document,
++         *  mapped through later accepts. Tells apart two pure deletions that
++         *  share one proposal position. */
++        fromA?: number;
++        toA?: number;
+     }>;
+     /** Whether the diff review is currently active */
+     active: boolean;
+@@ -34,6 +39,8 @@ export type DiffAction = {
+     type: 'reject';
+     fromB: number;
+     toB: number;
++    fromA?: number;
++    toA?: number;
+ } | {
+     type: 'acceptRange';
+     range: DiffRange;
+diff --git a/src/diff-commands.ts b/src/diff-commands.ts
+index ec9235fb3189bd48372b4faefed9c9e27316198d..4dc40a1aab169fd5f82274a7602354d290091367 100644
+--- a/src/diff-commands.ts
++++ b/src/diff-commands.ts
+@@ -132,6 +132,8 @@ export const rejectDiffChunkCmd = $command('RejectDiffChunk', () => {
+         type: 'reject',
+         fromB: change.fromB,
+         toB: change.toB,
++        fromA: change.fromA,
++        toA: change.toA,
+       } satisfies DiffAction)
+       dispatch(tr)
+     }
+diff --git a/src/diff-plugin.ts b/src/diff-plugin.ts
+index da6141f8616068adeccd5d9f3584d341835c84be..a0b415ea205a758e2a45c0cb0a850de90b32e0c2 100644
+--- a/src/diff-plugin.ts
++++ b/src/diff-plugin.ts
+@@ -1,5 +1,7 @@
+ import type { Node } from '@milkdown/prose/model'
+ 
++import type { Transaction } from '@milkdown/prose/state'
++
+ import { Plugin, PluginKey } from '@milkdown/prose/state'
+ import { $prose } from '@milkdown/utils'
+ 
+@@ -22,13 +24,60 @@ function recomputeChanges(
+   return { ...state, changes }
+ }
+ 
++interface RejectedRange {
++  fromB: number
++  toB: number
++  fromA?: number
++  toA?: number
++}
++
+ /// Check if a change overlaps with any rejected range in newDoc.
++///
++/// StashBase patch. Rejections are keyed by positions in the proposal, which
++/// never move. A pure deletion occupies no span there, so the half-open
++/// overlap test alone can never match it (`x < x` is false) and the deletion
++/// stayed pending after its own Reject. A point now matches a rejected point
++/// by identity, and, because consecutive deleted blocks share one point, by
++/// the span each removes from the reviewed document, which `apply` maps
++/// through every accept. A point inside a rejected span, or a span holding a
++/// rejected point, counts as rejected; touching at an edge does not, so a
++/// deletion beside a rejected insertion keeps its own card.
+ export function isChangeRejected(
+-  change: { fromB: number; toB: number },
+-  rejectedRanges: Array<{ fromB: number; toB: number }>
++  change: { fromB: number; toB: number; fromA?: number; toA?: number },
++  rejectedRanges: RejectedRange[]
+ ): boolean {
+-  return rejectedRanges.some(
+-    (r) => change.fromB < r.toB && change.toB > r.fromB
++  return rejectedRanges.some((r) => {
++    const changeIsPoint = change.fromB === change.toB
++    const rangeIsPoint = r.fromB === r.toB
++    if (!changeIsPoint && !rangeIsPoint)
++      return change.fromB < r.toB && change.toB > r.fromB
++    if (changeIsPoint && rangeIsPoint) {
++      if (change.fromB !== r.fromB) return false
++      if (
++        r.fromA == null ||
++        r.toA == null ||
++        change.fromA == null ||
++        change.toA == null
++      )
++        return true
++      return change.fromA < r.toA && change.toA > r.fromA
++    }
++    const point = changeIsPoint ? change.fromB : r.fromB
++    const span = changeIsPoint ? r : change
++    return span.fromB < point && point < span.toB
++  })
++}
++
++/// Keeps the reviewed-document span of each rejected deletion pointing at the
++/// same text after an accept elsewhere moved it.
++function mapRejectedRanges(
++  rejectedRanges: RejectedRange[],
++  mapping: Transaction['mapping']
++): RejectedRange[] {
++  return rejectedRanges.map((r) =>
++    r.fromA == null || r.toA == null
++      ? r
++      : { ...r, fromA: mapping.map(r.fromA, 1), toA: mapping.map(r.toA, -1) }
+   )
+ }
+ 
+@@ -67,9 +116,17 @@ export const diffPlugin = $prose((ctx) => {
+         // The accepted change naturally disappears from the new diff
+         let state = value
+         if (tr.docChanged && state.active) {
+-          state = recomputeChanges(newEditorState.doc, state, {
+-            ignoreAttrs: config.ignoreAttrs,
+-          })
++          state = recomputeChanges(
++            newEditorState.doc,
++            {
++              ...state,
++              rejectedRanges: mapRejectedRanges(
++                state.rejectedRanges,
++                tr.mapping
++              ),
++            },
++            { ignoreAttrs: config.ignoreAttrs }
++          )
+         }
+ 
+         if (!action) return state
+@@ -99,7 +156,12 @@ export const diffPlugin = $prose((ctx) => {
+               ...state,
+               rejectedRanges: [
+                 ...state.rejectedRanges,
+-                { fromB: action.fromB, toB: action.toB },
++                {
++                  fromB: action.fromB,
++                  toB: action.toB,
++                  fromA: action.fromA,
++                  toA: action.toA,
++                },
+               ],
+             }
+             break
+@@ -109,7 +171,12 @@ export const diffPlugin = $prose((ctx) => {
+               ...state,
+               rejectedRanges: [
+                 ...state.rejectedRanges,
+-                { fromB: action.range.fromB, toB: action.range.toB },
++                {
++                  fromB: action.range.fromB,
++                  toB: action.range.toB,
++                  fromA: action.range.fromA,
++                  toA: action.range.toA,
++                },
+               ],
+             }
+             break
+diff --git a/src/types.ts b/src/types.ts
+index 11ffe825a2c3dc7b411e3b3a3c8549a585cb6da7..cac299d625b23ea0c3a31aeea1d322053014e62c 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -9,7 +9,15 @@ export interface DiffState {
+   changes: readonly Change[]
+   /** Ranges in newDoc that have been rejected (fromB..toB).
+    *  These are stable because newDoc never changes. */
+-  rejectedRanges: Array<{ fromB: number; toB: number }>
++  rejectedRanges: Array<{
++    fromB: number
++    toB: number
++    /** The span the rejected change removes from the reviewed document,
++     *  mapped through later accepts. Tells apart two pure deletions that
++     *  share one proposal position. */
++    fromA?: number
++    toA?: number
++  }>
+   /** Whether the diff review is currently active */
+   active: boolean
+ }
+@@ -32,7 +40,7 @@ export interface DiffRange {
+ export type DiffAction =
+   | { type: 'start'; newDoc: Node }
+   | { type: 'accept'; changeIndex: number }
+-  | { type: 'reject'; fromB: number; toB: number }
++  | { type: 'reject'; fromB: number; toB: number; fromA?: number; toA?: number }
+   | { type: 'acceptRange'; range: DiffRange }
+   | { type: 'rejectRange'; range: DiffRange }
+   | { type: 'acceptAll' }
