@@ -425,6 +425,11 @@ registered host boundaries; renderer shared types are a different layer.
   the live document without mutating editor DOM during change callbacks. The sole
   double-cast exemption is its Find controller's structural DOM corpus and guarded
   CSS Highlight probe; other exceptions need their code-owned rationale.
+- Inline review runs Milkdown's diff plugin, registered directly by
+  `revision-adapter.ts`. `@milkdown/plugin-diff` is patched under `patches/` so a
+  per-change Reject also resolves a pure deletion, which holds no span in the
+  proposal and which upstream's span-keyed rejection never matches. A Milkdown
+  upgrade carries the patch, or retires it against the revision engine test.
 - Surface recovery remounts the smallest boundary. Shell remount loses live buffers
   and reloads only saved source files. HTTP loss must not reload the app.
   Raw failures are mapped to feature-owned messages and recovery kinds.

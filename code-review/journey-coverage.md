@@ -255,8 +255,10 @@ and recovery behavior; the evidence below establishes its exercised paths.
 
 **Implementation:** Renderer: `renderer/src/features/documents/ui/source/registry.tsx`, `renderer/src/features/documents/application/document-runtime.ts`, `renderer/src/features/documents/ui/markdown/document.tsx`.
 Inline review: `renderer/src/features/documents/domain/revision.ts`,
-`renderer/src/features/documents/ui/markdown/use-revision-review.tsx`, and
-`renderer/src/features/documents/hooks/use-revision-proposals.ts`.
+`renderer/src/features/documents/ui/markdown/use-revision-review.tsx`,
+`renderer/src/features/documents/hooks/use-revision-proposals.ts`, and
+`renderer/src/features/documents/ui/markdown/revision-adapter.ts` over a patched
+`@milkdown/plugin-diff` (`patches/`).
 A save refused against a version a deleted file no longer has, whose reload confirms
 the source is gone, enters the document's `detached` state and stops autosave.
 `application/draft-settlement.ts` turns a close or a release of such a tab into the
@@ -280,6 +282,10 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   HTTP source-format contracts isolate index admission; they do not start or
   verify the Python daemon. Real daemon lifecycle belongs to Electron smoke
   and the built-service pass below.
+  `revision-engine.test.ts` proves the inline review against the real Milkdown
+  build with DOM clicks: what a proposal renders, which commands dirty the
+  buffer, and that a per-change Reject resolves a deletion, including one of
+  two adjacent deleted blocks while the other stays acceptable.
 - **Driven Runtime Pass:** isolated built-app passes cover preview reuse/keep,
   history, draft creation/rename, and kept-only tab restoration. Earlier journal
   restoration passes apply to the removed snapshot feature, not current durability. A separate window-origin
@@ -303,6 +309,16 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   controls. The dark desktop composition was inspected by eye with both Chat
   and Documents visible. Accept all saved the exact proposed text to disk.
   This pass did not use a live Agent provider or a packaged build.
+- **Per-change Reject runtime pass (2026-09-20):** the built renderer in
+  Electron on macOS, with an isolated HOME, user-data directory and port, opened
+  a seeded Markdown project and its document, then a window-origin
+  `suggest_edits` request parked a proposal holding one pure deletion of a
+  wrapped sentence and one replacement. Real mouse input hovered the deleted
+  text, revealed its card and clicked Reject: the card and the strikethrough
+  went away, the bar dropped to one suggested change, and the file on disk was
+  unchanged. Accept on the remaining card closed the review and autosave wrote
+  exactly the expected text, the kept sentence included. The light composition
+  was inspected by eye. No live Agent provider or packaged build was used.
 - **AI Eval:** not required.
 - **Release Check:** representative complex PDF/DOCX/media in packaged viewers.
 - **Gap:** packaged multi-format viewer behavior and large-project resource
