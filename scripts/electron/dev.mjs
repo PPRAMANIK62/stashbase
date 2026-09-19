@@ -22,7 +22,7 @@ async function endpointIsReady(url) {
   }
 }
 
-export async function waitForDevelopmentServers(timeoutMs = 30_000) {
+export async function waitForDevelopmentServers(timeoutMs = 120_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const [viteReady, serverReady] = await Promise.all([
