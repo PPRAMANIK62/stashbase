@@ -16,7 +16,7 @@
  * runtime is bundled via `extraResources` and the path is overridden
  * via `STASHBASE_PYTHON` env var (see `electron/main.cjs`).
  */
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -116,12 +116,17 @@ export class MfsDaemon extends EventEmitter {
    *  cache "I already configured this daemon" state can compare against
    *  the value at config time — if it changed, re-issue the config op. */
   private generation = 0;
+  /** Bumps on every close() so a spawn still resolving its command when the
+   *  daemon is retired does not bring up a child nobody owns. */
+  private retirements = 0;
 
   /** Every folder root the server has asked us to bind. Keyed by comparison
    *  identity while retaining the first source spelling for daemon replay. */
   private bindings = new Map<string, { folder: string; cfg: BindFolderArgs }>();
 
-  constructor(private readonly commandResolver: () => DaemonCommand = resolveDaemonCommand) {
+  constructor(
+    private readonly commandResolver: () => DaemonCommand | Promise<DaemonCommand> = resolveDaemonCommand,
+  ) {
     super();
   }
 
@@ -207,9 +212,15 @@ export class MfsDaemon extends EventEmitter {
     this.bindings.clear();
   }
 
-  private spawnAndWait(): Promise<void> {
+  private async spawnAndWait(): Promise<void> {
+    // Resolving the command may probe the Python runtime, which is slow on a
+    // loaded machine. No child exists yet, so a close() that lands meanwhile
+    // finds nothing to retire; the counter lets that close win instead of
+    // this attempt spawning an orphan afterwards.
+    const retirementsBefore = this.retirements;
+    const daemon = await this.commandResolver();
+    if (this.retirements !== retirementsBefore) throw new MfsDaemonRetiringError();
     return new Promise<void>((resolve, reject) => {
-      const daemon = this.commandResolver();
       log.info(`spawning ${daemon.command} ${daemon.args.join(' ')}`);
       const proc = spawn(daemon.command, daemon.args, {
         cwd: daemon.cwd,
@@ -355,6 +366,7 @@ export class MfsDaemon extends EventEmitter {
     const proc = this.proc;
     this.proc = null;
     this.readyP = null;
+    this.retirements += 1;
     // Reject any in-flight calls so awaiters don't hang forever once
     // the process is gone.
     const inflight = [...this.pending.values()];
@@ -402,7 +414,7 @@ export class MfsDaemon extends EventEmitter {
  *   2. ``python/.venv.nosync/bin/python`` populated by ``pnpm setup:python``.
  *   3. system ``python3.13`` / ``python3`` — last resort, giving a clearer
  *      import error than a command-resolution failure. */
-function resolvePythonBin(): string {
+async function resolvePythonBin(): Promise<string> {
   const bin = (() => {
     if (process.env.STASHBASE_PYTHON) return process.env.STASHBASE_PYTHON;
     // The packaged runtime / venv live under RESOURCES_ROOT; in dev
@@ -425,26 +437,43 @@ function resolvePythonBin(): string {
     return 'python3';
   })();
 
-  // Bounded synchronous probe. This runs on the Node main thread at
-  // daemon spawn, so an interpreter whose import deadlocks (e.g. a
-  // corrupt venv where `import openai` never returns) would otherwise
-  // block the event loop forever and wedge the whole server. A timeout
-  // turns that into a clear, recoverable error instead.
-  const probe = spawnSync(bin, ['-c', 'import mfs, openai, numpy'], {
-    encoding: 'utf8',
-    timeout: 30_000,
-  });
-  if (probe.status !== 0) {
-    const reason = probe.error
-      ? probe.error.message
-      : ((probe.stderr || '').trim().split('\n').pop() ?? '');
-    throw new Error(
-      `Python sidecar deps missing or unusable at ${bin}\n` +
-        `  ${reason}\n` +
-        `  → fix: pnpm setup:python`,
-    );
-  }
+  await probePythonDeps(bin);
   return bin;
+}
+
+const PYTHON_PROBE_TIMEOUT_MS = 30_000;
+const PYTHON_PROBE_IMPORTS = 'import mfs, openai, numpy';
+
+/** Bounded check that the interpreter can import the sidecar deps, run at
+ *  daemon spawn. It stays off the event loop: an interpreter whose import
+ *  deadlocks (a corrupt venv where `import openai` never returns), or one that
+ *  is merely slow on a loaded machine, must not keep the server from answering
+ *  `/api/health` or the app from launching. A timeout turns either into a
+ *  clear, recoverable error. SIGKILL, because a child stuck in a native import
+ *  may not honor SIGTERM. */
+function probePythonDeps(bin: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    execFile(
+      bin,
+      ['-c', PYTHON_PROBE_IMPORTS],
+      { encoding: 'utf8', timeout: PYTHON_PROBE_TIMEOUT_MS, killSignal: 'SIGKILL' },
+      (error, _stdout, stderr) => {
+        if (!error) return resolve();
+        const reason = error.killed
+          ? `${PYTHON_PROBE_IMPORTS} did not finish within ${PYTHON_PROBE_TIMEOUT_MS / 1000}s`
+          : typeof error.code === 'string'
+            ? error.message
+            : ((stderr || '').trim().split('\n').pop() || error.message);
+        reject(
+          new Error(
+            `Python sidecar deps missing or unusable at ${bin}\n` +
+              `  ${reason}\n` +
+              `  → fix: pnpm setup:python`,
+          ),
+        );
+      },
+    );
+  });
 }
 
 function pythonCandidates(root: string): string[] {
@@ -459,7 +488,7 @@ function pythonCandidates(root: string): string[] {
       ];
 }
 
-function resolveDaemonCommand(): DaemonCommand {
+async function resolveDaemonCommand(): Promise<DaemonCommand> {
   const unavailable = nativeComponentUnavailable();
   if (!DEVELOPMENT_RUNTIME && unavailable) throw new Error(unavailable);
   const binary = resolveDaemonBinary();
@@ -467,7 +496,7 @@ function resolveDaemonCommand(): DaemonCommand {
   if (binary) {
     return { command: binary, args: [...storeArgs], cwd: path.dirname(binary) };
   }
-  const pythonBin = resolvePythonBin();
+  const pythonBin = await resolvePythonBin();
   const script = resolvePythonDaemonScript();
   return { command: pythonBin, args: ['-u', script, ...storeArgs], cwd: PROJECT_ROOT };
 }

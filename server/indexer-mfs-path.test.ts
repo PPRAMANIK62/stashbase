@@ -140,3 +140,34 @@ test('concurrent daemon closes share one retirement barrier before respawn', asy
 
   assert.equal(fs.readFileSync(launches, 'utf8').trim().split('\n').length, 2);
 });
+
+test('a daemon retired while its command is still resolving does not spawn', async (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-fake-mfs-resolve-'));
+  const fixture = path.join(scratch, 'fake-daemon.mjs');
+  const launches = path.join(scratch, 'launches.log');
+  fs.writeFileSync(fixture, `
+    import fs from 'node:fs';
+    fs.appendFileSync(process.argv[2], 'start\\n');
+    process.stdout.write(JSON.stringify({ event: 'ready', db: 'fake' }) + '\\n');
+    setInterval(() => {}, 1000);
+  `, 'utf8');
+  // The real resolver probes the Python runtime before any child exists, so
+  // a close() can land in that gap. Hold the resolution open by hand.
+  let resolveCommand!: (command: { command: string; args: string[]; cwd: string }) => void;
+  const daemon = new MfsDaemon(
+    () => new Promise((resolve) => { resolveCommand = resolve; }),
+  );
+  t.after(async () => {
+    await daemon.close();
+    fs.rmSync(scratch, { recursive: true, force: true });
+  });
+
+  const ready = daemon.ensureReady();
+  const rejected = assert.rejects(ready, isMfsDaemonRetiringError);
+  await daemon.close();
+  resolveCommand({ command: process.execPath, args: [fixture, launches], cwd: scratch });
+
+  await rejected;
+  assert.equal(daemon.currentGeneration(), 0);
+  assert.equal(fs.existsSync(launches), false);
+});
