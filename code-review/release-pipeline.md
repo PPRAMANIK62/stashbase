@@ -221,21 +221,21 @@ checks both versions, architectures, payload hashes, and component manifests
 before creating one latest-mac.yml containing both ZIP/DMG pairs. Only the
 combined set is uploaded to the draft; parallel jobs must never upload competing
 metadata under the same name. Homebrew selects the DMG and checksum by CPU.
-The v2.9.8 source commit passed [CI on all four native targets](https://github.com/liliu-z/stashbase/actions/runs/35360236230).
-Its first [coordinated run](https://github.com/liliu-z/stashbase/actions/runs/35361625505)
-stopped when the Intel signing job received no timestamp for one nested Python
-binary; the incomplete draft was deleted and the
-[second run](https://github.com/liliu-z/stashbase/actions/runs/35362942755)
-from the same tag passed both macOS architectures' signing, notarization, and
-mounted-DMG checks, the Windows and Linux packaged runtime checks, the complete
-update-set verification, publication, and the Homebrew cask update. Every
-platform asset, all three latest metadata files with their blockmaps, and the
-four extractor archives with manifests are on the public release; the Windows
-set is the NSIS installer, its blockmap, and latest.yml, which lists the
-installer alone. Local checks of the downloaded arm64 DMG matched the cask's
-checksum, reported 2.9.8, and passed strict/deep codesign, Gatekeeper's
-notarized Developer ID assessment, and stapler validation; that package was not
-launched from the release session. Real Intel macOS 12–14 entry/editing,
+The v2.9.9 source commit passed [CI on all four native targets](https://github.com/liliu-z/stashbase/actions/runs/35466974811),
+and its first [coordinated run](https://github.com/liliu-z/stashbase/actions/runs/35467895045)
+passed both macOS architectures' signing, notarization, and mounted-DMG checks,
+the Windows and Linux packaged runtime checks, the complete update-set
+verification, publication, and the Homebrew cask update. The v2.9.8 release
+needed a [second run](https://github.com/liliu-z/stashbase/actions/runs/35362942755)
+from the same tag after its Intel signing job received no timestamp for one
+nested Python binary; the incomplete draft was deleted first. Every platform
+asset, all three latest metadata files with their blockmaps, and the four
+extractor archives with manifests are on the public release; the Windows set is
+the NSIS installer, its blockmap, and latest.yml, which lists the installer
+alone. Local checks of the downloaded arm64 DMG matched the cask's checksum,
+reported 2.9.9, and passed strict/deep codesign, Gatekeeper's notarized
+Developer ID assessment, and stapler validation; that package was not launched
+from the release session. Real Intel macOS 12–14 entry/editing,
 representative OCR quality, live release-component delivery, the packaged
 in-app runtime update, a packaged Windows installer launch, and N→N+1 updates
 remain release checks.
