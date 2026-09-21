@@ -1,20 +1,20 @@
 /**
  * Tree-version signal — the surviving piece of the old fs.watch layer.
  *
- * 2026-06 simplification: StashBase no longer watches the filesystem.
- * Reconcile runs at deterministic event points instead — folder
- * open/switch, window focus, agent turn end, the manual Sync button, and
- * MCP `reindex`. That deleted the debounce window, the self-write
- * suppression TTL, the watcher-vs-import race gate, and the whole class
- * of "fs event arrived at the wrong moment" bugs. External edits made
- * while the app is focused surface on the next event point; everything
- * the app (or an agent via API) writes is indexed on its own write path.
+ * StashBase does not watch the filesystem. Reconcile runs at deterministic
+ * event points instead: folder open/switch, MCP `reindex`, and the
+ * renderer's `/api/sync` after an Agent write settles or after an Agent
+ * turn that ran a shell command, a subagent, or another tool whose writes
+ * name no file. There is no debounce window, no self-write suppression
+ * TTL, and no watcher-vs-import race gate. External edits made while the
+ * app is open surface on the next event point; everything the app (or an
+ * agent via API) writes is indexed on its own write path.
  *
  * What remains is a monotonic counter the renderer polls through
  * `/api/index-status.treeVersion`: any bump means "the visible file tree
  * may have changed — refetch /api/files". Routes that create/delete/move
- * files call `noteTreeChanged()` after the disk operation; sync bumps it
- * when a reconcile actually changed something.
+ * files call `noteTreeChanged()` after the disk operation; `/api/sync`
+ * bumps it after every reconcile that ran to completion.
  */
 
 let fsChangeCounter = 0;

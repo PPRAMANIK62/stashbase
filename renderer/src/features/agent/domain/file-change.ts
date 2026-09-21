@@ -6,6 +6,11 @@
  * transcript renders one diff surface and one changed-files list.
  */
 import type { AgentScope } from '@/features/agent/domain/session-state';
+import {
+  latestUserBlock,
+  type AgentTranscriptBlock,
+} from '@/features/agent/domain/session-transcript';
+import { agentToolKind, type AgentToolKind } from '@/features/agent/domain/tool-kind';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { basePathName } from '@/shared/utils/file-path';
 
@@ -216,6 +221,37 @@ export function settledFileChanges(tools: readonly ToolLike[]): AgentFileChange[
     }
   }
   return [...byPath.values()];
+}
+
+/** The kinds that leave the folder as they found it. */
+const READ_ONLY_KINDS: ReadonlySet<AgentToolKind> = new Set(['list', 'question', 'read', 'search']);
+
+/** Whether a call that ran could have changed files it never named: a shell
+ *  command, a subagent, or a tool this module does not read. A read, listing,
+ *  search, or question changes nothing, and a write this module parses has
+ *  already reported its paths as it settled. */
+function toolMayHaveChangedFilesUnseen(name: string, rawInput: Record<string, unknown>): boolean {
+  if (READ_ONLY_KINDS.has(agentToolKind(name))) return false;
+  return fileChangesForTool(name, rawInput).length === 0;
+}
+
+/** Whether the turn behind the latest prompt ran such a call, so the folder
+ *  on disk may no longer match the listing on screen once the turn settles.
+ *  A call the reader denied never ran; one still awaiting an answer has not. */
+export function turnMayHaveChangedFilesUnseen(
+  transcript: readonly AgentTranscriptBlock[],
+): boolean {
+  const prompt = latestUserBlock(transcript);
+  const start = prompt ? transcript.indexOf(prompt) + 1 : 0;
+  return transcript
+    .slice(start)
+    .some(
+      (block) =>
+        block.kind === 'tool' &&
+        block.status !== 'denied' &&
+        block.status !== 'awaiting' &&
+        toolMayHaveChangedFilesUnseen(block.name, block.input),
+    );
 }
 
 function normalizeSeparators(path: string): string {

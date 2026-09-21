@@ -30,6 +30,7 @@ import {
 } from '@/features/agent/domain/file-change';
 import { agentQuestionAnswers, agentQuestions } from '@/features/agent/domain/question';
 import type { AgentTranscriptBlock } from '@/features/agent/domain/session';
+import { agentToolKind } from '@/features/agent/domain/tool-kind';
 import { focusRing } from '@/lib/focus-ring';
 import { useShape } from '@/lib/shape-context';
 import { cn } from '@/lib/utils';
@@ -42,7 +43,6 @@ import { AgentQuestionSummary } from './question-card';
 import {
   agentActivitySummary,
   agentPermissionTitle,
-  agentToolKind,
   agentToolPayload,
   agentToolResult,
   agentToolRow,
@@ -57,7 +57,7 @@ type ToolIcon = ComponentType<{
 }>;
 
 function iconFor(tool: AgentToolBlock): ToolIcon {
-  switch (agentToolKind(tool)) {
+  switch (agentToolKind(tool.name)) {
     case 'command':
       return Terminal;
     case 'edit':

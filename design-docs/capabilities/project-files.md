@@ -40,8 +40,9 @@ defines those distinctions; [Project Context](project-context.md) owns preparati
 - Project import creates source files; same-name imports keep both copies using
   a new name. A partial import retries only refused files. Chat attachments are
   temporary context and never become project files merely by being attached.
-- Agent writes follow runtime permissions and produce ordinary files. File
-  refreshes do not steal focus or imply a universal accept/reject gate.
+- Agent writes follow runtime permissions and produce ordinary files, whether
+  made through a file tool, a shell command, or a subagent. File refreshes do
+  not steal focus or imply a universal accept/reject gate.
 
 ## Saving and Release
 

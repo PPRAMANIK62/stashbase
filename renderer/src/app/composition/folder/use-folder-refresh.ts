@@ -20,7 +20,9 @@ export interface FolderRefreshOptions {
 
 export interface FolderRefresh {
   /** Files an Agent wrote: show them, reload the documents they touched, then
-   *  reconcile the folder's index and readiness. */
+   *  reconcile the folder's index and readiness. A turn that wrote through a
+   *  shell command or a subagent names no file and takes the same path with
+   *  no documents to reload. */
   onAgentFilesChanged(change: AgentFilesChanged): void;
   /** Restarts preparation for one source and re-reads the folder once the
    *  call has settled. Preparation changes what the tree and the status line
@@ -37,8 +39,9 @@ export interface FolderRefresh {
  * app touched the folder and the listing has to be re-read — but only after a
  * revision has been seen for *this* folder, otherwise every folder switch would
  * refetch a listing that was just fetched. The other source is the Agent, which
- * reports exactly which files its settled write changed; those are refreshed
- * directly and then reconciled, and nothing here selects a file on its behalf.
+ * reports exactly which files its settled write changed, or that a settled turn
+ * ran work it could not see into; those are refreshed directly and then
+ * reconciled, and nothing here selects a file on its behalf.
  */
 export function useFolderRefresh({
   folderPath,

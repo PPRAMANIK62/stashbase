@@ -273,6 +273,10 @@ stable status without download, retry, or a new durable demand latch.
   without deleting native history or inferring recovery from later calls.
   Empty activity groups render nothing. Turn failures and permission decisions
   remain separate, and only successful file operations produce changed-file results.
+  A settled write reports its paths; a settled turn that ran a command, a
+  subagent, or another tool whose writes name no file reports that the folder
+  may have changed, and the shell reconciles it the same way. Reads, listings,
+  searches, and questions report nothing.
 - Instructions are scoped Settings guidance resolved at native mount and composed
   with internal routing policy. They are not permissions, skill contents, or
   project-file edits. Empty reset restores the packaged default; saves do not

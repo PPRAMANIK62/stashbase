@@ -6,7 +6,18 @@ import {
   fileChangesForTool,
   revisionProposalForTool,
   settledFileChanges,
+  turnMayHaveChangedFilesUnseen,
 } from './file-change';
+import type { AgentTranscriptBlock } from './session-transcript';
+
+function tool(
+  id: string,
+  name: string,
+  input: Record<string, unknown>,
+  status: Extract<AgentTranscriptBlock, { kind: 'tool' }>['status'] = 'done',
+): AgentTranscriptBlock {
+  return { id, input, kind: 'tool', name, status };
+}
 
 describe('Agent file changes', () => {
   it('reads Claude edits and writes as fragments and whole files', () => {
@@ -174,6 +185,54 @@ describe('Agent file changes', () => {
         },
       ]),
     ).toEqual([]);
+  });
+
+  it('tells a turn that may have written unseen from one that only read or reported', () => {
+    const prompt: AgentTranscriptBlock = { id: 'u2', kind: 'user', text: 'Draft the intro' };
+    const earlier = [
+      { id: 'u1', kind: 'user', text: 'Look around' } satisfies AgentTranscriptBlock,
+      tool('bash-0', 'Bash', { command: 'mkdir research' }),
+    ];
+    const readOnly = [
+      tool('read-1', 'Read', { file_path: '/project/Research/roles/writer.md' }),
+      tool('list-1', 'mcp__stashbase__list_directory', { path: '/project/Research' }),
+      tool('search-1', 'mcp__stashbase__search_project', { query: 'Jev' }),
+      tool('ask-1', 'AskUserQuestion', { questions: [] }),
+    ];
+
+    // A shell heredoc and a subagent both write without naming a file.
+    expect(
+      turnMayHaveChangedFilesUnseen([
+        ...earlier,
+        prompt,
+        ...readOnly,
+        tool('bash-1', 'Bash', { command: "cat > drafts/intro.md <<'EOF'\n# Jev\nEOF" }),
+      ]),
+    ).toBe(true);
+    expect(
+      turnMayHaveChangedFilesUnseen([
+        prompt,
+        tool('agent-1', 'Agent', { prompt: 'Draft the intro', subagent_type: 'general-purpose' }),
+      ]),
+    ).toBe(true);
+    // A write this module reads has already reported its path as it settled.
+    expect(
+      turnMayHaveChangedFilesUnseen([
+        ...earlier,
+        prompt,
+        ...readOnly,
+        tool('write-1', 'Write', { content: '# Jev', file_path: 'drafts/intro.md' }),
+      ]),
+    ).toBe(false);
+    // A denied command never ran; the earlier turn's command is not this one.
+    expect(
+      turnMayHaveChangedFilesUnseen([
+        ...earlier,
+        prompt,
+        tool('bash-1', 'Bash', { command: 'rm -rf drafts' }, 'denied'),
+      ]),
+    ).toBe(false);
+    expect(turnMayHaveChangedFilesUnseen([prompt, ...readOnly])).toBe(false);
   });
 
   it('names a file by its last segment on either separator', () => {

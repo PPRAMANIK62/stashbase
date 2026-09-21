@@ -569,6 +569,28 @@ layouts were inspected. This proves presentation, not real-provider retry behavi
 Validation: 35 focused tests passed; the subsequent combined validation passed
 all 12 renderer gates, including coverage.
 
+**Shell and subagent writes (2026-09-21):** a Claude Writer subagent created
+a draft through a Bash heredoc, so no tool named the file: the turn
+showed no file result, nothing reported the write, and the daemon's tree
+revision never moved, so Files kept the stale listing. `domain/file-change.ts`
+now asks, when a turn settles, whether it ran a call that could have written
+unseen (a command, a subagent, or any tool it does not parse; reads, listings,
+searches, and questions are excluded), and `application/session/events.ts`
+reports the folder as possibly changed. `use-folder-refresh.ts` takes that
+report down the existing Agent-write path: re-read the listing, reconcile the
+folder, re-read listing and status. A file result and its Open still require a
+named write; a shell-written file has none by design and appears in Files
+instead. Tests cover the classification, the settled-turn report against a
+read-and-reported-write turn, and the hook's reconcile with no named source.
+Validation: the complete `pnpm check` matrix passed in one run, including all
+12 renderer gates with coverage, `pnpm test:electron`, host types, and the built
+Electron smoke. An isolated built-app pass on macOS then wrote a Markdown file
+into an open project from outside any file tool and posted the window-origin
+`/api/sync` this report triggers: the reconcile added exactly that file, the
+tree revision moved, and `/api/files` listed it. Not proven: a live runtime
+turn through the built desktop, because no runtime signs in under an isolated
+home; the renderer's report itself rests on the tests above.
+
 **Work in progress presentation (2026-09-16):** a running turn is narrated by the
 activity group that closes the transcript: `ui/transcript/tool-presentation.ts`
 names the step in hand while the group is live and returns to the aggregate

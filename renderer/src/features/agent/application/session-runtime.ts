@@ -17,6 +17,7 @@ import {
 } from '@/features/agent/application/session/events';
 import {
   filesChanged,
+  folderMayHaveChanged,
   type AgentFilesChanged,
 } from '@/features/agent/application/session/files-changed';
 import {
@@ -103,6 +104,7 @@ export function createAgentSessionRuntime({
     const change = filesChanged(state().scope, changed);
     if (change) onFilesChanged(change);
   };
+  const notifyFolderMayHaveChanged = () => onFilesChanged?.(folderMayHaveChanged(state().scope));
 
   const submit = (prompt: PendingPrompt): boolean => {
     const current = state();
@@ -172,6 +174,7 @@ export function createAgentSessionRuntime({
     ledger,
     nextBlockId,
     notifyFilesChanged,
+    notifyFolderMayHaveChanged,
     state,
     submit,
     transition,

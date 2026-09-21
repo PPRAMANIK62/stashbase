@@ -40,6 +40,7 @@ function harness(initial?: Partial<AgentSessionState>) {
     ledger: createPromptLedger(),
     nextBlockId: (kind) => `${kind}-${++blocks}`,
     notifyFilesChanged: vi.fn(),
+    notifyFolderMayHaveChanged: vi.fn(),
     state: () => state,
     submit: vi.fn(() => true),
     transition: (action) => {
@@ -171,6 +172,50 @@ describe('applyAgentSessionEvent', () => {
     });
 
     expect(test.context.notifyFilesChanged).toHaveBeenCalledWith(['notes.md']);
+  });
+
+  it('reports that the folder may have moved once a turn that ran a command settles', () => {
+    const test = harness({ connection: { kind: 'live', turn: { promptBlockId: 'u1' } } });
+    test.context.transition({ at: 1, context: [], id: 'u1', kind: 'submit-prompt', text: 'Go' });
+    test.apply({
+      id: 'tool-1',
+      input: { command: "cat > drafts/intro.md <<'EOF'\n# Jev\nEOF" },
+      kind: 'tool-started',
+      name: 'Bash',
+    });
+    test.apply({ content: '', id: 'tool-1', isError: false, kind: 'tool-finished' });
+
+    test.apply({ isError: false, kind: 'turn-ended' });
+
+    // The command named no file, so its settled report was empty; the turn's
+    // end is the only moment the shell learns the disk may have moved.
+    expect(vi.mocked(test.context.notifyFilesChanged).mock.calls).toEqual([[[]]]);
+    expect(test.context.notifyFolderMayHaveChanged).toHaveBeenCalledOnce();
+    expect(test.state().connection).toEqual({ kind: 'live', turn: null });
+  });
+
+  it('leaves the folder alone after a turn of reads and writes it already reported', () => {
+    const test = harness({ connection: { kind: 'live', turn: { promptBlockId: 'u1' } } });
+    test.context.transition({ at: 1, context: [], id: 'u1', kind: 'submit-prompt', text: 'Go' });
+    test.apply({
+      id: 'read-1',
+      input: { file_path: '/project/Research/notes.md' },
+      kind: 'tool-started',
+      name: 'Read',
+    });
+    test.apply({ content: '# Notes', id: 'read-1', isError: false, kind: 'tool-finished' });
+    test.apply({
+      id: 'write-1',
+      input: { content: '# Notes', file_path: '/project/Research/notes.md' },
+      kind: 'tool-started',
+      name: 'Write',
+    });
+    test.apply({ content: 'ok', id: 'write-1', isError: false, kind: 'tool-finished' });
+
+    test.apply({ isError: false, kind: 'turn-ended' });
+
+    expect(test.context.notifyFilesChanged).toHaveBeenCalledWith(['/project/Research/notes.md']);
+    expect(test.context.notifyFolderMayHaveChanged).not.toHaveBeenCalled();
   });
 
   it('turns a failure inside a turn into a retry offer and one outside it into a stop', () => {

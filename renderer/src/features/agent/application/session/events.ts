@@ -10,7 +10,10 @@ import type {
   AgentPromptLedger,
   PendingPrompt,
 } from '@/features/agent/application/session/prompts';
-import { fileChangesForTool } from '@/features/agent/domain/file-change';
+import {
+  fileChangesForTool,
+  turnMayHaveChangedFilesUnseen,
+} from '@/features/agent/domain/file-change';
 import {
   latestUserBlock,
   agentTurnIsActive,
@@ -25,6 +28,8 @@ export interface AgentEventContext {
   nextBlockId(kind: string): string;
   /** Reports the paths a settled write changed, under the live scope. */
   notifyFilesChanged(paths: string[]): void;
+  /** Reports that a settled turn may have changed files it never named. */
+  notifyFolderMayHaveChanged(): void;
   state(): AgentSessionState;
   /** Sends a held prompt; false when the socket refused it. */
   submit(prompt: PendingPrompt): boolean;
@@ -124,9 +129,14 @@ export function applyAgentSessionEvent(context: AgentEventContext, event: AgentS
     case 'failed':
       applyFailure(context, event);
       return;
-    case 'turn-ended':
+    case 'turn-ended': {
+      // A shell command or a subagent writes without naming a file, so the
+      // turn that ran one is the only signal that the folder moved.
+      const unseen = turnMayHaveChangedFilesUnseen(context.state().transcript);
       transition({ at: Date.now(), isError: event.isError, kind: 'settle-turn' });
+      if (unseen) context.notifyFolderMayHaveChanged();
       return;
+    }
     case 'exited':
       transport.expectClose();
       transition({ kind: 'close', message: event.message });

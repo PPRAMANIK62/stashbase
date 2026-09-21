@@ -82,6 +82,24 @@ describe('useFolderRefresh', () => {
     );
   });
 
+  it('reconciles a folder a turn may have changed without naming a file', async () => {
+    const { isStale, result, syncFolder } = mount();
+
+    act(() =>
+      result.current.onAgentFilesChanged({
+        paths: [],
+        scope: { kind: 'folder', path: RESEARCH_FOLDER.path },
+        sources: [],
+      }),
+    );
+
+    expect(isStale(workspaceQueryKeys.files(RESEARCH_FOLDER.path))).toBe(true);
+    expect(syncFolder).toHaveBeenCalledExactlyOnceWith(RESEARCH_FOLDER.path);
+    await waitFor(() =>
+      expect(isStale(preparationQueryKeys.folderStatus(RESEARCH_FOLDER.path))).toBe(true),
+    );
+  });
+
   it('re-reads the folder once a reprocess has settled', async () => {
     const { isStale, reprocessSource, result } = mount();
     const source = { folderPath: RESEARCH_FOLDER.path, path: 'notes.md' };

@@ -22,8 +22,10 @@ Chat, Documents assistance, and runtimes.
    turn, and skipping tells the Agent no answer was given. Tool-call failures
    do not appear in chat, including activity summaries and expanded details. The Agent explains task outcomes; native
    execution history retains the failed attempts.
-   Only successful file operations contribute to changed-file results.
-   New output preserves reading position.
+   Only successful file operations contribute to changed-file results. A
+   write made through a shell command or a subagent names no file and shows
+   no result; when such a turn settles, the project's files refresh so the
+   file appears in Documents. New output preserves reading position.
 4. Continue, queue a follow-up, stop, or reuse a message for another turn. Open a
    file result or a local file link to switch to Documents and show that file,
    retaining the conversation and unsent input. Agent writes do not take focus.

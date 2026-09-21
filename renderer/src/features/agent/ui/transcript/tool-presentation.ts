@@ -3,20 +3,12 @@
  *  permission ask, and the bounded arguments and result behind an opened row.
  *  Wording only — whether a call is shown at all, and which group is still
  *  live, are decided by the surfaces in `activity.tsx`. */
-import { agentQuestions, QUESTION_TOOL_NAME } from '@/features/agent/domain/question';
+import { agentQuestions } from '@/features/agent/domain/question';
 import type { AgentTranscriptBlock } from '@/features/agent/domain/session';
+import { agentToolKind, type AgentToolKind } from '@/features/agent/domain/tool-kind';
 import { basePathName } from '@/shared/utils/file-path';
 
 export type AgentToolBlock = Extract<AgentTranscriptBlock, { kind: 'tool' }>;
-export type AgentToolKind =
-  | 'read'
-  | 'list'
-  | 'search'
-  | 'command'
-  | 'write'
-  | 'edit'
-  | 'question'
-  | 'other';
 
 /** What a call's status reads as, on its row and on a decided card. */
 export const STATUS_LABELS: Record<AgentToolBlock['status'], string> = {
@@ -50,25 +42,13 @@ function clipText(value: string, characterLimit: number): string {
     : output;
 }
 
-export function agentToolKind(tool: AgentToolBlock): AgentToolKind {
-  if (tool.name === QUESTION_TOOL_NAME) return 'question';
-  if (tool.name === 'Bash' || /command|shell|exec/i.test(tool.name)) return 'command';
-  if (/read_file$/i.test(tool.name) || /^read$/i.test(tool.name)) return 'read';
-  if (/write_file$/i.test(tool.name) || /^write$/i.test(tool.name)) return 'write';
-  if (/edit_file$/i.test(tool.name) || /file change/i.test(tool.name)) return 'edit';
-  if (/^(?:edit|multiedit|notebookedit|filediff)$/i.test(tool.name)) return 'edit';
-  if (/list_directory$/i.test(tool.name) || /^list/i.test(tool.name)) return 'list';
-  if (/search|grep|find/i.test(tool.name)) return 'search';
-  return 'other';
-}
-
 export function agentToolRow(tool: AgentToolBlock): {
   mono?: boolean;
   target?: string | undefined;
   verb: string;
 } {
   const input = argumentsOf(tool.input);
-  const kind = agentToolKind(tool);
+  const kind = agentToolKind(tool.name);
   const rawPath = input.path ?? input.file_path ?? input.file;
   const path = typeof rawPath === 'string' ? basePathName(rawPath) : undefined;
   switch (kind) {
@@ -110,7 +90,7 @@ export function agentToolRow(tool: AgentToolBlock): {
 
 export function agentPermissionTitle(tool: AgentToolBlock): string {
   if (tool.permissionTitle) return tool.permissionTitle;
-  switch (agentToolKind(tool)) {
+  switch (agentToolKind(tool.name)) {
     case 'command':
       return 'Run this command?';
     case 'write':
@@ -177,7 +157,7 @@ export function agentActivitySummary(tools: AgentToolBlock[], active: boolean): 
   if (step) return step;
   const counts = new Map<AgentToolKind, number>();
   for (const tool of tools) {
-    const kind = agentToolKind(tool);
+    const kind = agentToolKind(tool.name);
     counts.set(kind, (counts.get(kind) ?? 0) + 1);
   }
   const labels = [
