@@ -227,6 +227,16 @@ Host/services: `server/folder.ts`, `server/github-import.ts`, `server/project-fi
   Retry sends no second import POST. Explicit Open existing folder resolves the
   Gallery destination conflict. System picker choices and Gallery index bytes
   are controlled; source/server builds and native window routing are real.
+- **Boot and open reconcile pass (2026-09-21):** an isolated macOS built app
+  with a real Python/MFS daemon and no embedding key started with two registered
+  projects. Boot bound both and reconciled neither: the server log held no
+  project reconcile, and the project that was never opened still reported zero
+  documents at exit. Opening the other through a window-origin
+  `/api/projects/open` reconciled its 300 Markdown sources in about four
+  seconds, and a concurrent window-origin request loop saw no response slower
+  than 22 ms across the first second and a half of it. This is API evidence
+  from the desktop window's origin, not a UI pass, and it does not establish
+  behavior for large mixed-format folders or with an embedding provider.
 - **AI Eval:** not required.
 - **Release Check:** real OS folder picker, file drop, and packaged public Git import.
 - **File import (2026-09-16):** Files exposes `FileImport` through

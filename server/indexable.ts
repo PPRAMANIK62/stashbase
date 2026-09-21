@@ -36,6 +36,19 @@ export const INDEX_EXCLUDED_DIRS = new Set<string>([
  * reconcile cannot monopolize the shared Node event loop on flat code trees. */
 export const FILESYSTEM_SCAN_YIELD_EVERY = 2_048;
 
+/** Reconcile offers sources to MFS in batches of this size and yields the
+ * event loop between batches. Per-file admission already awaits real I/O,
+ * but a run of cheap decisions (stale-projection deletes, skipped formats)
+ * would otherwise settle as microtasks only and hold the shared Node event
+ * loop for the whole Folder. */
+export const RECONCILE_BATCH_SIZE = 32;
+
+/** One macrotask turn: lets queued I/O callbacks and HTTP handlers run
+ * before a long scan or reconcile continues. */
+export function yieldToEventLoop(): Promise<void> {
+  return new Promise<void>((resolve) => setImmediate(resolve));
+}
+
 /** Hard ceiling for a single source text that we will send to the daemon.
  *  It must be large enough for book-length PDF/OCR derived markdown,
  *  while still catching accidental bundled app dumps or source trees. */

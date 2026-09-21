@@ -37,7 +37,7 @@ import {
 } from './agent-contract.ts';
 import { onClose, ensureFolderHome, registeredFolderRoots } from './folder.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import { bootBindAllFolders, reconcileProjectFolders, resetIndexerRuntime } from './state.ts';
+import { bootBindAllFolders, resetIndexerRuntime } from './state.ts';
 import { reapOrphanDaemons, reclaimStaleServerPort } from './stale-lock.ts';
 import { startParentWatchdog } from './parent-watchdog.ts';
 import { logger } from './log.ts';
@@ -368,12 +368,13 @@ const server = app.listen(PORT, '127.0.0.1', () => {
     log.warn(`reap orphan daemons failed: ${err instanceof Error ? err.message : String(err)}`);
   }
   // Configure the daemon and bind registered folders in the background so
-  // their namespaces reconcile without waiting for the user to open them.
+  // each namespace is ready when a window selects it. Boot reconciles nothing:
+  // a folder reconciles when a window opens it, so a long recent-folder list
+  // never queues every registered folder ahead of the one the user is in.
   Promise.resolve()
     .then(() => bootBindAllFolders())
-    .then(() => reconcileProjectFolders('app boot'))
     .catch((err) =>
-      log.warn(`boot project bind/reconcile failed: ${err?.message ?? err}`),
+      log.warn(`boot project bind failed: ${err?.message ?? err}`),
     );
   log.info('waiting for the user to pick a folder');
 });

@@ -6,7 +6,12 @@ import test from 'node:test';
 import { syncIndex } from './sync.ts';
 import type { Indexer } from './indexer.ts';
 import { prepareForIndex } from './indexer.mfs.ts';
-import { hasNoExtractableText, indexableFileSizeError, MAX_INDEXABLE_BYTES } from './indexable.ts';
+import {
+  hasNoExtractableText,
+  indexableFileSizeError,
+  MAX_INDEXABLE_BYTES,
+  RECONCILE_BATCH_SIZE,
+} from './indexable.ts';
 
 for (const [source, content] of [
   ['/project/Data.JSON', '\uFEFF{\r\n  "z": 1,\r\n  "broken":\r\n'],
@@ -145,4 +150,33 @@ test('an unreadable subtree cannot authorize removal of existing projections', a
     upsertFile: async (name: string) => { mutations.push(name); return { outcome: 'added' }; },
   } as unknown as Indexer, root), { code: 'EACCES' });
   assert.deepEqual(mutations, []);
+});
+
+test('removing many stale projections yields to the event loop between batches', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-batched-reconcile-'));
+  try {
+    const stale = Array.from({ length: RECONCILE_BATCH_SIZE * 3 }, (_, i) => path.join(root, `gone-${i}.md`));
+    let deleted = 0;
+    const observed: number[] = [];
+    let finished = false;
+    // A macrotask probe stands in for an HTTP handler waiting behind the reconcile.
+    const probe = () => {
+      observed.push(deleted);
+      if (!finished) setImmediate(probe);
+    };
+    setImmediate(probe);
+    const result = await syncIndex({
+      listDocuments: async () => stale,
+      deleteFile: async () => { deleted += 1; },
+      upsertFile: async () => { throw new Error('nothing on disk to offer'); },
+    } as unknown as Indexer, root);
+    finished = true;
+    assert.equal(result.removed.length, stale.length);
+    assert.ok(
+      observed.some((count) => count > 0 && count < stale.length),
+      `the probe never ran mid-reconcile (saw ${observed.join(',')})`,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

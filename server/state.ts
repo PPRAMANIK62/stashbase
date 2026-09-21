@@ -4,8 +4,8 @@
  * One `MfsIndexer` instance lives for the lifetime of the server
  * process. The daemon underneath owns the MFS store in app data and gives
  * each Folder one Internal namespace. Boot binds every known Folder so it is
- * ready when selected; boot and Welcome can also reconcile known folders without opening them, so
- * interrupted conversion work is rediscovered across registered projects.
+ * ready when selected, but reconciles none of them: a Folder reconciles when a
+ * window opens it, and interrupted conversion work resumes on that open.
  *
  * Extracted from `server/index.ts` so route modules can import the
  * indexer without picking up the whole route registration kitchen sink.
@@ -127,9 +127,10 @@ export async function bootBindAllFolders(): Promise<void> {
 }
 
 /** Reconcile every project member without changing the active window folder.
- *  This is the project-level recovery hook: after a process restart, or when
- *  the user sits on Welcome, interrupted PDF/image conversions should resume
- *  even if no folder is opened into the editor. */
+ *  Only the embedding-key backfill uses this: a newly saved key should embed
+ *  every registered Folder, not just the open one. Boot deliberately does not
+ *  call it; ordinary reconcile is folder-explicit and runs when a window opens
+ *  a Folder. */
 export async function reconcileProjectFolders(reason: string): Promise<void> {
   const roots = projectFolderRoots();
   if (roots.length === 0) return;

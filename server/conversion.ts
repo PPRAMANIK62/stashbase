@@ -44,6 +44,7 @@ import {
   indexableFileSizeError,
   isCloudPlaceholderName,
   isIndexExcludedDirName,
+  yieldToEventLoop,
 } from './indexable.ts';
 import { registerDerivedSource } from './derived-store.ts';
 import {
@@ -512,7 +513,7 @@ export async function discoverCandidateSources(
     candidatesSinceYield += 1;
     if (candidatesSinceYield >= FILESYSTEM_SCAN_YIELD_EVERY) {
       candidatesSinceYield = 0;
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      await yieldToEventLoop();
     }
     if (spec.matches(path.basename(abs))) discoverSource(abs, spec, queueConversion);
   }
@@ -566,7 +567,7 @@ async function walkSources(
     state.entriesSinceYield += 1;
     if (state.entriesSinceYield >= FILESYSTEM_SCAN_YIELD_EVERY) {
       state.entriesSinceYield = 0;
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      await yieldToEventLoop();
     }
     if (isCloudPlaceholderName(e.name)) continue;
     // Match the index/sidebar project-directory policy so opening a code

@@ -172,8 +172,10 @@ source URL and installed package version.
   User Cancel is durable until Reprocess; shutdown/mutation
   interruption remains recoverable. Cancel the full native process tree and await
   handle release. Optional helpers must not block browsing or steal native focus.
-- Reconcile is folder-explicit and rediscovers lost in-memory work. Apply common
-  hidden/dependency exclusions before traversal and mutation-triggered scheduling.
+- Reconcile is folder-explicit and rediscovers lost in-memory work. Boot binds
+  every registered folder and reconciles none; a folder reconciles when a window
+  opens it, offering sources in bounded batches that yield the shared event loop.
+  Apply common hidden/dependency exclusions before traversal and mutation-triggered scheduling.
   An incomplete directory scan fails reconciliation before unseen projections can
   be removed. Queuing invalidates stale final output; source removal retires all
   owned artifacts.

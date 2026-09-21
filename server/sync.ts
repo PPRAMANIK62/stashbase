@@ -7,6 +7,10 @@
  * projection is offered idempotently; MFS returns `unchanged` without
  * embedding it again. Documents absent from the current source set are
  * removed by DocumentId.
+ *
+ * Sources are offered in bounded batches that yield the shared event loop,
+ * and per-file reads are asynchronous, so one large Folder cannot stall the
+ * HTTP routes serving the window that opened it.
  */
 import fs from 'node:fs';
 import { isMfsDaemonRetiringError } from './mfs-daemon.ts';
@@ -18,9 +22,11 @@ import { cancelConversion, collectSourceCandidates } from './conversion.ts';
 import type { Indexer, IndexUpsertResult } from './indexer.ts';
 import { logger, errorMessage } from './log.ts';
 import {
-  indexableFileSizeError,
+  indexableFileSizeErrorAsync,
   isRetrievalEligiblePath,
+  RECONCILE_BATCH_SIZE,
   shouldIndexFilePath,
+  yieldToEventLoop,
 } from './indexable.ts';
 import { detectFormat, isConvertibleSource } from './format.ts';
 import { clearRecord } from './conversion-status.ts';
@@ -38,10 +44,10 @@ function folderRelOf(root: string, abs: string): string | null {
   return rel === '' ? null : rel;
 }
 
-function readTextAt(root: string, abs: string): string | null {
+async function readTextAt(root: string, abs: string): Promise<string | null> {
   const rel = filesystemPath.relative(root, abs);
   if (rel == null || rel === '') return null;
-  try { return decodeDirectTextBytes(rel, fs.readFileSync(abs)); } catch { return null; }
+  try { return decodeDirectTextBytes(rel, await fs.promises.readFile(abs)); } catch { return null; }
 }
 
 export interface SyncOptions {
@@ -121,8 +127,14 @@ async function removeAbsentDocuments(
   failed: Array<{ name: string; error: string }>,
   opts: SyncOptions,
 ): Promise<boolean> {
+  let removedSinceYield = 0;
   for (const sourcePath of indexedDocuments) {
     if (currentSources.has(filesystemPath.identity(sourcePath))) continue;
+    if (removedSinceYield >= RECONCILE_BATCH_SIZE) {
+      removedSinceYield = 0;
+      await yieldToEventLoop();
+    }
+    removedSinceYield += 1;
     if (shouldStop(opts)) return false;
     try {
       cleanupRemovedSource(sourcePath);
@@ -162,13 +174,13 @@ async function indexDirectSource(
     await indexer.deleteFile(sourcePath);
     return { outcome: 'removed' };
   }
-  const tooLarge = indexableFileSizeError(sourcePath);
+  const tooLarge = await indexableFileSizeErrorAsync(sourcePath);
   if (tooLarge) {
     await indexer.deleteFile(sourcePath);
     failed.push({ name: sourcePath, error: tooLarge });
     return { outcome: 'removed' };
   }
-  const content = readTextAt(root, sourcePath);
+  const content = await readTextAt(root, sourcePath);
   if (content == null) {
     await indexer.deleteFile(sourcePath);
     failed.push({ name: sourcePath, error: 'source text could not be decoded safely' });
@@ -215,7 +227,13 @@ export async function syncIndex(
   const convertible = sources.filter((sourcePath) => isConvertibleSource(sourcePath));
   await discoverConvertibleSources(root, convertible);
 
+  let offeredSinceYield = 0;
   for (const sourcePath of sources) {
+    if (offeredSinceYield >= RECONCILE_BATCH_SIZE) {
+      offeredSinceYield = 0;
+      await yieldToEventLoop();
+    }
+    offeredSinceYield += 1;
     if (shouldStop(opts)) {
       return {
         added: toFolderRelList(root, added),
