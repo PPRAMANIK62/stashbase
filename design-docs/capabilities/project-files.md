@@ -100,6 +100,17 @@ preference wins either way, and a refused proposal is reported rather than
 written directly. This is standing guidance to the Agent, not a gate: the
 runtime's permissions still decide what a write needs.
 
+The reader can also ask for a rewrite from the document itself. **Humanize** on
+the selection toolbar sends the selected prose to Hemmingway-1 through a
+StashBase-run service and opens the rewrite as the same review; nothing is
+written until a change is accepted. The selection widens to the whole
+paragraphs, headings, quotes or lists it touches, up to about 1,000 words;
+code, tables, images and raw HTML are refused rather than rewritten. The
+rewrite is refused when the document changed while it ran, when the service
+cut it short, or when it changes nothing, and a busy or unavailable service
+leaves the document as it was. Humanize needs no account today and is free for
+a limited time; the service meters by network address, not by account.
+
 Markdown frontmatter is outside the prose editor. A proposal that changes it is
 refused with a visible reason; its metadata is never silently omitted from a review.
 

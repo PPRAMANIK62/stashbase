@@ -269,6 +269,10 @@ Inline review: `renderer/src/features/documents/domain/revision.ts`,
 `renderer/src/features/documents/hooks/use-revision-proposals.ts`, and
 `renderer/src/features/documents/ui/markdown/revision-adapter.ts` over a patched
 `@milkdown/plugin-diff` (`patches/`).
+Humanize on a selection: `renderer/src/features/documents/ui/markdown/humanize-selection.ts`,
+`use-humanize.ts`, `humanize-toolbar.ts`, `renderer/src/features/documents/infrastructure/humanize-api.ts`;
+host `server/humanize.ts` and `server/routes/humanize.ts`; wire
+`shared/protocols/http/humanize.ts`.
 A save refused against a version a deleted file no longer has, whose reload confirms
 the source is gone, enters the document's `detached` state and stops autosave.
 `application/draft-settlement.ts` turns a close or a release of such a tab into the
@@ -296,6 +300,27 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   build with DOM clicks: what a proposal renders, which commands dirty the
   buffer, and that a per-change Reject resolves a deletion, including one of
   two adjacent deleted blocks while the other stays acceptable.
+  It also proves the patched start keeps a document's trailing empty
+  paragraph out of the diff. `humanize-selection.test.ts` proves, on the same
+  build, that a selection widens to whole blocks, refuses code, and that the
+  proposal reviews as exactly one change on a document ending in a list;
+  `use-humanize.test.tsx` covers the request's refusals (review open, not
+  prose, document changed, cancelled, rebuilt editor) and both failure
+  ladders; `server/humanize.test.ts` and `server/routes/humanize.test.ts`
+  cover stream draining, the cut-off refusal and status mapping. One real
+  request through `server/humanize.ts` reached the live service on 2026-09-22
+  and returned a whole rewrite in about two seconds. Unproven: the shared
+  per-address rate limit under real use, and rewrite quality.
+- **Driven Runtime Pass (Humanize, 2026-09-22):** the built application, with
+  its own user data and port, opened a seeded folder from Recent, opened its
+  Markdown draft in Edit mode, and took real mouse input. A drag from a
+  paragraph across the code block into the list, then Humanize on the
+  selection toolbar, showed the refusal notice naming prose and left the
+  document untouched; Dismiss cleared it. A drag over one paragraph and
+  Humanize showed the running notice, and within seconds the live service's
+  rewrite opened as a review of three changes, all inside that paragraph,
+  with the code block and the list after it unmarked. Screenshots were
+  reviewed by eye; the pass records no timing beyond "seconds".
 - **Driven Runtime Pass:** isolated built-app passes cover preview reuse/keep,
   history, draft creation/rename, and kept-only tab restoration. Earlier journal
   restoration passes apply to the removed snapshot feature, not current durability. A separate window-origin
