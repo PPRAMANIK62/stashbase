@@ -27,6 +27,25 @@ test('MCP setup preserves unrelated commented/quoted tables and multiline text, 
   fs.rmSync(config);
 });
 
+test('Claude MCP setup keeps the user\'s other settings and asks for StashBase tools to stay loaded', () => {
+  const config = path.join(os.homedir(), '.claude.json');
+  fs.writeFileSync(config, JSON.stringify({
+    theme: 'dark',
+    mcpServers: { other: { command: 'other-server' }, stashbase: { command: 'old' } },
+  }));
+  ensureAgentMcp('claude');
+  const updated = JSON.parse(fs.readFileSync(config, 'utf8'));
+  assert.equal(updated.theme, 'dark');
+  assert.deepEqual(updated.mcpServers.other, { command: 'other-server' });
+  assert.equal(updated.mcpServers.stashbase.alwaysLoad, true);
+  assert.notEqual(updated.mcpServers.stashbase.command, 'old');
+  const malformed = '{ "mcpServers": ';
+  fs.writeFileSync(config, malformed);
+  assert.throws(() => ensureAgentMcp('claude'), /leaving it untouched/);
+  assert.equal(fs.readFileSync(config, 'utf8'), malformed);
+  fs.rmSync(config);
+});
+
 test('valid login-shell discoveries survive elapsed time and disappear only when their file disappears', { skip: process.platform === 'win32' }, async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-cli-cache-'));
   const shell = path.join(root, 'shell');

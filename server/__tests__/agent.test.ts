@@ -101,6 +101,10 @@ test('Claude keeps Agent Instructions user-visible while appending hidden StashB
   assert.match(appended, /search_project/);
   assert.match(appended, /read_file/);
   assert.match(appended, /do not install or run a separate parser/i);
+  // The policy is the one text a runtime always sees, so the choice between
+  // proposing a revision and writing it has to be stated here.
+  assert.match(appended, /suggest_edits/);
+  assert.match(appended, /Write the file directly/);
   assert.match(appended, /Prefer primary research notes\./);
   assert.notEqual(appended, instructions);
 });

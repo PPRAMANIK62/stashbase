@@ -278,7 +278,10 @@ stable status without download, retry, or a new durable demand latch.
   may have changed, and the shell reconciles it the same way. Reads, listings,
   searches, and questions report nothing.
 - Instructions are scoped Settings guidance resolved at native mount and composed
-  with internal routing policy. They are not permissions, skill contents, or
+  with internal routing policy. That policy is the one text every runtime always
+  sees, so it owns which StashBase tool orients and reads prepared text, and when
+  a Markdown revision is proposed rather than written; a tool description alone
+  cannot own a rule, because a runtime may defer it. They are not permissions, skill contents, or
   project-file edits. Empty reset restores the packaged default; saves do not
   mutate a running native prompt. Brainstorming needs no sources/wiki/index.
 - Attachment age cleanup excludes batches created by the active server process;
@@ -358,7 +361,9 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   authorize a whole-file overwrite. Generic/derived/unsupported entries never
   bypass source admission. Native coding-Agent tools have separate runtime permissions.
 - Readiness alone writes the built-in CLIs' MCP config; OpenQuill injects config
-  per process. External clients copy their setup manually. No second client-config
+  per process. Claude's entry asks the runtime to always load StashBase's tools,
+  because Claude otherwise defers MCP definitions behind its tool search once a
+  user's other connectors grow, leaving the model a tool name with no description. External clients copy their setup manually. No second client-config
   or credentials store belongs in StashBase.
 
 ## Usage Statistics

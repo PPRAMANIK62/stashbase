@@ -91,6 +91,15 @@ refused after a fresh source check; a proposal handed to a window is consumed on
 reported rather than silently retried. A new proposal cannot replace a review
 already open on that document.
 
+An Agent proposes a revision when it changes a few sentences to a few paragraphs
+of prose in an existing Markdown document. It writes directly for a new file, a
+draft it created in the same conversation, a rewrite of most of a document, one
+change repeated across many files, frontmatter, a file that is not Markdown, or
+a mechanical change such as a rename or a link update. The reader's stated
+preference wins either way, and a refused proposal is reported rather than
+written directly. This is standing guidance to the Agent, not a gate: the
+runtime's permissions still decide what a write needs.
+
 Markdown frontmatter is outside the prose editor. A proposal that changes it is
 refused with a visible reason; its metadata is never silently omitted from a review.
 

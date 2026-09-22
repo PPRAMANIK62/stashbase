@@ -51,7 +51,11 @@ export function ensureAgentMcp(id: 'claude' | 'codex'): void {
   if (id === 'codex') {
     configureCodex(path.join(os.homedir(), '.codex', 'config.toml'), wrapper);
   } else {
-    configureJsonMcp(path.join(os.homedir(), '.claude.json'), { type: 'stdio', command: wrapper });
+    // Claude defers MCP tool definitions behind its tool search once a user's
+    // connectors grow past a share of the context, leaving the model a bare
+    // name such as `suggest_edits` and no account of what it does. The routing
+    // policy names these tools, so their descriptions must always be loaded.
+    configureJsonMcp(path.join(os.homedir(), '.claude.json'), { type: 'stdio', command: wrapper, alwaysLoad: true });
   }
 }
 
