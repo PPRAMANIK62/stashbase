@@ -1,5 +1,5 @@
 diff --git a/lib/index.js b/lib/index.js
-index d4320f52c1371e4f0da4e8c0e1d6d9261299a456..1a10c930ed772becc3f3871b63190f6bbfd35c4f 100644
+index d4320f52c1371e4f0da4e8c0e1d6d9261299a456..64df0598a20d0cb8c2cad8f212ca0d8245c8415a 100644
 --- a/lib/index.js
 +++ b/lib/index.js
 @@ -323,8 +323,40 @@ function recomputeChanges(doc, state, options) {
@@ -78,7 +78,37 @@ index d4320f52c1371e4f0da4e8c0e1d6d9261299a456..1a10c930ed772becc3f3871b63190f6b
  							}]
  						};
  						break;
-@@ -485,7 +524,9 @@ var rejectDiffChunkCmd = $command("RejectDiffChunk", () => {
+@@ -421,11 +460,27 @@ function applyPendingChanges(tr, diffState) {
+ 	}
+ 	return tr;
+ }
++/**
++ * StashBase patch. Crepe's trailing plugin keeps an empty paragraph after a
++ * document whose last block is not a paragraph, so the reader can click
++ * below a list or a code block. Markdown cannot spell that paragraph, so a
++ * proposal parsed from Markdown always lacked it and every review of such a
++ * document opened with a phantom deletion at its end. The proposal takes the
++ * reviewed document's trailing paragraph as its own.
++ */
++function withTrailingParagraph(current, proposed) {
++	const last = current.lastChild;
++	if (!last || last.type.name !== "paragraph" || last.content.size !== 0) return proposed;
++	const proposedLast = proposed.lastChild;
++	if (proposedLast && proposedLast.type === last.type && proposedLast.content.size === 0) return proposed;
++	return proposed.copy(proposed.content.addToEnd(last.type.create()));
++}
+ var startDiffReviewCmd = $command("StartDiffReview", (ctx) => {
+ 	return (modifiedMarkdown) => (state, dispatch) => {
+ 		if (modifiedMarkdown == null) return false;
+-		const newDoc = ctx.get(parserCtx)(modifiedMarkdown);
+-		if (!newDoc) return false;
++		const parsed = ctx.get(parserCtx)(modifiedMarkdown);
++		if (!parsed) return false;
++		const newDoc = withTrailingParagraph(state.doc, parsed);
+ 		if (dispatch) dispatch(state.tr.setMeta(diffPluginKey, {
+ 			type: "start",
+ 			newDoc
+@@ -485,7 +540,9 @@ var rejectDiffChunkCmd = $command("RejectDiffChunk", () => {
  		if (dispatch) dispatch(state.tr.setMeta(diffPluginKey, {
  			type: "reject",
  			fromB: change.fromB,

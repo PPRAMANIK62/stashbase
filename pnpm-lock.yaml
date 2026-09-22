@@ -9,7 +9,7 @@ overrides:
   vitest@*: 4.1.11
 
 patchedDependencies:
-  '@milkdown/plugin-diff@7.21.3': 8adb8868803651fe700c4a920ef410bdf90f73359157a8cdb0907565b83e5182
+  '@milkdown/plugin-diff@7.21.3': 4e875e26a838603e44fee4fb3159c50b9cba795390cbb9a5997162e5f01e1237
 
 importers:
 
@@ -7551,7 +7551,7 @@ snapshots:
       '@milkdown/core': 7.21.3
       '@milkdown/ctx': 7.21.3
       '@milkdown/exception': 7.21.3
-      '@milkdown/plugin-diff': 7.21.3(patch_hash=8adb8868803651fe700c4a920ef410bdf90f73359157a8cdb0907565b83e5182)
+      '@milkdown/plugin-diff': 7.21.3(patch_hash=4e875e26a838603e44fee4fb3159c50b9cba795390cbb9a5997162e5f01e1237)
       '@milkdown/plugin-tooltip': 7.21.3
       '@milkdown/preset-commonmark': 7.21.3
       '@milkdown/preset-gfm': 7.21.3
@@ -7622,7 +7622,7 @@ snapshots:
       '@milkdown/plugin-block': 7.21.3
       '@milkdown/plugin-clipboard': 7.21.3
       '@milkdown/plugin-cursor': 7.21.3
-      '@milkdown/plugin-diff': 7.21.3(patch_hash=8adb8868803651fe700c4a920ef410bdf90f73359157a8cdb0907565b83e5182)
+      '@milkdown/plugin-diff': 7.21.3(patch_hash=4e875e26a838603e44fee4fb3159c50b9cba795390cbb9a5997162e5f01e1237)
       '@milkdown/plugin-history': 7.21.3
       '@milkdown/plugin-indent': 7.21.3
       '@milkdown/plugin-listener': 7.21.3
@@ -7673,7 +7673,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@milkdown/plugin-diff@7.21.3(patch_hash=8adb8868803651fe700c4a920ef410bdf90f73359157a8cdb0907565b83e5182)':
+  '@milkdown/plugin-diff@7.21.3(patch_hash=4e875e26a838603e44fee4fb3159c50b9cba795390cbb9a5997162e5f01e1237)':
     dependencies:
       '@milkdown/core': 7.21.3
       '@milkdown/ctx': 7.21.3
@@ -7725,7 +7725,7 @@ snapshots:
     dependencies:
       '@milkdown/core': 7.21.3
       '@milkdown/ctx': 7.21.3
-      '@milkdown/plugin-diff': 7.21.3(patch_hash=8adb8868803651fe700c4a920ef410bdf90f73359157a8cdb0907565b83e5182)
+      '@milkdown/plugin-diff': 7.21.3(patch_hash=4e875e26a838603e44fee4fb3159c50b9cba795390cbb9a5997162e5f01e1237)
       '@milkdown/prose': 7.21.3
       '@milkdown/utils': 7.21.3
     transitivePeerDependencies:

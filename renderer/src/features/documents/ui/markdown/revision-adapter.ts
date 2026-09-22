@@ -41,8 +41,17 @@ import { $prose } from '@milkdown/kit/utils';
 import { revisionHoverPlugin } from './revision-hover';
 
 /** The outline adapter stamps heading ids into the document, so a diff that
- *  compared them would report every heading as changed. */
-const IGNORED_ATTRIBUTES = { heading: ['id'] };
+ *  compared them would report every heading as changed. Milkdown writes every
+ *  bullet list loose, whatever the list was, so a proposal that went through
+ *  its serializer (Humanize builds its own that way) would report every tight
+ *  list as changed; whether a list is loose is spacing, not a change a reader
+ *  should have to reject. */
+const IGNORED_ATTRIBUTES = {
+  bullet_list: ['spread'],
+  heading: ['id'],
+  list_item: ['spread'],
+  ordered_list: ['spread'],
+};
 /** Node types drawn by a custom node view, which inline decorations cannot
  *  reach: their changes are merged into one block-level replacement. */
 const CUSTOM_BLOCK_TYPES = ['table', 'image-block', 'code_block'];

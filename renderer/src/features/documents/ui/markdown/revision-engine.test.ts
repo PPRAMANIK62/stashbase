@@ -193,6 +193,22 @@ describe('the inline revision engine', () => {
     expect(probe.markdown()).toBe('# Title\n\nThe first line.\n');
   });
 
+  it('reviews a document that ends in a list without a phantom deletion of the trailing paragraph', async () => {
+    // Crepe keeps an empty paragraph after a final list so the reader can
+    // click below it. Markdown cannot spell that paragraph, so an unpatched
+    // start read every proposal for such a document as deleting it.
+    const listed = '# Title\n\n- one\n- two\n';
+    const probe = await openProbe(listed);
+
+    probe.run(startDiffReviewCmd, listed);
+    expect(probe.pending()).toBe(0);
+
+    probe.run(clearDiffReviewCmd);
+    probe.run(startDiffReviewCmd, '# Heading\n\n- one\n- two\n');
+    expect(probe.pending()).toBe(1);
+    expect(probe.count('.milkdown-diff-removed')).toBe(1);
+  });
+
   it('parses raw frontmatter into the body, which is why a proposal is stripped first', async () => {
     const withFrontmatter = `---\ntitle: Plan\n---\n\n${PROPOSAL}`;
     const raw = await openProbe();
