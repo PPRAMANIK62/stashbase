@@ -578,6 +578,35 @@ chosen while its catalog is still being read is now held for that read instead
 of being refused as unavailable. Not proven: the packaged application running
 a real update end to end.
 
+**Newer-model offer (2026-09-23):** Claude learns from its server which models
+an account may use, including ones the installed build is too old to run, and
+caches that answer in `~/.claude.json` as `additionalModelOptionsCache`.
+Observed on 2.1.276 with Opus 5.5 released: the cache holds
+`{value: "cc-update-required-1", label: "Opus 5.5 (disabled)", description:
+"Update to 2.1.280+ to use Opus 5.5", disabled: true}`, while the SDK
+`initialize` handshake omits disabled entries (five entries, none disabled) and
+a live turn on `--model opus` reported `canonicalModel: claude-opus-5`. So the
+fact is local but not in the catalog: `server/claude-model-catalog.ts` reads it
+from the file beside the user settings it already reads, cached by mtime,
+and passes the runtime's own model name and sentence through unchanged.
+StashBase compares no versions of its own, so it can never claim a requirement
+the runtime did not state. Every unreadable shape is silence. The offer reaches
+Settings → Agents as the row's leading sentence beside the Update it already
+carried, and the chat as `ui/upgrade-offer.tsx` above the composer, which runs
+the same in-place update through `use-agent-runtime-update.ts` with no refused
+request to resend and is dismissed for the window. Tests cover the disabled
+filter, the label's parenthetical, every malformed shape, a missing and an
+unparseable file, the mtime re-read that withdraws the offer after an update,
+the row's copy, and the card's update call, dismissal, completion, and failure.
+Codex reports no equivalent, so it is never offered one. Driven through
+`/api/terminal/clis`: a fixture `CLAUDE_CONFIG_DIR` naming the disabled entry
+produced the offer on the Claude row and on no other, and the live withdrawal
+was observed when the CLI auto-updated to 2.1.280 mid-session, after which the
+cache dropped the entry, the listing dropped the offer, and the catalog began
+resolving `opus[1m]` to `claude-opus-5-5[1m]`. Not proven: the offer rendered
+in the running application, and the cache's freshness for a reader who has
+never run a Claude turn from StashBase.
+
 **Tool-attempt presentation (2026-09-16):** `ui/transcript/activity.tsx` omits failed
 tools from chat, including summaries and expanded details. Activity tests cover
 a subsequent running, successful, or failed call, empty-group suppression,

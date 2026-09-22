@@ -27,7 +27,10 @@ Settings owns lasting preferences and connection configuration:
   Default; manage Codex and Claude individually. An installed runtime shows its
   version; a runtime whose own updater StashBase can run offers Update, which
   runs that updater in place and never replaces a provider-owned installation
-  with a second copy. Credits refresh automatically; token accounting is not a
+  with a second copy. A runtime that reports a model its
+  installed version cannot run leads its row with that model instead of its
+  readiness; the requirement shown is the runtime's own, never one StashBase
+  worked out. Credits refresh automatically; token accounting is not a
   user setting.
 - **Advanced:** search by meaning and external apps (MCP). Search links directly
   to its configuration without discarding the current query. MCP reveals HTTP

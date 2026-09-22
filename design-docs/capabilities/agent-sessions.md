@@ -46,7 +46,9 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
   the preference; selecting Default explicitly clears the saved effort.
   Without an explicit model choice, a chat runs on the model the runtime's own
   settings name; StashBase never resets a runtime to a built-in default the user
-  did not choose. A model chosen while a session is still starting applies
+  did not choose. A model named by an alias shows the release that alias
+  resolves to, in the runtime's own words, so the reader can tell which model
+  the choice actually runs. A model chosen while a session is still starting applies
   before its first turn.
   Options remain fixed during a turn. Instructions are standing session guidance,
   distinct from permissions, requests, and user-owned native instruction files.

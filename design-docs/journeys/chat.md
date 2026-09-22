@@ -53,7 +53,10 @@ retires that continuation. Standalone Settings setup never sends a draft.
 
 Show what was retained and the required next action. A runtime too old for the
 selected model offers its update in the failed turn; after the update, the same
-request is sent again. Repair setup/account failures
+request is sent again. A runtime that reports a model its installed
+version cannot run offers the same update beside the composer, in that
+runtime's own words; the offer is dismissed for the window, never blocks a
+turn, and is absent whenever the runtime reports nothing. Repair setup/account failures
 without losing the idea. Keep partial output and file results after a turn fails.
 A missing context item needs refresh, replacement, or deliberate removal.
 

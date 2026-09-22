@@ -234,6 +234,13 @@ stable status without download, retry, or a new durable demand latch.
   output. Own temporary scripts and descendant cancellation; neither cleanup nor
   shell wrappers may mask failure. Do not redirect official installs into private
   paths or destructively rewrite user PATH. Platform details live beside the installer.
+- A model an installed runtime is too old to run is that runtime's own
+  statement, read from its own state and passed through unchanged; StashBase
+  compares no versions and infers no requirement, and the renderer only renders
+  what the runtime said. A file that is absent, unreadable, or differently
+  shaped leaves every runtime unchanged. The offer is advisory and shares the
+  existing in-place updater; it never gates a turn, a session, or a model
+  choice.
 - Codex MCP setup parses TOML and replaces only StashBase table ranges, preserving
   unrelated configuration. Invalid or unsupported configuration fails untouched.
 - Each OpenQuill chat owns an authenticated loopback OpenCode process; each Codex
