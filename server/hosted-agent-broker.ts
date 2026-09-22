@@ -4,7 +4,7 @@
  * OpenCode receives only a random process-local credential. The StashBase
  * account token is added here immediately before the request leaves the
  * machine, so neither the renderer nor OpenCode's config/history stores can
- * persist it. The hosted service remains the owner of DeepSeek routing,
+ * persist it. The hosted service remains the owner of Gemini routing,
  * token accounting, and allowance enforcement.
  */
 import crypto from 'node:crypto';

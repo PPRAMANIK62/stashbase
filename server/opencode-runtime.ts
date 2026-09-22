@@ -162,7 +162,7 @@ export function buildOpenCodeConfig(
         },
         models: {
           [model.model]: {
-            name: 'DeepSeek',
+            name: 'Gemini 3.8 Flash',
             tool_call: true,
             reasoning: true,
           },
