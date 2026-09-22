@@ -2,7 +2,6 @@
  *  explains a stopped session, and the composer beneath them. The workspace
  *  only reads session state and hands verbs back to the runtime; every
  *  decision about what a connection means is a domain selector. */
-import { RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
@@ -39,7 +38,7 @@ import { useAgentComposerFocused } from './composer/focus';
 import { AgentPermissionMode } from './composer/permission-mode';
 import { AgentProviderControl } from './composer/provider';
 import { AgentThinkingControl } from './composer/thinking';
-import { connectionNotice } from './connection-notice';
+import { AgentConnectionNotice, connectionNotice } from './connection-notice';
 import { AgentInstructionsControl } from './instructions/agent-instructions-control';
 import { NewChatButton } from './new-chat-button';
 import { AgentTranscript } from './transcript/transcript';
@@ -227,26 +226,7 @@ function ChatWorkspace({
         </Button>
       )}
       {notice && state.delivery !== 'unknown' && (
-        <div className="mx-auto flex w-full max-w-[46rem] shrink-0 items-center gap-2 px-5 pb-2 text-caption text-muted-foreground max-sm:px-4">
-          <span
-            className={cn(
-              'size-1.5 shrink-0 rounded-full',
-              notice.settled ? 'bg-decision' : 'bg-working',
-            )}
-          />
-          <span>{notice.text}</span>
-          {(state.connection.kind === 'closed' || state.connection.kind === 'failed') && (
-            <Button
-              className="ml-auto"
-              leadingIcon={RefreshCw}
-              onClick={active.reconnect}
-              size="compact"
-              variant="ghost"
-            >
-              Reconnect
-            </Button>
-          )}
-        </div>
+        <AgentConnectionNotice connection={state.connection} onReconnect={active.reconnect} />
       )}
 
       {composerShown && (
