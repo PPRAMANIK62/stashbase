@@ -740,6 +740,19 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
   The 2026-09-18 inline revision pass in J03 drove a controlled proposal through
   the built desktop and accepted it to disk; a real Agent turn producing that
   proposal and its matching Chat card remain unproven at runtime.
+- **Proposing or writing (2026-09-22):** a real Claude conversation edited an
+  open draft with the native edit tool and then with `edit_file`, and reached
+  `suggest_edits` only at its end. Its StashBase tools had been deferred behind
+  Claude's tool search, so it held their names without descriptions, and the
+  routing policy said nothing about writes. `server/agent-mcp.ts` now writes
+  Claude's entry with `alwaysLoad`, and `server/agent-runtime-instructions.ts`
+  states when a Markdown revision is proposed and when a file is written.
+  `pnpm test:agent` covers the policy reaching a Claude session and the config
+  write keeping a user's other settings. A controlled Claude CLI probe with tool
+  search forced on read the description of `suggest_edits` with the flag and
+  held only its name without it. Not proven: that a real runtime follows the
+  guidance turn after turn. It is a standing instruction, not a gate, and no
+  conversation was driven after the change.
 - **AI Eval:** requested writing quality belongs to J10. Existing deterministic
   orchestration evidence is not document-specific diff evidence.
 - **Release Check:** real-runtime requested draft/revision followed by editor save.

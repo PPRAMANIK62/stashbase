@@ -10,6 +10,9 @@ export const STASHBASE_AGENT_RUNTIME_POLICY = [
   '- Every file operation and search targets the bound project only. Never iterate projects to simulate global search.',
   '- Read PDFs and DOCX with the StashBase MCP `read_file` tool, which returns prepared text.',
   '- Do not install or run a separate parser for prepared content unless the user explicitly requests original-source analysis or `read_file` reports that prepared text is unavailable.',
+  '- Revise the prose of an existing Markdown document by proposing it with the StashBase MCP `suggest_edits` tool when the change is a few sentences to a few paragraphs. The reader accepts or rejects each change inside the document, and the file stays unchanged until they do.',
+  '- Write the file directly instead for a new file, a draft you created in this conversation, a rewrite of most of a document, one change repeated across many files, YAML frontmatter, a file that is not Markdown, or a mechanical change such as a rename or a link update.',
+  '- When the reader says how they want a change delivered, follow that. If `suggest_edits` refuses a proposal, report its reason instead of writing the same change directly.',
   '</stashbase_runtime_policy>',
 ].join('\n');
 
