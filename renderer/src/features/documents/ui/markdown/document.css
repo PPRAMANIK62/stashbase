@@ -70,6 +70,34 @@
   transform: translateX(-50%);
 }
 
+/* Humanize's progress and refusals sit where the link failure does: one
+   line at the foot of the document, out of the prose, gone when answered. */
+.markdown-humanize-notice {
+  position: absolute;
+  z-index: 3;
+  bottom: 16px;
+  /* Centred by auto margins between the two insets: a `left: 50%` pill
+     shrinks to half the surface and folds a one-line sentence into four. */
+  inset-inline: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: fit-content;
+  max-width: calc(100% - 32px);
+  margin-inline: auto;
+  padding: 4px 4px 4px 10px;
+  color: var(--muted-foreground);
+  font-size: var(--fs-caption, 12px);
+  background: color-mix(in oklab, var(--surface-3) 94%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--shape-input-radius, 8px);
+  box-shadow: var(--shadow-4);
+}
+
+.markdown-humanize-notice[data-state='failed'] {
+  color: var(--destructive);
+}
+
 ::highlight(stashbase-document-find) {
   color: inherit;
   background: color-mix(in oklab, var(--accent) 72%, transparent);
@@ -252,6 +280,27 @@
 
 .markdown-crepe .milkdown-toolbar .divider {
   background: var(--border);
+}
+
+/* Humanize is a word among glyphs: the item widens to the word, and the word
+   takes the glyphs' foreground ladder so it reads as one of them. */
+.markdown-crepe .milkdown-toolbar .toolbar-item:has(.markdown-humanize-label) {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  padding-inline: 10px;
+}
+
+.markdown-humanize-label {
+  color: color-mix(in oklab, var(--foreground) 76%, var(--background));
+  font-size: var(--fs-caption, 12px);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.markdown-crepe .milkdown-toolbar .toolbar-item:hover .markdown-humanize-label {
+  color: var(--foreground);
 }
 
 .markdown-crepe .milkdown-link-edit > .link-edit,

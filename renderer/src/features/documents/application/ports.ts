@@ -100,6 +100,21 @@ export interface DocumentRevisionsPort {
   drain(folderPath: string, signal: AbortSignal): Promise<DrainedRevisions>;
 }
 
+/** Hemmingway-1's plain rewrite of a selection: Markdown in, Markdown out.
+ *  The rewrite never touches a file; the caller turns it into a revision. */
+export interface DocumentHumanizePort {
+  humanize(input: { text: string }, signal: AbortSignal): Promise<{ text: string }>;
+}
+
+type HumanizeExtra = 'busy' | 'cut-off' | 'too-long';
+
+/** `busy` and `too-long` are the reader's to act on: wait, or select less.
+ *  `cut-off` is a rewrite the service ended at its length limit, which the
+ *  host refused rather than offering most of a paragraph. */
+export type DocumentHumanizeFailureKind = FeatureFailureKind<HumanizeExtra>;
+export type DocumentHumanizeError = FeatureError<HumanizeExtra>;
+export const DocumentHumanizeError = featureErrorClass<HumanizeExtra>('DocumentHumanizeError');
+
 export type DocumentRevisionsFailureKind = TransportFailureKind;
 export type DocumentRevisionsError = FeatureError;
 export const DocumentRevisionsError = featureErrorClass('DocumentRevisionsError');

@@ -1,5 +1,6 @@
 import type {
   DocumentAssetPort,
+  DocumentHumanizePort,
   DocumentRevisionsPort,
   DocumentSourcePort,
   DocumentWindowLifecyclePort,
@@ -12,6 +13,7 @@ import type { HttpClient } from '@/platform/http/client';
 import { createDocumentAssetAdapter } from './asset-api';
 import { createDocxPreviewAdapter } from './docx-preview-api';
 import { createGenericFilePreviewAdapter } from './generic-preview-api';
+import { createDocumentHumanizeAdapter } from './humanize-api';
 import { createDocumentRevisionsAdapter } from './revision-api';
 import { createDocumentSourceAdapter } from './source-api';
 import { createDocumentWindowLifecycleAdapter } from './window-lifecycle';
@@ -22,6 +24,7 @@ export interface DocumentAdapters {
   asset: DocumentAssetPort;
   docxPreview: DocxPreviewPort;
   genericPreview: GenericFilePreviewPort;
+  humanize: DocumentHumanizePort;
   revisions: DocumentRevisionsPort;
   source: DocumentSourcePort;
   windowLifecycle: DocumentWindowLifecyclePort;
@@ -36,7 +39,7 @@ export interface DocumentAdapterOptions {
 /**
  * The Documents feature, bound to this window's transports.
  *
- * Six factories used to leave the feature one by one, so adding a viewer that
+ * Seven factories used to leave the feature one by one, so adding a viewer that
  * needed another changed the app's dependency shape and every fake with it.
  * The feature answers for its own wiring here instead; which transport each
  * port ends up on is not the app's business.
@@ -50,6 +53,7 @@ export function createDocumentAdapters({
     asset: createDocumentAssetAdapter(http, serverOrigin),
     docxPreview: createDocxPreviewAdapter(),
     genericPreview: createGenericFilePreviewAdapter(http),
+    humanize: createDocumentHumanizeAdapter(http),
     revisions: createDocumentRevisionsAdapter(http),
     source: createDocumentSourceAdapter(http),
     windowLifecycle: createDocumentWindowLifecycleAdapter(windowLifecycle),

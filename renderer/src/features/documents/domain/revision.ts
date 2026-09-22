@@ -13,12 +13,13 @@
  */
 import type { DocumentState } from './document';
 
-/** Who offered the proposal. The Agent panel and the developer harness are
- *  the same mechanism with different provenance, so they are two variants of
- *  one union rather than two review shapes. Neither variant carries anything
- *  beyond the tag: the host records no instruction behind a parked proposal,
- *  and a field nothing can fill is a lie the type would then bless. */
-export type RevisionOrigin = { kind: 'agent' } | { kind: 'developer' };
+/** Who offered the proposal. The Agent panel, Humanize on a selection and
+ *  the developer harness are the same mechanism with different provenance,
+ *  so they are variants of one union rather than three review shapes. No
+ *  variant carries anything beyond the tag: the host records no instruction
+ *  behind a parked proposal, and a field nothing can fill is a lie the type
+ *  would then bless. */
+export type RevisionOrigin = { kind: 'agent' } | { kind: 'developer' } | { kind: 'humanize' };
 
 /** The two ways to end a whole review at once. The document's own header bar
  *  and the Agent panel both drive these, so one review cannot be resolved two

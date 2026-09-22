@@ -8,6 +8,7 @@
  * `unavailable` one. Every map covers its whole ladder, so adding a kind fails
  * the build here rather than silently showing the wrong recovery.
  */
+import type { HumanizeRefusal } from '@/features/documents/domain/humanize';
 import { JsonEditError } from '@/features/documents/domain/json-edit';
 import type { RevisionRefusal } from '@/features/documents/domain/revision';
 import {
@@ -19,6 +20,7 @@ import {
 import type { RevisionPickupFailure } from './open-revision';
 import type {
   DocumentAssetFailureKind,
+  DocumentHumanizeFailureKind,
   DocumentSaveFailureKind,
   DocumentSourceFailureKind,
   DocxPreviewFailureKind,
@@ -86,6 +88,33 @@ export const GENERIC_PREVIEW_MESSAGES: Readonly<Record<GenericFilePreviewFailure
   'scope-lost': 'That folder is no longer available in this window.',
   unauthorized: 'This window can no longer inspect that file.',
   unavailable: 'The file could not be inspected. It has not been changed.',
+};
+
+const HUMANIZE_UNAVAILABLE =
+  'Humanize is not available right now. Your document has not been changed.';
+
+/** Why a selection could not be humanized. `busy` and `too-long` are the
+ *  reader's to act on; the rest is the service. Every one of them leaves the
+ *  document as it was, and the sentence says so where the reader might doubt it. */
+export const DOCUMENT_HUMANIZE_MESSAGES: Readonly<Record<DocumentHumanizeFailureKind, string>> = {
+  busy: 'Humanize is busy right now. Try again in a minute.',
+  'cut-off':
+    'The rewrite was cut off before the end, so it was not offered. Select less text and try again.',
+  'invalid-response': HUMANIZE_UNAVAILABLE,
+  'scope-lost': HUMANIZE_UNAVAILABLE,
+  'too-long': 'Select less text to humanize, up to about 1,000 words.',
+  unauthorized: HUMANIZE_UNAVAILABLE,
+  unavailable: HUMANIZE_UNAVAILABLE,
+};
+
+/** Why a rewrite that came back, or a selection that never left, did not
+ *  open as a review. */
+export const HUMANIZE_REFUSAL_MESSAGES: Readonly<Record<HumanizeRefusal, string>> = {
+  changed: 'The document changed while the rewrite was running, so it was not offered. Try again.',
+  empty: 'Select the text to humanize first.',
+  'not-prose': 'Select prose to humanize: paragraphs, headings, quotes or lists.',
+  unchanged: 'Hemmingway-1 left this text as it is.',
+  unusable: 'The rewrite could not take the place of the selection, so it was not offered.',
 };
 
 /** Why a proposed revision could not be opened on the document in front of

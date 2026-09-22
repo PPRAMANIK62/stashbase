@@ -33,6 +33,12 @@ import { writeToClipboard } from '@/shared/ui/clipboard';
 
 import { watchMarkdownChanges } from './changes';
 import { createMarkdownFindController } from './find-controller';
+import { HumanizeNotice } from './humanize-notice';
+import { humanizeToolbar } from './humanize-toolbar';
+
+import '@milkdown/crepe/theme/common/style.css';
+import '@milkdown/crepe/theme/frame.css';
+import './document.css';
 import {
   activeHeadingId,
   applyHeadingIds,
@@ -44,10 +50,7 @@ import {
   scrollOutlineToHeading,
   type ProseMirrorDocument,
 } from './outline-adapter';
-
-import '@milkdown/crepe/theme/common/style.css';
-import '@milkdown/crepe/theme/frame.css';
-import './document.css';
+import { useHumanize, type HumanizeBinding } from './use-humanize';
 import { useRevisionReview, type RevisionBinding } from './use-revision-review';
 
 type CreationState = 'creating' | 'failed' | 'ready';
@@ -56,6 +59,9 @@ export interface MarkdownDocumentProps {
   active: boolean;
   canChangeMode: boolean;
   dirty: boolean;
+  /** Humanize on the selection toolbar. Absent where no rewrite service is
+   *  wired, and then the toolbar offers no such control. */
+  humanize?: HumanizeBinding | undefined;
   mode: MarkdownViewMode;
   name: string;
   onChange(value: string): void;
@@ -77,6 +83,7 @@ export function MarkdownDocument({
   active,
   canChangeMode,
   dirty,
+  humanize,
   mode,
   name,
   onChange,
@@ -118,6 +125,9 @@ export function MarkdownDocument({
     attach: attachReview,
     bar: reviewBar,
   } = useRevisionReview({ creationState, revision });
+  const humanizeControls = useHumanize(humanize, editorRef);
+  // `run` is stable, so the toolbar built with the editor keeps it without a ref.
+  const humanizeRun = humanize === undefined ? null : humanizeControls.run;
   const pendingAnchor = useStore(navigation.store, (state) =>
     state.pendingAnchor?.tabId === tabId ? state.pendingAnchor.id : null,
   );
@@ -154,7 +164,7 @@ export function MarkdownDocument({
           }),
       })
       .addFeature(blockEdit)
-      .addFeature(toolbar)
+      .addFeature(toolbar, humanizeRun ? humanizeToolbar(() => humanizeRun(editor)) : undefined)
       .addFeature(table)
       .addFeature(codeMirror, { copyText: 'Copy code', languages })
       .addFeature(latex);
@@ -203,7 +213,7 @@ export function MarkdownDocument({
       }
       stopCreation();
     };
-  }, [attachReview, attempt, navigation, tabId]);
+  }, [attachReview, attempt, humanizeRun, navigation, tabId]);
 
   useEffect(() => {
     editorRef.current?.setReadonly(readOnly);
@@ -373,6 +383,7 @@ export function MarkdownDocument({
         </div>
       )}
       {reviewBar}
+      <HumanizeNotice controls={humanizeControls} />
       {linkFailure && (
         <div className="markdown-link-failure" role="alert">
           Could not open this link in your browser.

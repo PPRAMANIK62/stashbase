@@ -5,6 +5,7 @@ import { useStore } from 'zustand';
 import { Button } from '@/components/ui/button';
 import type {
   DocumentAssetPort,
+  DocumentHumanizePort,
   DocumentSourcePort,
   DocxPreviewPort,
   GenericFilePreviewPort,
@@ -38,6 +39,7 @@ export interface DocumentWorkspaceProps {
   assetApi: DocumentAssetPort;
   docxPreviewApi: DocxPreviewPort;
   genericPreviewApi: GenericFilePreviewPort;
+  humanizeApi?: DocumentHumanizePort | undefined;
   onNavigate?: ((target: DocumentNavigationTarget) => void) | undefined;
   onOpenExternal?: ((href: string) => Promise<boolean>) | undefined;
   /** Fired once when a DOCX or media document mounts so preparation can be
@@ -59,6 +61,7 @@ export function DocumentWorkspace({
   assetApi,
   docxPreviewApi,
   genericPreviewApi,
+  humanizeApi,
   onNavigate = ignoreNavigation,
   onOpenExternal = rejectExternalNavigation,
   onOpenPrepared,
@@ -126,6 +129,7 @@ export function DocumentWorkspace({
             assetApi={assetApi}
             docxPreviewApi={docxPreviewApi}
             genericPreviewApi={genericPreviewApi}
+            humanizeApi={humanizeApi}
             navigation={runtime.navigation}
             onNavigate={onNavigate}
             onOpenExternal={onOpenExternal}

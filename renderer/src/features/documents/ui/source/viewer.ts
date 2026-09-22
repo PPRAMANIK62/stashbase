@@ -12,6 +12,7 @@ import type { DocumentRuntime } from '@/features/documents/application/document-
 import type { DocumentNavigationRuntime } from '@/features/documents/application/navigation-runtime';
 import type {
   DocumentAssetPort,
+  DocumentHumanizePort,
   DocumentSourcePort,
   DocxPreviewPort,
   GenericFilePreviewPort,
@@ -38,6 +39,9 @@ export interface DocumentViewerServices {
   assetApi: DocumentAssetPort;
   docxPreviewApi: DocxPreviewPort;
   genericPreviewApi: GenericFilePreviewPort;
+  /** Absent where no rewrite service is wired; the Markdown surface then
+   *  offers no Humanize control rather than one that cannot answer. */
+  humanizeApi?: DocumentHumanizePort | undefined;
   navigation: DocumentNavigationRuntime;
   onNavigate(target: DocumentNavigationTarget): void;
   onOpenExternal(href: string): Promise<boolean>;

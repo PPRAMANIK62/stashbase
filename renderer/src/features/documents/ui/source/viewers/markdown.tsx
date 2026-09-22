@@ -1,9 +1,11 @@
+import type { RevisionReview } from '@/features/documents/domain/revision';
 import { MarkdownDocument } from '@/features/documents/ui/markdown/document';
 import { TextSurface } from '@/features/documents/ui/source/text';
 import type { DocumentViewerProps } from '@/features/documents/ui/source/viewer';
 
 export default function MarkdownViewer({
   active,
+  humanizeApi,
   name,
   navigation,
   onNavigate,
@@ -11,7 +13,20 @@ export default function MarkdownViewer({
   runtime,
   sourceApi,
   status,
-}: DocumentViewerProps<'navigation' | 'onNavigate' | 'onOpenExternal' | 'sourceApi'>) {
+}: DocumentViewerProps<
+  'humanizeApi' | 'navigation' | 'onNavigate' | 'onOpenExternal' | 'sourceApi'
+>) {
+  // Read live, not captured: the request outlives any one render and must
+  // see the buffer as it is when the rewrite lands.
+  const humanize = humanizeApi
+    ? {
+        api: humanizeApi,
+        editor: () => runtime.store.getState().editor,
+        reviewOpen: () => runtime.store.getState().revision.kind !== 'idle',
+        start: (review: RevisionReview, currentBody: string) =>
+          runtime.startRevision(review, currentBody),
+      }
+    : undefined;
   return (
     <TextSurface
       active={active}
@@ -28,6 +43,7 @@ export default function MarkdownViewer({
           active={active}
           canChangeMode={access === 'editable' && editor !== null}
           dirty={editor !== null && editor.value !== editor.baseline}
+          humanize={humanize}
           mode={markdownMode}
           name={name}
           navigation={navigation}
