@@ -51,6 +51,18 @@ export interface Agent {
    *  name the model and level it will run on before a session exists. Empty
    *  until the runtime has been read once. */
   readonly models: readonly AgentModel[];
+  /** A model the runtime says it is too old to run, when it says so. A
+   *  conversation reads it to offer the update once; absence is the normal
+   *  state and says nothing. */
+  readonly upgrade?: AgentUpgradeOffer;
+}
+
+/** A model an installed runtime cannot run yet, named by that runtime. */
+export interface AgentUpgradeOffer {
+  /** What the runtime calls the model. */
+  readonly model: string;
+  /** The runtime's own sentence about what using it takes. */
+  readonly note: string;
 }
 
 /** What the Agent service says it can run right now. `agents` — never the

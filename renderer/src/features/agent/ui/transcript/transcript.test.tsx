@@ -75,7 +75,14 @@ it('offers the runtime update instead of a retry on a turn the runtime was too o
       onOpenExternal={vi.fn()}
       onPermission={vi.fn(() => true)}
       onRetry={vi.fn(() => true)}
-      runtimeUpdate={{ busy: false, completedBlockId, failure: null, label: 'Claude', update }}
+      runtimeUpdate={{
+        busy: false,
+        completed: false,
+        completedBlockId,
+        failure: null,
+        label: 'Claude',
+        update,
+      }}
     />
   );
   const rendered = render(view(null));

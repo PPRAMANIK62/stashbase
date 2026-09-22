@@ -11,8 +11,9 @@ import { agentCliVersion, resolveAgentCli } from './agent-cli.ts';
 import { agentSupportsInAppUpdate, agentBootstrapStatus } from './agent-runtime-installer.ts';
 import { ensureAgentMcp } from './agent-mcp.ts';
 import { rememberedCatalogFor } from './agent-model-catalog.ts';
+import { claudeUpgradeOffer } from './claude-model-catalog.ts';
 import { filesystemPath } from './filesystem-path.ts';
-import type { AgentModelCatalog } from '../shared/agent-runtime.ts';
+import type { AgentModelCatalog, AgentUpgradeOffer } from '../shared/agent-runtime.ts';
 
 /** The renderer↔server wire vocabulary lives in `shared/agent-protocol.ts` so
  * the renderer can import it without pulling this module's server-only graph
@@ -217,6 +218,9 @@ export interface AgentRuntimeDescriptor {
   capabilities: AgentCapabilities;
   /** The runtime's remembered model catalog, once one has been read. */
   catalog?: AgentModelCatalog;
+  /** A model the installed runtime says it is too old to run, when it says
+   *  so. */
+  upgrade?: AgentUpgradeOffer;
 }
 
 const adapters = new Map<AgentId, AgentAdapter>();
@@ -279,7 +283,14 @@ export function discoverAgentRuntimes(): AgentRuntimeDescriptor[] {
   return [...adapters.values()].map((adapter) => {
     const descriptor = runtimeDescriptorFor(adapter);
     const catalog = rememberedCatalogFor(descriptor);
-    return catalog ? { ...descriptor, catalog } : descriptor;
+    // Claude is the only runtime that reports a model it is too old to run;
+    // Codex's catalog simply omits what its app-server does not offer.
+    const upgrade = descriptor.id === 'claude' && descriptor.installed ? claudeUpgradeOffer() : undefined;
+    return {
+      ...descriptor,
+      ...(catalog ? { catalog } : {}),
+      ...(upgrade ? { upgrade } : {}),
+    };
   });
 }
 

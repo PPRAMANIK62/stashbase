@@ -114,6 +114,16 @@ export const agentModelCatalogSchema = z
   })
   .strict();
 
+/** A model the runtime says it is too old to run, named and explained by the
+ * runtime itself. An offer, never a requirement: absent is the normal state,
+ * and a runtime that says nothing is absent too. */
+export const agentUpgradeOfferSchema = z
+  .object({
+    model: z.string().min(1).max(200),
+    note: z.string().min(1).max(500),
+  })
+  .strict();
+
 export const agentSchema = z
   .object({
     id: agentIdSchema,
@@ -124,6 +134,7 @@ export const agentSchema = z
     source: agentSourceSchema.nullable().optional(),
     version: z.string().max(64).nullable().optional(),
     updatable: z.boolean().optional(),
+    upgrade: agentUpgradeOfferSchema.optional(),
     bootstrap: agentBootstrapStatusSchema.optional(),
     launchCommand: z.string().max(2000),
     endpoint: z.string().max(2000).optional(),
@@ -165,6 +176,7 @@ export type AgentBootstrapFailureWire = z.infer<typeof agentBootstrapFailureSche
 export type AgentBootstrapStatusWire = z.infer<typeof agentBootstrapStatusSchema>;
 export type AgentRuntimeDebugStateWire = z.infer<typeof agentRuntimeDebugStateSchema>;
 export type AgentRuntimeDebugPatchRequestWire = z.infer<typeof agentRuntimeDebugPatchRequestSchema>;
+export type AgentUpgradeOfferWire = z.infer<typeof agentUpgradeOfferSchema>;
 export type AgentWire = z.infer<typeof agentSchema>;
 export type AgentsResponseWire = z.infer<typeof agentsResponseSchema>;
 export type HostedAgentAllowanceWire = z.infer<typeof hostedAgentAllowanceSchema>;

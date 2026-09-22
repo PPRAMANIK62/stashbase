@@ -98,6 +98,7 @@ export function agentRuntime(overrides: Partial<AgentRuntime> = {}): AgentRuntim
     label: 'Default',
     ownership: 'bundled',
     preparation: { kind: 'ready' },
+    upgrade: null,
     updatable: false,
     version: null,
     ...overrides,

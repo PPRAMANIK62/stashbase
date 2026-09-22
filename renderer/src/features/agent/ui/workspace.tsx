@@ -42,6 +42,7 @@ import { AgentConnectionNotice, connectionNotice } from './connection-notice';
 import { AgentInstructionsControl } from './instructions/agent-instructions-control';
 import { NewChatButton } from './new-chat-button';
 import { AgentTranscript } from './transcript/transcript';
+import { AgentUpgradeOfferCard } from './upgrade-offer';
 import { AgentWorkStatus } from './work-status';
 import type { AgentWorkspaceProps } from './workspace-lazy';
 
@@ -227,6 +228,10 @@ function ChatWorkspace({
       )}
       {notice && state.delivery !== 'unknown' && (
         <AgentConnectionNotice connection={state.connection} onReconnect={active.reconnect} />
+      )}
+
+      {composerShown && selectedAgent.upgrade && (
+        <AgentUpgradeOfferCard offer={selectedAgent.upgrade} runtimeUpdate={runtimeUpdate} />
       )}
 
       {composerShown && (

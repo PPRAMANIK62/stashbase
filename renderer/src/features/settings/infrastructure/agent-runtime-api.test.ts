@@ -34,6 +34,7 @@ describe('agent runtime API', () => {
           ownership: 'bundled',
           preparation: { kind: 'ready' },
           updatable: false,
+          upgrade: null,
           version: null,
         },
       ],

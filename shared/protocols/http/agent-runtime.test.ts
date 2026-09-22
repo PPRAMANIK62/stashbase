@@ -37,6 +37,30 @@ test('a runtime entry carries the catalog the service remembers for it, and noth
   assert.throws(() => agentsResponseSchema.parse({ clis: [{ ...entry, catalog: { ...entry.catalog, stale: true } }] }));
 });
 
+test('a runtime entry carries a model the runtime says it is too old to run', () => {
+  const entry = {
+    id: 'claude',
+    label: 'Claude',
+    vendor: 'Anthropic',
+    installHint: '',
+    installed: true,
+    source: 'system',
+    version: '2.1.276',
+    updatable: true,
+    upgrade: { model: 'Opus 5.5', note: 'Update to 2.1.280+ to use Opus 5.5' },
+    bootstrap: { phase: 'ready' },
+    launchCommand: 'claude',
+    state: 'available',
+  };
+  assert.deepEqual(agentsResponseSchema.parse({ clis: [entry] }).clis[0]?.upgrade, entry.upgrade);
+  // Absent is the normal state: an up-to-date runtime sends no offer at all.
+  const { upgrade: _omitted, ...current } = entry;
+  assert.equal(agentsResponseSchema.parse({ clis: [current] }).clis[0]?.upgrade, undefined);
+  assert.throws(() =>
+    agentsResponseSchema.parse({ clis: [{ ...entry, upgrade: { ...entry.upgrade, url: 'https://example' } }] }),
+  );
+});
+
 test('agents response accepts a mixed catalog of installed, mid-bootstrap, and failed runtimes', () => {
   const result = agentsResponseSchema.parse({
     clis: [

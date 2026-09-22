@@ -69,6 +69,7 @@ function toAgent(wire: AgentWire): Agent {
     ),
     ...(wire.bootstrap?.failure ? { setupFailure: wire.bootstrap.failure.message } : {}),
     ready: wire.bootstrap?.phase === 'ready' && wire.state !== 'failed',
+    ...(wire.upgrade ? { upgrade: wire.upgrade } : {}),
   };
 }
 

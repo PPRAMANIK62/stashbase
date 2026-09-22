@@ -81,6 +81,19 @@ export interface AgentRuntime {
   readonly version: string | null;
   /** Whether the runtime's own updater can be run from here. */
   readonly updatable: boolean;
+  /** A model the runtime says it is too old to run, when it says so. Null is
+   *  the normal state, and a runtime that reports nothing reads the same as
+   *  one with nothing to report, because the row says nothing extra either
+   *  way. */
+  readonly upgrade: AgentUpgradeOffer | null;
+}
+
+/** A model an installed runtime cannot run yet, named by that runtime. */
+interface AgentUpgradeOffer {
+  /** What the runtime calls the model. */
+  readonly model: string;
+  /** The runtime's own sentence about what using it takes. */
+  readonly note: string;
 }
 
 /** A one-shot simulated outcome for the next staged preparation. */

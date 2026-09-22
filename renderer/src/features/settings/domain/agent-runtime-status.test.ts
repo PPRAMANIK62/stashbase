@@ -176,6 +176,27 @@ describe('describeRuntime', () => {
     });
   });
 
+  it('names a model the runtime is too old to run ahead of its readiness', () => {
+    const display = describeRuntime(
+      codex({
+        id: 'claude',
+        installed: true,
+        label: 'Claude',
+        ownership: 'system',
+        preparation: { kind: 'ready' },
+        updatable: true,
+        upgrade: { model: 'Opus 5.5', note: 'Update to 2.1.280+ to use Opus 5.5' },
+        version: '2.1.276',
+      }),
+      false,
+    );
+    expect(display).toEqual({
+      description: 'Opus 5.5 needs a newer Claude · Installed on your system · 2.1.276',
+      stage: 'ready',
+      action: { kind: 'update', label: 'Update' },
+    });
+  });
+
   it('withholds Update while the runtime has a command of its own in flight', () => {
     const display = describeRuntime(
       codex({

@@ -83,8 +83,16 @@ export function describeRuntime(
   // update the reader runs from here has a visible before and after.
   const label = ownershipLabel(runtime.ownership);
   const detail = runtime.version ? `${label} · ${runtime.version}` : label;
+  // A model the runtime is too old to run is the one thing worth saying
+  // ahead of readiness: the row already carries the action for it, and a
+  // reader who is ready to chat still has a reason to run it.
+  const lead = runtime.upgrade
+    ? `${runtime.upgrade.model} needs a newer ${runtime.label}`
+    : preparation.kind === 'ready'
+      ? 'Ready to chat'
+      : null;
   return {
-    description: preparation.kind === 'ready' ? `Ready to chat · ${detail}` : detail,
+    description: lead ? `${lead} · ${detail}` : detail,
     stage: 'ready',
     action: !busy && runtime.updatable ? { kind: 'update', label: 'Update' } : null,
   };

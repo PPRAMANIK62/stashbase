@@ -17,6 +17,7 @@ const codex: AgentRuntime = {
   installed: true,
   ownership: 'system',
   preparation: { kind: 'ready' },
+  upgrade: null,
   updatable: true,
   version: '0.155.0',
 };
@@ -27,6 +28,7 @@ const claude: AgentRuntime = {
   installed: true,
   ownership: 'system',
   preparation: { kind: 'ready' },
+  upgrade: null,
   updatable: true,
   version: '2.1.276',
 };
@@ -37,6 +39,7 @@ const stashbase: AgentRuntime = {
   installed: true,
   ownership: 'bundled',
   preparation: { kind: 'ready' },
+  upgrade: null,
   updatable: false,
   version: null,
 };
@@ -99,6 +102,18 @@ function accountRequiredPort(): AgentRuntimePort {
   };
 }
 
+/** Claude names a model this installation is too old to run. The row leads
+ *  with that model instead of its readiness, and the Update it already
+ *  carried is now the thing to do. */
+function upgradeOfferedPort(): AgentRuntimePort {
+  const behind: AgentRuntime = {
+    ...claude,
+    upgrade: { model: 'Opus 5.5', note: 'Update to 2.1.280+ to use Opus 5.5' },
+  };
+  const runtimes = [codex, behind, stashbase];
+  return { ...fakePort(), listAgents: async () => catalog(runtimes) };
+}
+
 function Harness({ account, port }: { account: AccountPort; port: AgentRuntimePort }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
@@ -122,3 +137,7 @@ type Story = StoryObj<typeof Harness>;
 export const Ready: Story = { args: { account: signedIn, port: fakePort() } };
 
 export const NeedsSignIn: Story = { args: { account: signedOut, port: accountRequiredPort() } };
+
+export const UpdateOffersAModel: Story = {
+  args: { account: signedIn, port: upgradeOfferedPort() },
+};

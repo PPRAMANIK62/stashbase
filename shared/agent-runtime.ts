@@ -75,6 +75,15 @@ export interface AgentModelCatalog {
   readAt: string;
 }
 
+/** A model an installed runtime says it is too old to run, in that runtime's
+ * own words. StashBase compares no versions of its own: the runtime knows
+ * which models its account may use and which of them its build cannot run,
+ * and this carries that answer through. */
+export interface AgentUpgradeOffer {
+  model: string;
+  note: string;
+}
+
 export interface Agent {
   id: import('./agent-protocol.ts').AgentId;
   label: string;
@@ -117,6 +126,8 @@ export interface Agent {
   };
   /** Present once the runtime's catalog has been read at least once. */
   catalog?: AgentModelCatalog;
+  /** Present only while the runtime names a model it is too old to run. */
+  upgrade?: AgentUpgradeOffer;
 }
 
 export interface AgentsResponse {

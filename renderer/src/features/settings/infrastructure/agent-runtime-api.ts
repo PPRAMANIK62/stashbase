@@ -108,6 +108,7 @@ function toRuntime(wire: AgentWire): AgentRuntime {
     ownership: wire.source ?? null,
     preparation: toPreparation(wire.bootstrap),
     updatable: wire.updatable ?? false,
+    upgrade: wire.upgrade ?? null,
     version: wire.version ?? null,
   };
 }

@@ -1,12 +1,18 @@
 /**
  * The in-place update of a conversation's runtime, run from the turn that
- * runtime was too old for.
+ * runtime was too old for, or from the offer of a model it cannot reach.
  *
  * The service runs the runtime's own updater and reports the runtime ready
  * again; the conversation's process still runs the old executable, so the
  * session is reconnected to spawn the updated one, and the request the old
  * one refused is sent again. Nothing here is a second installation: the
  * runtime keeps ownership of its own files throughout.
+ *
+ * The same update also runs with nothing to resend, from a chat that offers
+ * a newer model rather than reporting a failure. That is the whole difference
+ * between the two callers: one has a refused request waiting, the other has
+ * only a reader who said yes. Everything before the resend is identical, so
+ * it is written once here rather than twice.
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useStore } from 'zustand';
@@ -34,7 +40,12 @@ export interface AgentRuntimeUpdateView {
   /** The failed turn an update has already run for, so its block offers a
    *  plain retry instead of another update. */
   readonly completedBlockId: string | null;
-  update(errorBlockId: string): void;
+  /** Whether an update finished here, so an offer that prompted one stops
+   *  offering it. */
+  readonly completed: boolean;
+  /** With a failed turn's id, the same request is sent again once the
+   *  updated runtime is live. Without one, the update simply happens. */
+  update(errorBlockId?: string): void;
 }
 
 type ReconnectOutcome = 'live' | 'settled' | 'timeout' | 'cancelled';
@@ -84,10 +95,11 @@ export function useAgentRuntimeUpdate(
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [completedBlockId, setCompletedBlockId] = useState<string | null>(null);
+  const [completed, setCompleted] = useState(false);
   const running = useRef(false);
 
   const update = useCallback(
-    (errorBlockId: string) => {
+    (errorBlockId?: string) => {
       if (running.current) return;
       running.current = true;
       const signal = AbortSignal.any([requestSignal('update'), session.signal]);
@@ -109,6 +121,8 @@ export function useAgentRuntimeUpdate(
             setFailure(agentReconnectAfterUpdateFailure(label, outcome));
             return;
           }
+          setCompleted(true);
+          if (errorBlockId === undefined) return;
           setCompletedBlockId(errorBlockId);
           session.retry(errorBlockId);
         } catch (error) {
@@ -123,7 +137,7 @@ export function useAgentRuntimeUpdate(
   );
 
   return useMemo(
-    () => ({ busy, completedBlockId, failure, label: agentLabel(agent), update }),
-    [agent, busy, completedBlockId, failure, update],
+    () => ({ busy, completed, completedBlockId, failure, label: agentLabel(agent), update }),
+    [agent, busy, completed, completedBlockId, failure, update],
   );
 }
