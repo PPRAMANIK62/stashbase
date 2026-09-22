@@ -154,6 +154,27 @@ describe('agent composer model-and-thinking control', () => {
     expect(screen.getByRole('menuitem', { name: 'Model. Codex Mini' })).not.toBeNull();
   });
 
+  /** A runtime's model labels are aliases: "Opus" is whichever Opus that
+   *  build runs, so the label alone cannot tell a reader which release they
+   *  are on. The runtime says that in its description, and the row shows it. */
+  it('shows the release a model alias resolves to, where the runtime names one', async () => {
+    const { user } = renderControl({
+      activeAgent: CLAUDE_AGENT,
+      state: sessionState({
+        models: [{ ...OPUS, description: 'Opus 5.5 with 1M context · Best for everyday tasks' }],
+      }),
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Model and thinking: Default' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Model. Default' }));
+
+    expect(
+      screen.getByRole('menuitemradio', {
+        name: 'Opus. Opus 5.5 with 1M context · Best for everyday tasks',
+      }),
+    ).not.toBeNull();
+  });
+
   it('keeps a Default row wherever the runtime has named no default of its own', async () => {
     const first = renderControl({
       activeAgent: CLAUDE_AGENT,

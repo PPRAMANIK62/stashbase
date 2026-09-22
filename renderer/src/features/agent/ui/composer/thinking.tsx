@@ -173,6 +173,12 @@ function ModelLayer({
         <MenuItem
           checked={model.id === choice.model?.id}
           closeOnClick
+          // A runtime's model labels are aliases: "Opus" is whichever Opus
+          // that build runs. The release it resolves to is in the runtime's
+          // own description, which is the only place a reader can see that
+          // their Opus is now 5.5, so the rows carry it the way the levels
+          // above them already do.
+          {...(model.description === undefined ? {} : { description: model.description })}
           key={model.id}
           label={model.label}
           layout="wrap"
