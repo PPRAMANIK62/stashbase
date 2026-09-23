@@ -39,6 +39,10 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
   may advance the queue. Stop, failure, or connection loss pauses it.
 - Validate context before sending. Opening a document does not attach it; missing
   or changed context needs replacement, refresh, or explicit removal.
+- A runtime that advertises attachments accepts ordinary local files through the
+  picker, drop, or paste. Images and PDFs may have visual previews; other files
+  remain named file cards. Attachment acceptance does not promise that every
+  runtime can interpret every binary format, and a refused read must stay visible.
 - Model, effort, skills, and permission options follow the selected runtime.
   Remember explicitly chosen thinking effort per project and Agent for new chats,
   including after restart. A model that does not support that effort uses its own

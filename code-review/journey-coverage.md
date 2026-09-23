@@ -673,6 +673,17 @@ remain temporary. The attachment route test ages a live upload and verifies its
 bytes survive while an abandoned batch is removed. OS/external deletion is not
 prevented, and historical metadata does not restore attachment bytes.
 
+**General file attachments (2026-09-23):** attachment-capable runtimes accept
+ordinary local files from the picker, drop, and clipboard instead of limiting the
+composer to images and PDFs. Focused renderer tests cover an arbitrary MIME type,
+an image preview, and a text-file card; history tests keep unknown-extension files
+inside transient attachment storage as name-only cards while leaving arbitrary
+external paths in the transcript. Runtime interpretation of binary formats remains
+provider-dependent and is not established by local upload acceptance.
+Validation: `pnpm check:web` passed all 12 renderer gates; `pnpm test:agent`
+passed 204 tests; the attachment route test, host typecheck, and documentation
+checks passed.
+
 **Intent:** [J06](../design-docs/journeys/README.md#j06-start-and-continue-an-agent-chat).
 
 **Implementation:** Renderer: `renderer/src/features/agent/application/workspace-runtime.ts`, `renderer/src/features/agent/application/session-runtime.ts`.

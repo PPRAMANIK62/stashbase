@@ -306,16 +306,20 @@ describe('AgentWorkspace composer context', () => {
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
     expect(await screen.findByRole('button', { name: 'Attach files' })).not.toBeNull();
     const file = new File(['png'], 'shot.png', { type: 'image/png' });
+    const document = new File(['# Notes'], 'notes.md', { type: 'text/markdown' });
     fireEvent.paste(screen.getByRole('textbox', { name: 'Message' }), {
-      clipboardData: { files: [file], getData: () => '' },
+      clipboardData: { files: [file, document], getData: () => '' },
     });
     await waitFor(() =>
-      expect(context.upload).toHaveBeenCalledWith([file], expect.any(AbortSignal)),
+      expect(context.upload).toHaveBeenCalledWith([file, document], expect.any(AbortSignal)),
     );
-    // The upload becomes the shared composer's own tile, not a name chip.
+    // Uploads become the shared composer's own tiles, not name chips. Images
+    // get a preview while ordinary files use the generic file treatment.
     const tile = await screen.findByRole('img', { name: 'shot.png' });
     expect(tile.getAttribute('src')).toBe('blob:shot');
+    expect(screen.getByRole('img', { name: 'notes.md' })).not.toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Remove shot.png' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove notes.md' }));
     await waitFor(() =>
       expect(runtime.activeSession().store.getState().context).toEqual([
         expect.objectContaining({ format: 'md', kind: 'source' }),

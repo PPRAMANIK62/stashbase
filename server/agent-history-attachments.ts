@@ -16,8 +16,9 @@ export interface RestoredAttachment {
  * file the user attached reads as ONE chip rather than a chip PLUS its raw
  * path leaking back into the shown message. Images become transient
  * thumbnails (transient-only, so an arbitrary image path never gains a preview
- * URL); other known document types become plain name-only cards. A line we
- * cannot classify stays in the text, untouched. */
+ * URL); every other transient upload becomes a plain name-only card. Known
+ * project document paths retain their existing cards, while an arbitrary path
+ * outside transient storage stays in the text untouched. */
 export function restoreHistoryAttachments(text: string): { text: string; attachments: RestoredAttachment[] } {
   const marker = '\n\nAttached files:\n';
   const offset = text.lastIndexOf(marker);
@@ -41,7 +42,12 @@ function historyAttachment(rest: string): RestoredAttachment | null {
   const cut = rest.indexOf(' (');
   const candidate = (cut >= 0 ? rest.slice(0, cut) : rest).trim();
   if (!candidate) return null;
+  // Images are preview-capable and therefore require the stronger transient
+  // path check before any broader document-card classification.
   if (isPreviewableImage(candidate)) return historyImageAttachment(candidate);
+  if (isTransientAttachmentPath(candidate)) {
+    return { path: candidate, name: path.basename(candidate) };
+  }
   if (isKnownDocument(candidate)) return { path: candidate, name: path.basename(candidate) };
   return null;
 }

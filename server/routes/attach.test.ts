@@ -7,7 +7,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { attachRoot, cleanupStaleAttachments, mount, transientAttachmentPreviewPath } from './attach.ts';
 
-test('transient attachment upload preserves ordered UTF-8 filenames', async (t) => {
+test('transient attachment upload preserves ordered UTF-8 filenames across file types', async (t) => {
   const root = attachRoot();
   fs.mkdirSync(root, { recursive: true, mode: 0o700 });
   let uploadedBatch: string | undefined;
@@ -27,7 +27,7 @@ test('transient attachment upload preserves ordered UTF-8 filenames', async (t) 
 
   const body = new FormData();
   body.append('files', new Blob(['pdf bytes'], { type: 'application/pdf' }), '研究报告.pdf');
-  body.append('files', new Blob(['more pdf bytes'], { type: 'application/pdf' }), '中文资料.pdf');
+  body.append('files', new Blob(['# notes'], { type: 'text/markdown' }), '中文资料.md');
   body.append('files', new Blob(['accented pdf bytes'], { type: 'application/pdf' }), 'café.pdf');
   const response = await fetch(`http://127.0.0.1:${address.port}/api/agent/attach`, { method: 'POST', body });
 
@@ -37,8 +37,8 @@ test('transient attachment upload preserves ordered UTF-8 filenames', async (t) 
   const uploadedPaths = payload.files.map((file) => file.path);
   assert.ok(uploadedPaths.every((filePath) => typeof filePath === 'string'));
   uploadedBatch = path.dirname(uploadedPaths[0]);
-  assert.deepEqual(payload.files.map((file) => file.name), ['研究报告.pdf', '中文资料.pdf', 'café.pdf']);
-  assert.deepEqual(uploadedPaths.map((filePath) => path.basename(filePath)), ['研究报告.pdf', '中文资料.pdf', 'café.pdf']);
+  assert.deepEqual(payload.files.map((file) => file.name), ['研究报告.pdf', '中文资料.md', 'café.pdf']);
+  assert.deepEqual(uploadedPaths.map((filePath) => path.basename(filePath)), ['研究报告.pdf', '中文资料.md', 'café.pdf']);
   const staleTime = new Date(Date.now() - 25 * 60 * 60_000);
   fs.utimesSync(uploadedBatch, staleTime, staleTime);
   const abandoned = fs.mkdtempSync(path.join(root, 'abandoned-'));

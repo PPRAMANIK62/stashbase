@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
@@ -216,5 +216,20 @@ describe('InputMessage composer regions', () => {
 
     await user.click(screen.getByRole('button', { name: 'Remove shot.png' }));
     expect(onFilesChange).toHaveBeenCalledWith([]);
+  });
+
+  it('accepts any file when the consumer supplies no file-type restriction', () => {
+    const seen: { context: InputMessageEditorContext | null } = { context: null };
+    const onFilesChange = vi.fn();
+    const archive = new File(['bytes'], 'sources.zip', { type: 'application/zip' });
+    const view = render(fullComposer(seen, { accept: '', files: [], onFilesChange }));
+    const surface = view.container.firstElementChild;
+    if (!(surface instanceof HTMLElement)) throw new Error('composer surface was not rendered');
+
+    fireEvent.drop(surface, {
+      dataTransfer: { files: [archive], types: ['Files'] },
+    });
+
+    expect(onFilesChange).toHaveBeenCalledWith([archive]);
   });
 });

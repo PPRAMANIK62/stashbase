@@ -121,6 +121,33 @@ test('restores a transient image attachment from the persisted prompt marker', (
   }]);
 });
 
+test('restores an unrecognised transient file as a name-only attachment', () => {
+  const archivePath = path.join(
+    os.tmpdir(),
+    'stashbase-attachments',
+    'batch-archive',
+    'sources.zip',
+  );
+  const blocks = codexThreadToBlocks({
+    turns: [{
+      items: [{
+        type: 'userMessage',
+        content: [{
+          type: 'text',
+          text: `inspect this archive\n\nAttached files:\n- ${archivePath}`,
+        }],
+      }],
+    }],
+  });
+
+  assert.deepEqual(blocks, [{
+    kind: 'user',
+    id: 'c0',
+    text: 'inspect this archive',
+    attachments: [{ path: archivePath, name: 'sources.zip' }],
+  }]);
+});
+
 test('does not expose arbitrary filesystem paths embedded in a prompt', () => {
   const blocks = codexThreadToBlocks({
     turns: [{

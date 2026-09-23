@@ -41,7 +41,10 @@ import { DraftSourceTiles, isVisualSource } from './context-tiles';
 import { MentionEditor, type MentionEditorHandle, type MentionEditorProps } from './mention-editor';
 import { MentionListbox } from './mention-listbox';
 
-const ATTACH_ACCEPT = 'image/png,image/jpeg,image/webp,application/pdf';
+/** Native picker hint for an Agent that accepts transient local files. The
+ * selected runtime decides what it can interpret after the file is attached;
+ * the composer must not silently narrow that capability to images and PDFs. */
+const ATTACH_ACCEPT = '';
 
 export interface AgentContextComposerProps {
   attachments: boolean;
@@ -63,10 +66,6 @@ export interface AgentContextComposerProps {
   session: AgentSessionRuntime;
   skills: boolean;
   status: 'idle' | 'streaming';
-}
-
-function acceptsUpload(file: File): boolean {
-  return ATTACH_ACCEPT.split(',').includes(file.type);
 }
 
 function onDragOverCapture(event: DragEvent<HTMLDivElement>) {
@@ -275,7 +274,7 @@ export function AgentContextComposer({
 
   const onPasteCapture = (event: ClipboardEvent<HTMLDivElement>) => {
     if (!attachments) return;
-    const files = Array.from(event.clipboardData?.files ?? []).filter(acceptsUpload);
+    const files = Array.from(event.clipboardData?.files ?? []);
     if (files.length === 0) return;
     event.preventDefault();
     void session.attachFiles(files);

@@ -39,7 +39,8 @@ export interface InputMessageFileProps {
   files?: File[];
   /** Called when files are added (drag-drop or picker) or removed. */
   onFilesChange?: (files: File[]) => void;
-  /** Accepted MIME types as a comma-separated string. Defaults to PNG / JPEG / PDF. */
+  /** Accepted MIME types as a comma-separated string. An empty value accepts
+   * every file. Defaults to PNG / JPEG / PDF. */
   accept?: string;
   /** Maximum number of files. Extra files are dropped when the limit is exceeded. */
   maxFiles?: number;
@@ -116,6 +117,7 @@ export function useComposerFiles({
 
   const matchesAccept = useCallback(
     (file: File) =>
+      acceptTokens.length === 0 ||
       acceptTokens.some((token) => {
         if (token.endsWith('/*')) return file.type.startsWith(token.slice(0, -1));
         if (token.startsWith('.')) return file.name.toLowerCase().endsWith(token.toLowerCase());
@@ -226,7 +228,7 @@ export function useComposerFiles({
       <input
         ref={inputRef}
         type="file"
-        accept={accept}
+        accept={accept || undefined}
         multiple={maxFiles == null || maxFiles > 1}
         className="hidden"
         onChange={onInputChange}
