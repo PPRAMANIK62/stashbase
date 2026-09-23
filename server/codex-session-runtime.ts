@@ -543,9 +543,9 @@ export class CodexSession implements AttributedAgentSession {
       approvalPolicy: access.approvalPolicy,
       approvalsReviewer: access.approvalsReviewer,
       sandbox: access.sandbox,
-      // Keep the editable Agent Instructions distinct from StashBase's
-      // internal project-routing policy even though Codex receives their
-      // composition through one native developer-instructions field.
+      // Keep the chosen Persona distinct from StashBase's internal
+      // project-routing policy even though Codex receives their composition
+      // through one native developer-instructions field.
       developerInstructions: resolveAgentRuntimeInstructions(
         cwd,
       ),

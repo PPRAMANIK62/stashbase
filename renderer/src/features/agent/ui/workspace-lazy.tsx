@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { SURFACE_FAILED } from '@/features/agent/application/failure-messages';
-import type { AgentCatalogPort, AgentInstructionsPort } from '@/features/agent/application/ports';
+import type { AgentCatalogPort, AgentPersonaPort } from '@/features/agent/application/ports';
 import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import type { AgentScope } from '@/features/agent/domain/session';
 import type { AgentRevisionReview } from '@/features/agent/ui/transcript/revision-card';
@@ -17,8 +17,8 @@ export interface AgentWorkspaceProps {
    *  names the chat then, and the Chats panel beside it manages the history
    *  and New chat. */
   header?: boolean | undefined;
-  /** The standing instructions this scope's Chats run under. */
-  instructions: AgentInstructionsPort;
+  /** The persona this scope's Chats run under. */
+  persona: AgentPersonaPort;
   onOpenExternal(href: string): void;
   onOpenAgentSettings(): void;
   /** Explicit account choice; a caller signal waits for completion without

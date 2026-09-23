@@ -697,9 +697,11 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
 - **Contract Test:** `pnpm test:agent`, renderer, project-operation, MCP, and
   config suites cover setup/consent, authentication, scope, permissions,
   queue/turn/history ownership, stop/retirement, failure classification,
-  instructions, and transcript/layout state. Automatic grep/hybrid selection
+  persona, and transcript/layout state. Automatic grep/hybrid selection
   follows current key configuration; explicit/provider failures do not silently
-  change strategy. Instructions save for later mounts, not the current session.
+  change strategy. A persona save resumes the chat's own conversation so it
+  applies from the next turn (`session-runtime.test.ts`, `use-agent-persona.test.ts`);
+  Claude and Codex compose the stored persona before the routing policy.
   `pnpm test:opencode:native` completes a turn with the bundled executable and a
   local fake gateway; broker suites cover token/turn isolation, retry, and credits.
   Focused first-send tests cover project-default selection, durable explicit
@@ -886,7 +888,7 @@ Host/services: `electron/bug-report-service.cjs`, `electron/bug-report-handoff.c
 **Intent:** [J10](../design-docs/journeys/README.md#j10-turn-a-local-project-into-durable-agent-assisted-work).
 
 **Implementation:** Renderer: `renderer/src/app/composition/folder/use-agent-environment.ts`, `renderer/src/app/composition/folder/refresh-folder.ts`.
-Host/services: `assets/agent-instructions/default.md`; follow J02/J03/J05/J06/J07 owners for the exercised path.
+Host/services: follow J02/J03/J05/J06/J07 owners for the exercised path. StashBase ships no workflow prompt; the user's `AGENTS.md` / `CLAUDE.md` owns it.
 
 **Status:** Partial and release-dependent evidence for implemented writing.
 
@@ -923,7 +925,10 @@ Provider quality and packaged behavior remain separate J06 evidence requirements
 **Intent:** [J12](../design-docs/journeys/README.md#j12-build-wiki-pages-from-a-local-folder).
 
 **Implementation:** Renderer: `renderer/src/features/agent/ui/workspace.tsx`, `renderer/src/features/agent/application/session-runtime.ts`.
-Host/services: `assets/agent-instructions/default.md`, `server/project-file-mutations.ts`, `server/sync.ts`.
+Host/services: `server/project-file-mutations.ts`, `server/sync.ts`. No packaged
+prompt states wiki conventions (a `wiki/` folder, following an existing wiki's
+structure); they come from the request, a Gallery prompt, or the user's
+`AGENTS.md` / `CLAUDE.md`.
 
 **Status:** Partial and release-dependent.
 
@@ -958,7 +963,7 @@ Host/services: `server/routes/gallery.ts`, `server/github-import.ts`, `electron/
   hero, and thumbnail images, and selects another screenshot using controlled
   proxy bytes with production CSP and native request authorization. See
   [Gallery boundary](architecture.md#gallery).
-- **Driven Runtime Pass:** clean-profile bundled browsing and detail/Instructions
+- **Driven Runtime Pass:** clean-profile bundled browsing and detail/Prompt
   inspection without account/runtime. A separate isolated built-app pass
   (2026-09-14) copies real `octocat/Hello-World` via a controlled Gallery index,
   registers it, opens a second bound window, and preserves the shop's null binding.

@@ -216,9 +216,7 @@ export function createAgentSessionRuntime({
     store,
     accept,
     capture,
-    isBlank() {
-      return agentSessionIsBlank(state());
-    },
+    isBlank: () => agentSessionIsBlank(state()),
     interrupt: controls.interrupt,
     continueQueue: controls.continueQueue,
     confirmOutcome: controls.confirmOutcome,
@@ -308,6 +306,7 @@ export function createAgentSessionRuntime({
       }
     },
     setAccessMode: controls.setAccessMode,
+    applyPersona: controls.applyPersona,
     setEffort(effort) {
       const previous = state().effort;
       controls.setEffort(effort);

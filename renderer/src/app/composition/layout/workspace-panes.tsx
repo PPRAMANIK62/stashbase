@@ -90,7 +90,7 @@ export function WorkspacePanes({
           catalog={dependencies.agent.catalog}
           accountSignedIn={account.account?.signedIn ?? false}
           header={mode === 'documents'}
-          instructions={dependencies.agent.instructions}
+          persona={dependencies.agent.persona}
           onOpenAgentSettings={() => settings.openSettings('agents')}
           onOpenExternal={(href) => void dependencies.documents.openExternal(href)}
           onOpenSource={(source) => {

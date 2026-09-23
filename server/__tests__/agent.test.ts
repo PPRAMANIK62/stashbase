@@ -17,7 +17,7 @@ import {
   claudeSkillPrompt,
   selectClaudeModel,
 } from '../agent.ts';
-import { resolveAgentInstructions, setAgentInstructions } from '../agent-instructions.ts';
+import { resolveAgentPersona, setAgentPersona } from '../agent-persona.ts';
 import { clearCurrentFolder, runWithWindowId, openProjectFolder, registerProjectFolderAsync } from '../folder.ts';
 import { derivedNoteFor, registerDerivedSource } from '../derived-store.ts';
 import { claudeTranscriptEffort } from '../claude-history.ts';
@@ -65,12 +65,12 @@ function fakeClaudeQuery(failureOrMessages?: Error | SDKMessage[], failure?: Err
   } as unknown as Query;
 }
 
-test('Claude keeps Agent Instructions user-visible while appending hidden StashBase routing policy', async (t) => {
+test('Claude appends the chosen Persona before hidden StashBase routing policy', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-claude-instructions-'));
-  const instructions = 'Prefer primary research notes.';
-  setAgentInstructions({ kind: 'folder', path: folder }, instructions);
+  const persona = 'Prefer primary research notes.';
+  setAgentPersona({ kind: 'folder', path: folder }, { custom: persona, selected: 'custom' });
   t.after(() => {
-    setAgentInstructions({ kind: 'folder', path: folder }, '');
+    setAgentPersona({ kind: 'folder', path: folder }, { custom: '', selected: null });
     fs.rmSync(folder, { recursive: true, force: true });
   });
 
@@ -96,7 +96,7 @@ test('Claude keeps Agent Instructions user-visible while appending hidden StashB
 
   session.begin();
   await settle();
-  assert.equal(resolveAgentInstructions(folder), instructions);
+  assert.equal(resolveAgentPersona(folder), persona);
   assert.match(appended, /StashBase MCP/i);
   assert.match(appended, /search_project/);
   assert.match(appended, /read_file/);
@@ -106,7 +106,7 @@ test('Claude keeps Agent Instructions user-visible while appending hidden StashB
   assert.match(appended, /suggest_edits/);
   assert.match(appended, /Write the file directly/);
   assert.match(appended, /Prefer primary research notes\./);
-  assert.notEqual(appended, instructions);
+  assert.notEqual(appended, persona);
 });
 
 interface TurnEvent {

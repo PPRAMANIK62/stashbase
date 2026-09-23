@@ -54,8 +54,12 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
   resolves to, in the runtime's own words, so the reader can tell which model
   the choice actually runs. A model chosen while a session is still starting applies
   before its first turn.
-  Options remain fixed during a turn. Instructions are standing session guidance,
-  distinct from permissions, requests, and user-owned native instruction files.
+  Options remain fixed during a turn. A persona is standing session guidance
+  chosen per project in the composer: a packaged persona, the reader's own
+  Custom prompt, or none. Choosing one applies from the chat's next message by
+  resuming its own conversation, and to new chats in the project. It is
+  distinct from permissions, requests, and user-owned native instruction files,
+  which own how the Agent works.
 - Approval applies to its pending action only. Stop cancels unanswered approvals,
   retires model/tool work, and preserves transcripts and completed file edits.
   Cancellation is confirmed before reporting Stopped; it does not roll back edits.

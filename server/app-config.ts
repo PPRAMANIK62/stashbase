@@ -2,7 +2,7 @@
  * App-level config persistence — the single `~/.stashbase/config.json`.
  * Writes enforce owner-only POSIX permissions; Windows relies on the user's
  * profile ACL. This module owns the file primitives and the user-preference
- * accessors (API keys, Agent Instructions, terminal CLI, embedder provider); `folder.ts`
+ * accessors (API keys, Agent Persona, terminal CLI, embedder provider); `folder.ts`
  * reuses the same primitives for project membership. Extracted from folder.ts:
  * credentials and preferences have nothing to do with the folder registry, and
  * routes that only need a key shouldn't import the whole window-context machinery.
@@ -129,10 +129,11 @@ export interface AppConfigFile {
    * reads this through the local server so this process remains the sole
    * config writer. */
   updates?: Partial<UpdatePreferences>;
-  /** User-authored Chat guidance owned by StashBase. Folder entries use the
-   * exact spelling of project membership paths; no project file is created. */
-  agentInstructions?: {
-    folders?: Array<{ path: string; text: string }>;
+  /** Each project's chosen Agent Persona and its custom prompt, owned by
+   * StashBase. Folder entries use the exact spelling of project membership
+   * paths; no project file is created. See `agent-persona.ts`. */
+  agentPersonas?: {
+    folders?: Array<{ path: string; selected?: string; custom?: string }>;
   };
   /** Each native runtime's last-read model catalog and the model it last ran
    * with nothing chosen. A memory rather than a preference: losing it costs

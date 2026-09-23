@@ -13,19 +13,27 @@ import type { AgentSessionCommand } from '@/features/agent/domain/session-comman
 import { featureErrorClass, type FeatureError } from '@/shared/domain/feature-error';
 import type { SourceReference } from '@/shared/domain/source-reference';
 
-/** The standing instructions a scope's Chats run under: a packaged default a
- *  reader may replace, never a resolved prompt. The runtime composes the real
- *  prompt server-side, so nothing here is the text a turn actually carries. */
-export interface AgentInstructionsPort {
-  load(scope: AgentScope, signal: AbortSignal): Promise<AgentInstructions>;
-  /** Empty text restores the packaged default. */
-  save(scope: AgentScope, text: string, signal: AbortSignal): Promise<AgentInstructions>;
+/** A packaged persona, or the reader's own prompt for the project. */
+export type AgentPersonaChoice = 'marketer' | 'journalist' | 'storyteller' | 'custom';
+
+/** The persona a scope's Chats run under: which one is chosen and the
+ *  reader's own prompt, never the resolved text. The runtime composes the
+ *  real prompt server-side, so nothing here is the text a turn carries. */
+export interface AgentPersona {
+  /** Null runs no persona. */
+  readonly selected: AgentPersonaChoice | null;
+  /** Kept while a packaged persona is chosen, so Custom can return to it. */
+  readonly custom: string;
 }
 
-export interface AgentInstructions {
-  /** False while the packaged default is standing. */
-  readonly customized: boolean;
-  readonly text: string;
+export interface AgentPersonaChange {
+  readonly selected?: AgentPersonaChoice | null;
+  readonly custom?: string;
+}
+
+export interface AgentPersonaPort {
+  load(scope: AgentScope, signal: AbortSignal): Promise<AgentPersona>;
+  save(scope: AgentScope, change: AgentPersonaChange, signal: AbortSignal): Promise<AgentPersona>;
 }
 
 export interface AgentCatalogPort {

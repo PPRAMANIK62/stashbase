@@ -8,7 +8,9 @@ import type {
   AgentCatalogPort,
   AgentConnectionListener,
   AgentContextPort,
-  AgentInstructionsPort,
+  AgentPersona,
+  AgentPersonaChange,
+  AgentPersonaPort,
   AgentSessionPort,
 } from '@/features/agent/application/ports';
 import type { Agent, AgentAbilities } from '@/features/agent/domain/agent-catalog';
@@ -103,14 +105,19 @@ export function idleAgentSessionPort(overrides: Partial<AgentSessionPort> = {}):
   }).port;
 }
 
-/** Instructions that read as the packaged default and save what they are
- *  given. Override `load` to exercise a customized scope. */
-export function agentInstructionsApi(
-  overrides: Partial<AgentInstructionsPort> = {},
-): AgentInstructionsPort {
+/** A project with no persona chosen that stores what it is given. Override
+ *  `load` to exercise a chosen persona. */
+export function agentPersonaApi(overrides: Partial<AgentPersonaPort> = {}): AgentPersonaPort {
+  let stored: AgentPersona = { custom: '', selected: null };
   return {
-    load: vi.fn(async () => ({ customized: false, text: 'Packaged default.' })),
-    save: vi.fn(async (_scope, text: string) => ({ customized: text !== '', text })),
+    load: vi.fn(async () => stored),
+    save: vi.fn(async (_scope, change: AgentPersonaChange) => {
+      stored = {
+        custom: change.custom ?? stored.custom,
+        selected: change.selected === undefined ? stored.selected : change.selected,
+      };
+      return stored;
+    }),
     ...overrides,
   };
 }

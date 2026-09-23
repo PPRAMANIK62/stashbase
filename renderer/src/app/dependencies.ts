@@ -13,11 +13,11 @@ import type { ComponentProps } from 'react';
 import { createAgentPreferencesAdapter, type AgentPreferencesPort } from '@/features/agent/public';
 import {
   createAgentCatalogAdapter,
-  createAgentInstructionsAdapter,
+  createAgentPersonaAdapter,
   createAgentContextAdapter,
   createAgentSessionAdapter,
   type AgentCatalogPort,
-  type AgentInstructionsPort,
+  type AgentPersonaPort,
   type AgentContextPort,
   type AgentSessionPort,
 } from '@/features/agent/public';
@@ -81,7 +81,7 @@ export interface AppDependencies {
     catalog: AgentCatalogPort;
     preferences?: AgentPreferencesPort;
     context: AgentContextPort;
-    instructions: AgentInstructionsPort;
+    persona: AgentPersonaPort;
     session: AgentSessionPort;
   };
   /** Opens the bug-report review for this window; null outside Electron. */
@@ -135,7 +135,7 @@ export function createDependencies(): AppDependencies {
     agent: {
       catalog: createAgentCatalogAdapter(http),
       preferences: createAgentPreferencesAdapter(http),
-      instructions: createAgentInstructionsAdapter(http),
+      persona: createAgentPersonaAdapter(http),
       context: createAgentContextAdapter(http, bridge.runtime.serverOrigin),
       session: createAgentSessionAdapter(http, bridge.runtime.serverOrigin),
     },

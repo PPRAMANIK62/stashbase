@@ -56,7 +56,7 @@
     "shared/protocols/electron/window-lifecycle.ts",
     "shared/protocols/electron/workspace-session.ts",
     "shared/protocols/http/agent-context.ts",
-    "shared/protocols/http/agent-instructions.ts",
+    "shared/protocols/http/agent-persona.ts",
     "shared/protocols/http/agent-preferences.ts",
     "shared/protocols/http/agent-runtime.ts",
     "shared/protocols/http/agent-sessions.ts",

@@ -13,7 +13,7 @@ import { CodexRpcPeer } from '../codex-rpc-transport.ts';
 import { runtimeDescriptorFor } from '../agent-contract.ts';
 import { BUILT_IN_AGENT_ADAPTERS } from '../agent-adapters.ts';
 import { CodexSession } from '../codex-session-runtime.ts';
-import { resolveAgentInstructions, setAgentInstructions } from '../agent-instructions.ts';
+import { resolveAgentPersona, setAgentPersona } from '../agent-persona.ts';
 import { clearCurrentFolder, runWithWindowId, openProjectFolder } from '../folder.ts';
 
 class FakeCodexProcess extends EventEmitter {
@@ -187,14 +187,14 @@ test('Codex publishes its native model catalog before ready and forwards a selec
   session.dispose();
 });
 
-test('Codex keeps Agent Instructions user-visible while injecting hidden StashBase routing policy', async (t) => {
+test('Codex injects the chosen Persona with hidden StashBase routing policy', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-instructions-'));
-  const instructions = 'Prefer primary research notes.';
+  const persona = 'Prefer primary research notes.';
   await runWithWindowId('instructions-window', () => openProjectFolder(folder));
-  setAgentInstructions({ kind: 'folder', path: folder }, instructions);
+  setAgentPersona({ kind: 'folder', path: folder }, { custom: persona, selected: 'custom' });
   t.after(() => {
     runWithWindowId('instructions-window', () => clearCurrentFolder());
-    setAgentInstructions({ kind: 'folder', path: folder }, '');
+    setAgentPersona({ kind: 'folder', path: folder }, { custom: '', selected: null });
     fs.rmSync(folder, { recursive: true, force: true });
   });
   const ws = new FakeWebSocket();
@@ -220,13 +220,13 @@ test('Codex keeps Agent Instructions user-visible while injecting hidden StashBa
   const developerInstructions = native.requests.find(
     (request) => request.method === 'thread/start',
   )?.params.developerInstructions;
-  assert.equal(resolveAgentInstructions(folder), instructions);
+  assert.equal(resolveAgentPersona(folder), persona);
   assert.equal(typeof developerInstructions, 'string');
   assert.match(String(developerInstructions), /StashBase MCP/i);
   assert.match(String(developerInstructions), /search_project/);
   assert.match(String(developerInstructions), /read_file/);
   assert.match(String(developerInstructions), /Prefer primary research notes\./);
-  assert.notEqual(developerInstructions, instructions);
+  assert.notEqual(developerInstructions, persona);
 });
 
 test('Codex holds a model chosen while its catalog is still being read and applies it to the first turn', async (t) => {

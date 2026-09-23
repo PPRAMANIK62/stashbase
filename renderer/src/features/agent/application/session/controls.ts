@@ -83,6 +83,11 @@ export function createSessionControls({
       transition({ effort, kind: 'set-effort' });
       if (isStarted()) transport.open({ resume: current.nativeSessionId ?? undefined });
     },
+    applyPersona() {
+      const current = state();
+      if (disposed() || agentSessionIsBusy(current) || !isStarted()) return;
+      transport.open({ resume: current.nativeSessionId ?? undefined });
+    },
     setModel(model: Parameters<AgentSessionRuntime['setModel']>[0]) {
       const current = state();
       if (

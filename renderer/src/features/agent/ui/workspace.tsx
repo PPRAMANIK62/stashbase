@@ -23,7 +23,7 @@ import {
 import { EMPTY_CHAT_PROMPTS } from '@/features/agent/domain/starters';
 import { useAgentAccess } from '@/features/agent/hooks/use-agent-access';
 import { useAgentCatalog } from '@/features/agent/hooks/use-agent-catalog';
-import { useAgentInstructions } from '@/features/agent/hooks/use-agent-instructions';
+import { useAgentPersona } from '@/features/agent/hooks/use-agent-persona';
 import { useAgentRuntimeUpdate } from '@/features/agent/hooks/use-agent-runtime-update';
 import { useRenameConversation } from '@/features/agent/hooks/use-conversation-history';
 import { useRotatingPrompt } from '@/features/agent/hooks/use-rotating-prompt';
@@ -39,8 +39,8 @@ import { AgentPermissionMode } from './composer/permission-mode';
 import { AgentProviderControl } from './composer/provider';
 import { AgentThinkingControl } from './composer/thinking';
 import { AgentConnectionNotice, connectionNotice } from './connection-notice';
-import { AgentInstructionsControl } from './instructions/agent-instructions-control';
 import { NewChatButton } from './new-chat-button';
+import { AgentPersonaControl } from './persona/agent-persona-control';
 import { AgentTranscript } from './transcript/transcript';
 import { AgentUpgradeOfferCard } from './upgrade-offer';
 import { AgentWorkStatus } from './work-status';
@@ -58,7 +58,7 @@ function ChatWorkspace({
   catalog,
   catalogPort,
   header = true,
-  instructions: instructionsApi,
+  persona: personaApi,
   onOpenAgentSettings,
   onSignIn,
   onOpenExternal,
@@ -119,7 +119,7 @@ function ChatWorkspace({
   const armedSkill = agentSkills(state.skillCatalog).find((skill) => skill.id === state.skill);
   const empty = state.transcript.length === 0;
   const scopeName = scopeLabel(state.scope);
-  const instructions = useAgentInstructions(instructionsApi, state.scope);
+  const persona = useAgentPersona(personaApi, state.scope, active.applyPersona);
   const honoredModes = readyAgent?.abilities.modes;
   useEffect(() => {
     if (!honoredModes || honoredModes.length === 0) return;
@@ -283,7 +283,7 @@ function ChatWorkspace({
                       onChange={active.setAccessMode}
                     />
                   )}
-                  <AgentInstructionsControl editor={instructions} scopeName={scopeName} />
+                  <AgentPersonaControl disabled={busy} picker={persona} scopeName={scopeName} />
                 </>
               }
               rightSlot={

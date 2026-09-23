@@ -284,13 +284,17 @@ stable status without download, retry, or a new durable demand latch.
   subagent, or another tool whose writes name no file reports that the folder
   may have changed, and the shell reconciles it the same way. Reads, listings,
   searches, and questions report nothing.
-- Instructions are scoped Settings guidance resolved at native mount and composed
+- A persona is per-project Settings guidance resolved at native mount and composed
   with internal routing policy. That policy is the one text every runtime always
   sees, so it owns which StashBase tool orients and reads prepared text, and when
   a Markdown revision is proposed rather than written; a tool description alone
-  cannot own a rule, because a runtime may defer it. They are not permissions, skill contents, or
-  project-file edits. Empty reset restores the packaged default; saves do not
-  mutate a running native prompt. Brainstorming needs no sources/wiki/index.
+  cannot own a rule, because a runtime may defer it. Neither is a permission,
+  skill contents, or a project-file edit, and StashBase ships no workflow
+  guidance of its own: that is the user's `AGENTS.md` / `CLAUDE.md`. Packaged
+  personas live in `assets/agent-personas/`; no persona is the default. A save
+  never mutates a running native prompt: the renderer resumes the chat's own
+  conversation, as it does for effort, so the persona applies from the next
+  turn. Brainstorming needs no sources/wiki/index.
 - Attachment age cleanup excludes batches created by the active server process;
   drafts, queues, and retries may retain them until process exit. They remain
   temporary files, not durable historical attachments.

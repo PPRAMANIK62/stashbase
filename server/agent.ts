@@ -440,9 +440,9 @@ export class AgentSession implements AttributedAgentSession {
           // Apply the shared Access choice when the native session starts.
           // Later changes still use the SDK's live setPermissionMode API.
           permissionMode: this.access,
-          // Preserve Claude's native preset, then append the resolved
-          // user-visible Agent Instructions plus StashBase's internal project
-          // routing policy. The policy is never stored in the editable text.
+          // Preserve Claude's native preset, then append the project's chosen
+          // Persona plus StashBase's internal project routing policy. The
+          // policy is never stored in the Persona.
           systemPrompt: {
             type: 'preset',
             preset: 'claude_code',

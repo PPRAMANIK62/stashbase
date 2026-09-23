@@ -3,17 +3,20 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { expect, screen, userEvent, waitFor } from 'storybook/test';
 
-import type { AgentInstructionsPort } from '@/features/agent/application/ports';
+import type { AgentPersonaPort } from '@/features/agent/application/ports';
 import { createAgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import type { Agent } from '@/features/agent/domain/agent-catalog';
 import { cn } from '@/lib/utils';
 
 import ManagedAgentWorkspace from './workspace';
 
-const storyInstructions = {
-  load: async () => ({ customized: false, text: 'Keep answers grounded in this folder.' }),
-  save: async (_scope: unknown, text: string) => ({ customized: text !== '', text }),
-} as AgentInstructionsPort;
+const storyPersona = {
+  load: async () => ({ custom: '', selected: null }),
+  save: async (_scope: unknown, change: { custom?: string; selected?: unknown }) => ({
+    custom: change.custom ?? '',
+    selected: change.selected ?? null,
+  }),
+} as AgentPersonaPort;
 
 const abilities: Agent['abilities'] = {
   attachments: true,
@@ -228,7 +231,7 @@ function WorkspacePreview({
               listAgents: async () => ({ agents: ready ? agents : pendingAgents }),
               prepareAgent: async () => ({ agents }),
             }}
-            instructions={storyInstructions}
+            persona={storyPersona}
             onOpenExternal={() => undefined}
             onOpenAgentSettings={() => undefined}
             onSignIn={() => undefined}

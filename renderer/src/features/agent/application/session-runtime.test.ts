@@ -138,6 +138,34 @@ describe('AgentSessionRuntime', () => {
     expect(runtime.store.getState().effort).toBe('high');
   });
 
+  it('applies a persona by resuming its own conversation, and leaves a draft to start with it', () => {
+    const test = harness();
+    const runtime = createAgentSessionRuntime({
+      agent: 'claude',
+      id: 'chat-1',
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'folder', path: '/project/Research' },
+    });
+    test.listeners[0]?.onEvent({ kind: 'ready' });
+    test.listeners[0]?.onEvent({ id: 'native-1', kind: 'identified' });
+
+    runtime.applyPersona();
+    expect(test.requests()).toHaveLength(2);
+    expect(test.requests().at(-1)).toMatchObject({ resume: 'native-1' });
+
+    const draft = createAgentSessionRuntime({
+      agent: 'claude',
+      autostart: false,
+      id: 'chat-2',
+      port: test.port,
+      scheduler: test.scheduler,
+      scope: { kind: 'folder', path: '/project/Research' },
+    });
+    draft.applyPersona();
+    expect(test.requests()).toHaveLength(2);
+  });
+
   it('loads replay before reconnecting exactly that native session', async () => {
     const test = harness();
     const runtime = createAgentSessionRuntime({

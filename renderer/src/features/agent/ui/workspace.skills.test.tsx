@@ -20,7 +20,7 @@ import {
   BUILT_IN_AGENT,
   CLAUDE_AGENT,
   CODEX_AGENT,
-  agentInstructionsApi,
+  agentPersonaApi,
 } from '@/test/fakes/agent';
 import { createTestQueryClient, withQueryClient } from '@/test/query';
 
@@ -64,7 +64,7 @@ function renderWorkspace(
       />
       <ManagedAgentWorkspace
         catalog={catalog}
-        instructions={agentInstructionsApi()}
+        persona={agentPersonaApi()}
         onOpenAgentSettings={vi.fn()}
         onOpenExternal={vi.fn()}
         onSignIn={vi.fn()}

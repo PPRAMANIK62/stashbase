@@ -113,7 +113,7 @@ export function scopeForWindowFolder(folderPath: string | null): AgentScope {
   return { kind: 'folder', path: folderPath };
 }
 
-/** Instructions and preferences share the project path as their key. */
+/** Persona and preferences share the project path as their key. */
 export function agentScopeKey(scope: AgentScope): string {
   return scope.path;
 }

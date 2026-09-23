@@ -3,7 +3,7 @@
  *  the thinking level and keeps the model list one layer deeper. The level is
  *  the thing a reader changes turn to turn; the model is chosen once. It sits
  *  at the composer's right edge beside Send, where the reader looks last
- *  before sending; the runtime, its permission mode, and Instructions keep
+ *  before sending; the runtime, its permission mode, and the persona keep
  *  the left. */
 import { ChevronDown, ChevronLeft, ChevronRight, Zap } from 'lucide-react';
 import { useState } from 'react';

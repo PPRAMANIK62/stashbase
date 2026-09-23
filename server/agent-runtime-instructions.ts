@@ -1,8 +1,9 @@
-import { resolveAgentInstructions } from './agent-instructions.ts';
+import { resolveAgentPersona } from './agent-persona.ts';
 
 /** Product-owned routing policy for native Agent runtimes. This policy is not
- * part of the user-editable Agent Instructions surface: adapters compose it
- * only when starting a native session. */
+ * part of the user-chosen Persona: adapters compose it only when starting a
+ * native session. How the Agent works otherwise is the reader's own
+ * `AGENTS.md` / `CLAUDE.md`, which the runtimes read natively. */
 export const STASHBASE_AGENT_RUNTIME_POLICY = [
   '<stashbase_runtime_policy>',
   "Use StashBase MCP tools for the conversation's bound project.",
@@ -16,12 +17,12 @@ export const STASHBASE_AGENT_RUNTIME_POLICY = [
   '</stashbase_runtime_policy>',
 ].join('\n');
 
-export function composeAgentRuntimeInstructions(agentInstructions?: string): string {
-  return agentInstructions
-    ? `${agentInstructions}\n\n${STASHBASE_AGENT_RUNTIME_POLICY}`
+export function composeAgentRuntimeInstructions(persona?: string): string {
+  return persona
+    ? `${persona}\n\n${STASHBASE_AGENT_RUNTIME_POLICY}`
     : STASHBASE_AGENT_RUNTIME_POLICY;
 }
 
 export function resolveAgentRuntimeInstructions(folderPath: string): string {
-  return composeAgentRuntimeInstructions(resolveAgentInstructions(folderPath));
+  return composeAgentRuntimeInstructions(resolveAgentPersona(folderPath));
 }

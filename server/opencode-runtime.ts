@@ -20,7 +20,7 @@ import {
 } from '@opencode-ai/sdk';
 import { getHostedAccountSession } from './app-config.ts';
 import { ensureMcpLauncher } from './agent-mcp.ts';
-import { resolveAgentInstructions } from './agent-instructions.ts';
+import { resolveAgentPersona } from './agent-persona.ts';
 import { composeAgentRuntimeInstructions } from './agent-runtime-instructions.ts';
 import { appDataRoot } from './local-data.ts';
 import { logger } from './log.ts';
@@ -130,9 +130,9 @@ export function buildOpenCodeConfig(
   model: { apiKey: string; baseUrl: string; model: string },
   mcp: string,
   mcpEnvironment: Record<string, string> = {},
-  agentInstructions?: string,
+  persona?: string,
 ): Config {
-  const runtimeInstructions = composeAgentRuntimeInstructions(agentInstructions);
+  const runtimeInstructions = composeAgentRuntimeInstructions(persona);
   const permission = {
     edit: 'ask',
     bash: 'ask',
@@ -192,9 +192,9 @@ export function buildOpenCodeConfig(
 function openCodeConfig(
   model: { apiKey: string; baseUrl: string; model: string },
   mcpEnvironment: Record<string, string>,
-  agentInstructions?: string,
+  persona?: string,
 ): Config {
-  return buildOpenCodeConfig(model, ensureMcpLauncher(), mcpEnvironment, agentInstructions);
+  return buildOpenCodeConfig(model, ensureMcpLauncher(), mcpEnvironment, persona);
 }
 
 class OpenCodeRuntime {
@@ -206,7 +206,7 @@ class OpenCodeRuntime {
 
   constructor(
     private readonly mcpEnvironment: Record<string, string> = {},
-    private readonly agentInstructions?: string,
+    private readonly persona?: string,
     private readonly requireAccount = true,
     private readonly agentSessionId = 'history',
   ) {
@@ -331,7 +331,7 @@ class OpenCodeRuntime {
       '--pure',
       '--log-level=WARN',
     ], {
-      env: privateRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.agentInstructions), username, password),
+      env: privateRuntimeEnvironment(openCodeConfig(model, this.mcpEnvironment, this.persona), username, password),
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
@@ -423,7 +423,7 @@ export function createOpenCodeSessionRuntime(
   const sessionRuntime = new OpenCodeRuntime({
     STASHBASE_WINDOW_ID: context.windowId,
     STASHBASE_AGENT_SESSION_ID: context.agentSessionId,
-  }, resolveAgentInstructions(
+  }, resolveAgentPersona(
     context.cwd,
   ), true, context.agentSessionId);
   return {

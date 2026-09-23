@@ -71,6 +71,10 @@ export interface AgentSessionRuntime {
   sendPrompt(text?: string, options?: { queuedId?: string }): Promise<AgentSendResult>;
   setAccessMode(mode: AgentAccessMode): void;
   setEffort(effort: string | null): void;
+  /** Restarts a started session on its own conversation so it runs under the
+   *  project's persona as stored now. The runtime reads the persona only when
+   *  a session starts; an unstarted one picks it up on its own. */
+  applyPersona(): void;
   setModel(model: string | null): void;
   /** Arms a catalog skill for the next turn, or disarms with null. */
   setSkill(skill: string | null): void;

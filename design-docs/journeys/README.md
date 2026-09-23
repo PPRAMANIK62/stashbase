@@ -218,7 +218,7 @@ component tests.
 ## J11: Turn a conversation into a project
 
 **Retired.** StashBase starts conversations inside an open project. There is no
-unbound chat, separate Instructions scope, or conversation migration. The ID stays
+unbound chat, separate persona scope, or conversation migration. The ID stays
 reserved so previous review references remain identifiable.
 
 Explicit MCP project creation belongs to J08; opening its result follows J02.
@@ -237,7 +237,7 @@ pages and source links.
 ### Required Results
 
 Wiki pages are ordinary requested project files, with no mandatory entry filename or
-automatic regeneration. Copying a prompt does not install Instructions or authorize
+automatic regeneration. Copying a prompt does not change the persona or authorize
 source reorganization.
 
 ### Failure and Recovery
@@ -259,7 +259,7 @@ or make a local project copy → enter.
 ### Required Results
 
 Browsing requires no project/account. Prompt copying never sends a message or changes
-Instructions. Use the current catalog entry and shared project-entry rules; a withdrawn
+the persona. Use the current catalog entry and shared project-entry rules; a withdrawn
 entry cannot still be copied.
 
 ### Failure and Recovery

@@ -198,12 +198,12 @@ Paths are relative to the repository root.
 - `renderer/src/features/agent/application/session/prompts.ts`
 - `renderer/src/features/agent/infrastructure/session-api.ts`
 
-## Chat starters and project instructions
+## Chat starters and project persona
 
 - `renderer/src/features/agent/domain/starters.ts`
-- `renderer/src/features/agent/ui/instructions/agent-instructions-dialog.tsx`
-- `assets/agent-instructions/default.md`
-- `server/agent-instructions.ts`
+- `renderer/src/features/agent/ui/persona/agent-persona-control.tsx`
+- `assets/agent-personas/`
+- `server/agent-persona.ts`
 - `server/opencode-runtime.ts`
 
 ## Documents mode, sidebar, and Agent pane
@@ -495,6 +495,6 @@ Paths are relative to the repository root.
 ## Product necessity and project-first sessions
 
 - Conversation scope and history → `server/agent-contract.ts`, `server/agent-session-registry.ts`, `server/claude-history.ts`, `server/codex-history-adapter.ts`, `server/opencode-agent.ts`, `server/routes/agent-sessions.ts`, `renderer/src/features/agent/application/workspace-runtime.ts`.
-- Instructions and project creation → `server/agent-instructions.ts`, `server/agent-projects.ts`, `mcp/project-server.ts`.
+- Persona and project creation → `server/agent-persona.ts`, `server/agent-projects.ts`, `mcp/project-server.ts`.
 - Source mutation and derived ownership → `server/active-file-operations.ts`, `server/project-file-mutations.ts`, `server/derived-store.ts`.
 - Native report entry and package dependencies → `electron/main.cjs`, `electron/renderer/preload.ts`, `package.json`, `renderer/package.json`.

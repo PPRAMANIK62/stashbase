@@ -4,8 +4,8 @@ Shared terms for product copy, design, code review, and tests.
 
 ## Naming During Review
 
-Start with the meaning and scope, then inspect the name. Product copy, Agent
-Instructions, and guides use the vocabulary here. Code identifiers may use
+Start with the meaning and scope, then inspect the name. Product copy, packaged
+personas, and guides use the vocabulary here. Code identifiers may use
 established technical terms; renaming a persisted field, protocol, or path
 requires checking current readers and writers; historical-data-only compatibility follows
 the [maintenance policy](../MAINTENANCE.md#previous-version-data-policy).
@@ -48,11 +48,13 @@ from Agent permissions and document reading/editing controls.
 The Agent collaboration capability; **Chat** is its conversation surface.
 OpenQuill, Claude, and Codex are runtimes, not names for the capability.
 
-## Agent Instructions
+## Persona
 
-Editable, scope-specific guidance stored in Settings and resolved at session
-mount. It is distinct from access control, internal routing, and user-owned
-`AGENTS.md` / `CLAUDE.md` native instruction files.
+Who the Agent is when it talks and writes in a project: one of the packaged
+personas, the reader's own **Custom** prompt, or none. StashBase stores the
+choice per project and resolves it when a session starts. How the Agent works
+belongs to the user-owned `AGENTS.md` / `CLAUDE.md` native instruction files;
+a persona is distinct from them, from access control, and from internal routing.
 
 ## OpenQuill
 

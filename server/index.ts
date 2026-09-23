@@ -72,7 +72,7 @@ import { createMcpHttpService } from './mcp-http-service.ts';
 import { runShutdownCleanup } from './shutdown-cleanup.ts';
 import { mount as mountAgentSessionsRoutes } from './routes/agent-sessions.ts';
 import { mount as mountAgentPreferencesRoutes } from './routes/agent-preferences.ts';
-import { mount as mountAgentInstructionsRoutes } from './routes/agent-instructions.ts';
+import { mount as mountAgentPersonaRoutes } from './routes/agent-persona.ts';
 import { createRendererOriginPolicy } from './middleware/renderer-origin.ts';
 import { mount as mountAccountRoutes } from './routes/account.ts';
 import { BUILT_IN_AGENT_ADAPTERS } from './agent-adapters.ts';
@@ -323,7 +323,7 @@ mountTerminalRoutes(app);
 mountMcpRoutes(app, mcpHttpService);
 mcpHttpService.mountLoopback(app); // local POST /mcp; Docker listener is opt-in and MCP-only
 mountAgentSessionsRoutes(app); // shared contract history surface for the built-in panel
-mountAgentInstructionsRoutes(app);
+mountAgentPersonaRoutes(app);
 mountAgentPreferencesRoutes(app); // global + explicit member-folder Chat guidance
 
 // Renderer error sink. The root `ErrorBoundary` POSTs render-time

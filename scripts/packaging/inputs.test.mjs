@@ -68,25 +68,19 @@ test('the supported renderer build is the only packaged renderer input', () => {
   assert.match(pkg.scripts?.build ?? '', /build:electron-boundary/);
 });
 
-test('packaged Agent Instructions include the canonical default prompt', () => {
-  const prompt = fs.readFileSync(path.join(root, 'assets', 'agent-instructions', 'default.md'), 'utf8').trim();
-  // The three things the shipped prompt has to still say: who the Agent is,
-  // that a file change needs asking for, and where a wiki lives. A packaged
-  // placeholder or a truncated copy fails on all three.
-  assert.match(prompt, /You are my writing partner/);
-  assert.match(prompt, /\*\*Discuss ideas\*\*/);
-  assert.match(prompt, /\*\*Draft and revise\*\*/);
-  assert.match(prompt, /\*\*Build a wiki when requested\*\*/);
-  assert.match(prompt, /plain, natural language/);
-  assert.match(prompt, /Discussion alone does not authorize file changes/);
-  assert.match(prompt, /Keep Wiki Pages in `wiki\/`/);
-  assert.match(prompt, /follow an existing wiki's structure, naming, and linking conventions/);
+test('packaged Agent Personas include every preset the picker offers', () => {
+  // A packaged placeholder or a missing preset would start a session with no
+  // persona while the picker says one is chosen.
+  for (const id of ['marketer', 'journalist', 'storyteller']) {
+    const prompt = fs.readFileSync(path.join(root, 'assets', 'agent-personas', `${id}.md`), 'utf8').trim();
+    assert.match(prompt, /^Take the persona of /);
+  }
 
   assert.deepEqual(
-    pkg.build?.extraResources?.find((entry) => entry?.to === 'assets/agent-instructions'),
+    pkg.build?.extraResources?.find((entry) => entry?.to === 'assets/agent-personas'),
     {
-      from: 'assets/agent-instructions',
-      to: 'assets/agent-instructions',
+      from: 'assets/agent-personas',
+      to: 'assets/agent-personas',
     },
   );
 });

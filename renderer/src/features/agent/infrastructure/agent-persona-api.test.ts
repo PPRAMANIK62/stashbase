@@ -2,40 +2,29 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 
 import type { HttpClient } from '@/platform/http/client';
 
-import { createAgentInstructionsAdapter } from './agent-instructions-api';
+import { createAgentPersonaAdapter } from './agent-persona-api';
 
 const STATE = {
-  customized: false,
+  custom: '',
   scope: { kind: 'folder', path: '/project/Research' },
-  text: 'Packaged.',
+  selected: null,
 };
 const signal = () => new AbortController().signal;
 
 function adapter(body: unknown = STATE) {
   const request = vi.fn(async () => ({ body, status: 200 }));
-  return { adapter: createAgentInstructionsAdapter({ request } as HttpClient), request };
+  return { adapter: createAgentPersonaAdapter({ request } as HttpClient), request };
 }
 
-describe('agent instructions adapter', () => {
-  it('reads project instructions', async () => {
-    const { adapter: api, request } = adapter();
-    await api.load({ kind: 'folder', path: '/project/Research' }, signal());
-
-    expect(request).toHaveBeenCalledWith(
-      expect.objectContaining({
-        method: 'GET',
-        path: '/api/agent-instructions?scope=%2Fproject%2FResearch',
-      }),
-    );
-  });
-
+describe('agent persona adapter', () => {
   it('reads a folder scope by its path, encoded', async () => {
     const { adapter: api, request } = adapter();
     await api.load({ kind: 'folder', path: '/project/my notes' }, signal());
 
     expect(request).toHaveBeenCalledWith(
       expect.objectContaining({
-        path: '/api/agent-instructions?scope=%2Fproject%2Fmy%20notes',
+        method: 'GET',
+        path: '/api/agent-persona?scope=%2Fproject%2Fmy%20notes',
       }),
     );
   });
@@ -44,35 +33,37 @@ describe('agent instructions adapter', () => {
   // what keeps membership authority server-side.
   it('writes the scope as the spelling the route reads, not as the object', async () => {
     const { adapter: api, request } = adapter();
-    await api.save({ kind: 'folder', path: '/project/notes' }, 'Be terse.', signal());
+    await api.save(
+      { kind: 'folder', path: '/project/notes' },
+      { custom: 'Be terse.', selected: 'custom' },
+      signal(),
+    );
 
     expect(request).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: { scope: '/project/notes', text: 'Be terse.' },
+        body: { custom: 'Be terse.', scope: '/project/notes', selected: 'custom' },
         method: 'PUT',
       }),
     );
   });
 
-  it('answers whether the text is the reader own, never the resolved prompt', async () => {
+  it('answers the chosen persona and the reader own prompt, never the resolved text', async () => {
     const { adapter: api } = adapter({
-      customized: true,
+      custom: 'Mine.',
       scope: { kind: 'folder', path: '/project/Research' },
-      text: 'Mine.',
+      selected: 'journalist',
     });
 
     expect(await api.load({ kind: 'folder', path: '/project/Research' }, signal())).toEqual({
-      customized: true,
-      text: 'Mine.',
+      custom: 'Mine.',
+      selected: 'journalist',
     });
   });
 
-  it('refuses a response whose scope names neither kind', async () => {
-    const { adapter: api } = adapter({ customized: false, scope: { kind: 'window' }, text: '' });
+  it('refuses a response that names an unknown persona', async () => {
+    const { adapter: api } = adapter({ ...STATE, selected: 'poet' });
     await expect(
       api.load({ kind: 'folder', path: '/project/Research' }, signal()),
-    ).rejects.toMatchObject({
-      kind: 'invalid-response',
-    });
+    ).rejects.toMatchObject({ kind: 'invalid-response' });
   });
 });

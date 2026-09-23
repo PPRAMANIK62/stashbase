@@ -22,7 +22,7 @@ const MODE_TEXT = {
   },
 } as const satisfies Record<AgentAccessMode, { description: string; label: string }>;
 
-// Plan explores, so it wears the compass; the scroll belongs to Instructions.
+// Plan explores, so it wears the compass.
 const MODE_ICONS = {
   default: MessageCircleQuestion,
   plan: Compass,

@@ -42,11 +42,12 @@ supported files directly.
 - **Cmd/Ctrl+W:** close the active document tab.
 - **@ mentions in Chat:** find a file or folder and insert its relative path.
 
-Tool calls and file edits can be reviewed in Chat. Use **Agent Instructions**
-in the composer to customize guidance for its scope. Saved changes apply to
-newly mounted Chat sessions; an existing mounted session keeps its original
-instructions. StashBase stores the setting without creating or rewriting
-`AGENTS.md` or `CLAUDE.md` in your folders.
+Tool calls and file edits can be reviewed in Chat. Use **Persona** in the
+composer to choose who the Agent is when it talks and writes in this project:
+Marketer, Journalist, Storyteller, or **Custom**, which opens an empty box for
+your own. A choice applies from your next message and to new chats in the
+project. How the Agent works belongs in your own `AGENTS.md` or `CLAUDE.md`;
+StashBase never creates or rewrites them.
 
 Drafting, editing, Agent file-change reports, and save-conflict comparisons are
 available, and so is the [document diff](../README.md#document-diff): an Agent can
