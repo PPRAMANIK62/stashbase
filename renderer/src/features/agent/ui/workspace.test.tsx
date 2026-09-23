@@ -94,7 +94,9 @@ describe('Agent workspace', () => {
     // their internal shape is the contract here.
     const codexMark = codexOption.querySelector('svg[viewBox="-2 -2 28 28"]'); // dom-contract: see comment above
     const claudeMark = claudeOption.querySelector('svg[viewBox="-2 -2 28 28"]'); // dom-contract: see comment above
-    expect(codexMark?.querySelector('linearGradient')).not.toBeNull(); // dom-contract: see comment above
+    expect(codexMark?.getAttribute('fill')).toBe('currentColor'); // dom-contract: see comment above
+    expect(codexMark?.querySelectorAll('path')).toHaveLength(1); // dom-contract: see comment above
+    expect(codexMark?.querySelector('linearGradient')).toBeNull(); // dom-contract: see comment above
     expect(claudeMark?.querySelector('path[fill="#D97757"]')).not.toBeNull(); // dom-contract: see comment above
     expect(codexOption.querySelector('svg title')).toBeNull(); // dom-contract: see comment above
     expect(claudeOption.querySelector('svg title')).toBeNull(); // dom-contract: see comment above
