@@ -19,9 +19,7 @@ with Claude and Codex, drawing on your own sources and past work.
 
 ## Product Preview
 
-![StashBase: reviewing suggested inline document revisions alongside Agent chat](assets/readme/product-preview.png)
-
-*Reviewing an Agent's suggested revisions inside the document.*
+https://github.com/user-attachments/assets/4ba282a3-85d2-4a08-b7af-562a1e71e716
 
 ## Document Diff
 
