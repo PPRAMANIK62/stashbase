@@ -270,9 +270,12 @@ Inline review: `renderer/src/features/documents/domain/revision.ts`,
 `renderer/src/features/documents/ui/markdown/revision-adapter.ts` over a patched
 `@milkdown/plugin-diff` (`patches/`).
 Humanize on a selection: `renderer/src/features/documents/ui/markdown/humanize-selection.ts`,
-`use-humanize.ts`, `humanize-toolbar.ts`, `renderer/src/features/documents/infrastructure/humanize-api.ts`;
+`use-humanize.ts`, `selection-toolbar.ts`, `renderer/src/features/documents/infrastructure/humanize-api.ts`;
 host `server/humanize.ts` and `server/routes/humanize.ts`; wire
 `shared/protocols/http/humanize.ts`.
+Ask Agent on a selection: `renderer/src/features/documents/ui/markdown/selection-markdown.ts`
+and `selection-toolbar.ts`, bound in `renderer/src/app/shell.tsx`, which saves the
+documents, shows the chat pane, and hands the passage to the Agent workspace.
 A save refused against a version a deleted file no longer has, whose reload confirms
 the source is gone, enters the document's `detached` state and stops autosave.
 `application/draft-settlement.ts` turns a close or a release of such a tab into the
@@ -780,6 +783,29 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
   are removed; official installations remain provider-owned. Real provider login,
   official installer downloads, and packaged cross-platform shutdown remain
   release checks, not established by these local fixtures.
+
+**Document context (2026-09-25):** a passage is a context kind in
+`renderer/src/features/agent/domain/context.ts`, rendered into the prompt as a
+`Selected passages:` block by `domain/prompt-context.ts` and validated only
+against scope, listing, and its 6,000-character limit. `application/ask-about.ts`
+binds it to the chat in the passage's folder and leaves a composer focus request that survives the pane
+mounting. `server/agent-history-attachments.ts` lifts the block back out of
+Claude and Codex history, and `infrastructure/session-api.ts` turns a replayed
+quote under the chat's folder into the same passage chip. The composer's
+suggestion of the document in front comes from `activeSource`, which
+`use-agent-environment.ts` publishes only in Documents; `domain/draft-context.ts`
+decides what is offered and `use-suggested-source.ts` holds the dismissal.
+`context.test.ts`, `session-runtime.context.test.ts`, `ask-about.test.ts`,
+`session-api.test.ts`, `codex-history.test.ts`, `context-composer.test.tsx`,
+`humanize-selection.test.ts`, and `use-agent-environment.test.tsx` own these rules.
+A driven built-app pass (2026-09-25, Linux, isolated home, folder dialog stubbed
+in the main process) opened a Markdown file beside the Agent pane: the pane
+offered it as a dashed suggestion; a selection showed Humanize and Ask Agent on
+the toolbar; Ask Agent bound "tide rises twice" as a passage chip and moved the
+caret into the composer; clicking the suggestion turned it into an inline
+mention and removed it. The formatting toolbar stays drawn after Ask Agent
+moves focus, until the next selection change. Not proven at runtime: a real
+turn receiving the passage, and a reloaded chat restoring its chip.
 
 ## J07: Converge
 

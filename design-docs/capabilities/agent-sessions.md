@@ -39,6 +39,15 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
   may advance the queue. Stop, failure, or connection loss pauses it.
 - Validate context before sending. Opening a document does not attach it; missing
   or changed context needs replacement, refresh, or explicit removal.
+- The Agent pane beside Documents suggests the document in front of the reader
+  as a quiet chip. One click attaches it like a mention; dismissing it hides the
+  suggestion until another document comes to the front. Chat mode shows no
+  suggestion, since no document is on screen there.
+- A **passage** is selected text bound as context, from **Ask Agent** on a
+  Markdown selection. Its words travel with the request, so later edits to the
+  file do not change what was asked about; it is refused only when its file
+  leaves the project or it exceeds 6,000 characters. Reloaded history shows it
+  as the same passage chip.
 - A runtime that advertises attachments accepts ordinary local files through the
   picker, drop, or paste. Images and PDFs may have visual previews; other files
   remain named file cards. Attachment acceptance does not promise that every

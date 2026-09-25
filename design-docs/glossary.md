@@ -48,6 +48,11 @@ from Agent permissions and document reading/editing controls.
 The Agent collaboration capability; **Chat** is its conversation surface.
 OpenQuill, Claude, and Codex are runtimes, not names for the capability.
 
+## Passage
+
+Selected document text bound to an Agent request with **Ask Agent**. Its words
+are sent with the request; it is not a file attachment or a revision.
+
 ## Persona
 
 Who the Agent is when it talks and writes in a project: one of the packaged

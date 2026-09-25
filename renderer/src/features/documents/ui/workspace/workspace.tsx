@@ -17,6 +17,7 @@ import {
   documentViewerFormat,
 } from '@/features/documents/domain/document-format';
 import { retainMarkdownTabIds } from '@/features/documents/domain/markdown';
+import type { DocumentSelection } from '@/features/documents/domain/selection';
 import { useDocumentTabs } from '@/features/documents/hooks/use-document-tabs';
 import { DocumentSource } from '@/features/documents/ui/source/document';
 import { documentViewerEntry } from '@/features/documents/ui/source/registry';
@@ -40,6 +41,8 @@ export interface DocumentWorkspaceProps {
   docxPreviewApi: DocxPreviewPort;
   genericPreviewApi: GenericFilePreviewPort;
   humanizeApi?: DocumentHumanizePort | undefined;
+  /** Binds a selected Markdown passage to the Agent beside the document. */
+  onAskAgent?: ((selection: DocumentSelection) => void) | undefined;
   onNavigate?: ((target: DocumentNavigationTarget) => void) | undefined;
   onOpenExternal?: ((href: string) => Promise<boolean>) | undefined;
   /** Fired once when a DOCX or media document mounts so preparation can be
@@ -62,6 +65,7 @@ export function DocumentWorkspace({
   docxPreviewApi,
   genericPreviewApi,
   humanizeApi,
+  onAskAgent,
   onNavigate = ignoreNavigation,
   onOpenExternal = rejectExternalNavigation,
   onOpenPrepared,
@@ -131,6 +135,7 @@ export function DocumentWorkspace({
             genericPreviewApi={genericPreviewApi}
             humanizeApi={humanizeApi}
             navigation={runtime.navigation}
+            onAskAgent={onAskAgent}
             onNavigate={onNavigate}
             onOpenExternal={onOpenExternal}
             onOpenPrepared={onOpenPrepared}
