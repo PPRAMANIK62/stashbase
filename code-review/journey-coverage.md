@@ -790,7 +790,7 @@ Project choice and first Send: `renderer/src/features/agent/application/project-
 against scope, listing, and its 6,000-character limit. `application/ask-about.ts`
 binds it to the chat in the passage's folder and leaves a composer focus request that survives the pane
 mounting. `server/agent-history-attachments.ts` lifts the block back out of
-Claude and Codex history, and `infrastructure/session-api.ts` turns a replayed
+Claude, Codex, and Default (OpenCode) history, and `infrastructure/session-api.ts` turns a replayed
 quote under the chat's folder into the same passage chip. The composer's
 suggestion of the document in front comes from `activeSource`, which
 `use-agent-environment.ts` publishes only in Documents; `domain/draft-context.ts`
@@ -806,6 +806,12 @@ caret into the composer; clicking the suggestion turned it into an inline
 mention and removed it. The formatting toolbar stays drawn after Ask Agent
 moves focus, until the next selection change. Not proven at runtime: a real
 turn receiving the passage, and a reloaded chat restoring its chip.
+A real Default turn (2026-09-25) received the passage and replied with a
+`#:~:text=` citation, but showed the reader's own prompt, context block
+included, again as Agent text: OpenCode streams the prompt's text part like a
+reply's, and `OpenCodeEventTranslator` forwarded every text part. It now drops
+parts of messages OpenCode announced as the user's; `opencode-agent.test.ts`
+owns that rule and the history restore.
 
 ## J07: Converge
 
