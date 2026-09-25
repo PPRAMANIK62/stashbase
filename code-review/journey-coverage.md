@@ -846,6 +846,15 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
   held only its name without it. Not proven: that a real runtime follows the
   guidance turn after turn. It is a standing instruction, not a gate, and no
   conversation was driven after the change.
+- **Citations (2026-09-25):** `renderer/src/features/agent/domain/citation.ts`
+  reads a `#:~:text=` phrase from a reply's local link; the transcript hands it
+  to `locatePassage` in `use-document-sources.ts`, which opens the file with a
+  passage-purpose Find target whose notices `navigation-runtime.ts` words for a
+  passage. `server/agent-runtime-instructions.ts` asks every runtime to cite
+  that way. `citation.test.ts`, `markdown.test.tsx`, `navigation-runtime.test.ts`,
+  and `agent-convergence.test.tsx` (a cited link selects Documents and Find lands
+  on the phrase) cover it. Not proven: that a real runtime cites as instructed,
+  and a phrase spanning a line break in the rendered text is not found.
 - **AI Eval:** requested writing quality belongs to J10. Existing deterministic
   orchestration evidence is not document-specific diff evidence.
 - **Release Check:** real-runtime requested draft/revision followed by editor save.

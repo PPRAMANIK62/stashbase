@@ -72,6 +72,11 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
 - Approval applies to its pending action only. Stop cancels unanswered approvals,
   retires model/tool work, and preserves transcripts and completed file edits.
   Cancellation is confirmed before reporting Stopped; it does not roll back edits.
+- A reply may cite a passage in a project file with a link carrying a short
+  quoted phrase. Opening it shows the file in Documents and locates that
+  phrase; when the file no longer holds it, the file stays open and says so.
+  A link without a phrase opens its file at the top. Citing is standing
+  guidance to the Agent, not a guarantee that every reply cites.
 - A clarifying question is answered in place on its own pending request. Answers
   return keyed by question text; Skip or Stop leaves it unanswered rather than
   guessing on the reader's behalf.

@@ -53,6 +53,11 @@ OpenQuill, Claude, and Codex are runtimes, not names for the capability.
 Selected document text bound to an Agent request with **Ask Agent**. Its words
 are sent with the request; it is not a file attachment or a revision.
 
+## Citation
+
+A reply's link to a passage in a project file, carrying a short quoted phrase
+that Documents locates on open. A plain file link is not a citation.
+
 ## Persona
 
 Who the Agent is when it talks and writes in a project: one of the packaged

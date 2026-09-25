@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 
 import { Button } from '@/components/ui/button';
+import { SEARCH_NOTICES } from '@/features/documents/application/navigation-runtime';
 import type {
   DocumentAssetPort,
   DocumentHumanizePort,
@@ -77,6 +78,7 @@ export function DocumentWorkspace({
   viewers,
 }: DocumentWorkspaceProps) {
   const searchNotice = useStore(runtime.navigation.store, (state) => state.searchNotice);
+  const searchPurpose = useStore(runtime.navigation.store, (state) => state.searchPurpose);
   const openFailure = useStore(runtime.store, (state) => state.openFailure);
   const closeDecision = useStore(runtime.store, (state) => state.closeDecision);
   const { activeTab, activeTabId, tabs } = useDocumentTabs(runtime);
@@ -174,7 +176,7 @@ export function DocumentWorkspace({
       {searchNotice && (
         <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2 text-caption">
           <span role="status">
-            {activeFindable ? searchNotice : 'This preview cannot locate search matches.'}
+            {activeFindable ? searchNotice : SEARCH_NOTICES[searchPurpose].unavailable}
           </span>
           <Button
             size="compact"

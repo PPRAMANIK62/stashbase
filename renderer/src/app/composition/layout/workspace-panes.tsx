@@ -97,8 +97,9 @@ export function WorkspacePanes({
           persona={dependencies.agent.persona}
           onOpenAgentSettings={() => settings.openSettings('agents')}
           onOpenExternal={(href) => void dependencies.documents.openExternal(href)}
-          onOpenSource={(source) => {
-            sources.open(source);
+          onOpenSource={(source, phrase) => {
+            if (phrase) void sources.locatePassage(source, phrase);
+            else sources.open(source);
             onShowDocuments();
           }}
           onReprocess={onReprocess}
