@@ -125,6 +125,32 @@
   visibility: hidden;
 }
 
+/* Word count: a quiet caption in the corner, where the link failure is not. */
+.markdown-word-count {
+  position: absolute;
+  z-index: 2;
+  right: 16px;
+  bottom: 12px;
+  padding: 2px 8px;
+  color: var(--muted-foreground);
+  font-size: var(--fs-caption, 12px);
+  font-variant-numeric: tabular-nums;
+  background: color-mix(in oklab, var(--surface-2) 88%, transparent);
+  border-radius: var(--shape-input-radius, 8px);
+  pointer-events: none;
+}
+
+/* Focus mode dims every top-level block but the one being written. The editor
+   marks that block whether or not the mode is on, so turning it on needs no
+   editor round trip. */
+html[data-focus-mode='on'] .markdown-crepe .ProseMirror > * {
+  transition: opacity var(--motion-base) ease;
+}
+
+html[data-focus-mode='on'] .markdown-crepe:focus-within .ProseMirror > :not(.is-current-block) {
+  opacity: 0.32;
+}
+
 .markdown-status {
   z-index: 1;
   display: flex;
