@@ -29,6 +29,7 @@ import type { DocumentHeading } from '@/features/documents/domain/outline';
 import type { DocumentSelection } from '@/features/documents/domain/selection';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { prefersReducedMotion } from '@/shared/runtime/appearance-surface';
 import { writeToClipboard } from '@/shared/ui/clipboard';
 
 import { watchMarkdownChanges } from './changes';
@@ -286,8 +287,7 @@ export function MarkdownDocument({
           hostRef.current,
           heading,
           currentEditorView(editorRef.current),
-          hostRef.current?.ownerDocument.defaultView?.matchMedia('(prefers-reduced-motion: reduce)')
-            .matches ?? true,
+          prefersReducedMotion(hostRef.current?.ownerDocument.defaultView),
         ),
     );
   }, [active, activeHeading, creationState, headings, navigation, tabId]);
