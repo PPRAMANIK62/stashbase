@@ -548,6 +548,13 @@ html[data-reading-font='serif'][data-reading-text-size='large'] {
   font-size: var(--fs-caption, 12px);
 }
 
+/* A chrome type size the named roles above do not cover, still multiplied by
+   the interface-size preference: `text-ui-11` is 11px at the default step.
+   A literal `text-[11px]` would silently opt out of that preference. */
+@utility text-ui-* {
+  font-size: calc(--value(integer) * 1px * var(--ui-scale, 1));
+}
+
 /* Motion steps as duration utilities — the class-side spelling of the
    `--motion-*` tokens above (and of `tween` in lib/springs.ts). Registered
    with tailwind-merge in lib/utils.ts so they still deduplicate against the

@@ -92,10 +92,10 @@ function customProperty(block: string, name: string): number {
   return Number(scaled);
 }
 
-/** The pixel size a `text-[13px]` ladder class stands for. */
+/** The pixel size a `text-ui-13` ladder class stands for. */
 function ladderPx(className: string): number {
-  const match = /^text-\[(\d+)px\]$/.exec(className);
-  expect(match, `${className} is an arbitrary px type step`).not.toBeNull();
+  const match = /^text-ui-(\d+)$/.exec(className);
+  expect(match, `${className} is an interface-scaled px type step`).not.toBeNull();
   return Number(match?.[1]);
 }
 

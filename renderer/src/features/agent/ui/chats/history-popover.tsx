@@ -135,7 +135,7 @@ export function ChatHistoryPopover({
                *  own scale rather than shouting over the list. */}
               <div className="[&>div]:h-8 [&>div]:px-3 [&>div>svg]:size-3.5">
                 <CommandInput
-                  className="text-[12px]"
+                  className="text-ui-12"
                   aria-activedescendant={
                     rows[activeIndex] ? `${listId}-row-${activeIndex}` : undefined
                   }
