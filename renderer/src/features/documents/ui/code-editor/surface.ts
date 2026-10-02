@@ -18,7 +18,13 @@ const codeSurfaceTheme = EditorView.theme({
     height: '100%',
   },
   '&.cm-focused': { outline: 'none' },
-  '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'var(--hover)' },
+  // The current line marks where typing lands, so it is painted only while
+  // the editor has focus; an unfocused editor would otherwise show a second
+  // caret line beside the one the reader is actually typing in.
+  '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'transparent' },
+  '&.cm-focused .cm-activeLine, &.cm-focused .cm-activeLineGutter': {
+    backgroundColor: 'var(--hover)',
+  },
   '.cm-content': {
     caretColor: 'var(--foreground)',
     fontFamily: 'var(--font-mono)',

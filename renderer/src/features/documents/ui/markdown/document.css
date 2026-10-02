@@ -300,7 +300,17 @@
   border-right: 1px solid var(--border);
 }
 
+/* The current line is painted only while the block's editor has focus, so a
+ * block the caret has left does not keep a line marked beside the prose the
+ * reader is typing in. */
 .markdown-crepe .milkdown-code-block :is(.cm-activeLine, .cm-activeLineGutter) {
+  background: transparent !important;
+}
+
+.markdown-crepe
+  .milkdown-code-block
+  .cm-editor.cm-focused
+  :is(.cm-activeLine, .cm-activeLineGutter) {
   background: var(--hover) !important;
 }
 

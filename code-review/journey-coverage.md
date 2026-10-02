@@ -397,9 +397,23 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   while such a draft is open, so quitting needs the reader to restore or discard first
   and then repeat the quit; that refusal is proven at the renderer layer only, and no
   packaged build has been driven through this journey.
+- **Focus-scoped current line (2026-10-01):** the code editor (plain text and JSON)
+  and Markdown code blocks paint the current line only while their editor has
+  focus, so a document the caret has left no longer shows a second marked line.
+  A temporary harness in Electron's Chromium mounted both editors with the
+  shipped theme and stylesheet and read the computed background: before the
+  change it stayed painted after focus moved away; after it, focused lines keep
+  the hover color and unfocused lines are transparent. happy-dom does not apply
+  CodeMirror's focus class or theme, so no unit test owns this.
+  A built-app Electron pass (2026-10-02) opened plain-text, JSON, and Markdown
+  files in an isolated project/profile. Real mouse input focused and blurred
+  the source editors via the file tree, then moved from a Markdown code block
+  to prose and between two code blocks. Computed line and gutter backgrounds
+  were the hover color only in the focused editor and transparent otherwise;
+  refocusing restored the highlight. The light composition was inspected by eye.
 - **Known issues — source/viewers:** Markdown relative images lack folder-scoped resolution/upload/lightbox; heading
   ids are assigned by order without identity cross-check. PDF placeholder/observer
-  counts are unbounded. Active-line paint is not focus-scoped.
+  counts are unbounded.
   Markdown retention remains a format-name exception outside the registry.
 - **Known issues — work continuity:** sandboxed HTML owns its internal scroll
   position; host reading-position capture does not cross that boundary. Native
