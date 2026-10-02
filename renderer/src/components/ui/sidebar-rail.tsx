@@ -1,5 +1,5 @@
 /** The grab strip on the sidebar's inner edge: drag it to resize, click it to
- *  collapse.
+ *  collapse, or focus it and use the arrow keys to resize.
  *
  *  The drag is a single pointer-captured gesture with three outcomes — a
  *  clamped resize, a collapse preview once it is thrown past the minimum
@@ -13,7 +13,9 @@ import { forwardRef, useRef, useState, type HTMLAttributes } from 'react';
 
 import { useShortcutKey, useSidebar, useSidebarInternals } from '@/components/ui/sidebar-context';
 import { ShortcutKbd } from '@/components/ui/sidebar-shortcut';
+import { KEY_STEP_PX } from '@/components/ui/split-handle';
 import { Tooltip } from '@/components/ui/tooltip';
+import { FOCUS_RING_SEAM } from '@/lib/focus-ring';
 import { fontWeights } from '@/lib/font-weight';
 import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
@@ -35,6 +37,17 @@ const SIDEBAR_COLLAPSE_SLOP = 56;
 /** Pointer travel (px) before a press becomes a drag rather than a click. */
 const DRAG_THRESHOLD = 4;
 
+/** The live width, a CSS length, in px. The app sets px; the provider's own
+ *  default is in rem, which resolves against the root font size. */
+function widthInPx(width: string): number {
+  const value = Number.parseFloat(width);
+  if (width.endsWith('rem')) {
+    const root = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+    return Math.round(value * (Number.isFinite(root) ? root : 16));
+  }
+  return Math.round(value);
+}
+
 interface DragSession {
   startX: number;
   startWidth: number;
@@ -52,7 +65,7 @@ interface SidebarRailProps extends HTMLAttributes<HTMLButtonElement> {
  *  border the shell draws. */
 const SidebarRail = forwardRef<HTMLButtonElement, SidebarRailProps>(
   ({ className, tooltipOpen, ...props }, ref) => {
-    const { toggleSidebar, setOpen, side } = useSidebar();
+    const { toggleSidebar, setOpen, side, width } = useSidebar();
     const { setWidth, setIsResizing } = useSidebarInternals();
     const shortcutKey = useShortcutKey();
     const railRef = useRef<HTMLButtonElement | null>(null);
@@ -120,6 +133,24 @@ const SidebarRail = forwardRef<HTMLButtonElement, SidebarRailProps>(
       setIsResizing(false);
     };
 
+    // The width the panel is drawn at, which the keyboard steps from and the
+    // separator reports: a focusable separator must always say where it is.
+    const currentWidth = widthInPx(width);
+
+    // The keyboard path to the same resize the drag makes, as the Agent pane's
+    // seam offers: each arrow press steps toward or away from the content and
+    // stops at the clamp. It never collapses; the toggle shortcut and the
+    // trigger own that, and a collapse would strand focus on a rail that just
+    // went inert.
+    const onKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      const direction = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0;
+      if (direction === 0) return;
+      event.preventDefault();
+      const grows = side === 'left' ? direction : -direction;
+      const next = clamp(currentWidth + grows * KEY_STEP_PX, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH);
+      setWidth(`${next}px`);
+    };
+
     const semibold = { fontVariationSettings: fontWeights.semibold };
 
     return (
@@ -151,7 +182,12 @@ const SidebarRail = forwardRef<HTMLButtonElement, SidebarRailProps>(
           type="button"
           data-sidebar="rail"
           aria-label="Resize or collapse sidebar"
-          tabIndex={-1}
+          aria-orientation="vertical"
+          aria-valuemax={SIDEBAR_MAX_WIDTH}
+          aria-valuemin={SIDEBAR_MIN_WIDTH}
+          aria-valuenow={currentWidth}
+          role="separator"
+          onKeyDown={onKeyDown}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -169,6 +205,9 @@ const SidebarRail = forwardRef<HTMLButtonElement, SidebarRailProps>(
             'after:absolute after:inset-y-0 after:w-px after:bg-transparent after:transition-colors after:duration-fast hover:after:bg-foreground/25',
             tooltipOpen && 'after:bg-foreground/25',
             side === 'left' ? 'after:right-0' : 'after:left-0',
+            // Keyboard focus tints the same edge hairline the hover brightens,
+            // the way the Agent pane's seam shows it.
+            FOCUS_RING_SEAM,
             className,
           )}
           {...props}

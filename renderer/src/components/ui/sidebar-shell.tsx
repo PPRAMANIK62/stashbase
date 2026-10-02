@@ -154,6 +154,29 @@ const SidebarShell = forwardRef<HTMLDivElement, SidebarShellProps>(
         ? toggleSettle
         : toggleRetract;
 
+    // The rail is the last child of the sidebar's own landmark, so its resize
+    // control is announced as part of the sidebar. Neither aside is positioned,
+    // so the rail still measures its edge against the sliding panel around it.
+    const railElement = rail ? (
+      <SidebarRail
+        tooltipOpen={railTooltipOpen}
+        className={cn(
+          // The floating card sits inside the panel's p-2 gutter, so the
+          // grab strip (and its hover hairline) moves in to straddle the
+          // card's edge instead of the panel's.
+          variant === 'floating' &&
+            (side === 'left' ? 'right-1 after:right-[3.5px]' : 'left-1 after:left-[3.5px]'),
+          // Cards are vertically inset and rounded — the hover hairline
+          // hugs the card's straight run: fully transparent through the
+          // corner radius, then fading in over 24px (mirrored at the
+          // bottom). The radius rides the shape system via CSS vars.
+          variant !== 'sidebar' &&
+            'after:inset-y-2 after:[mask-image:linear-gradient(to_bottom,transparent_var(--rail-fade-start),black_var(--rail-fade-end),black_calc(100%-var(--rail-fade-end)),transparent_calc(100%-var(--rail-fade-start)))]',
+        )}
+        style={variant !== 'sidebar' ? railFadeVars(shape.bgRadius) : undefined}
+      />
+    ) : null;
+
     return (
       <motion.div
         ref={mergeRefs(shellRef, ref)}
@@ -241,6 +264,7 @@ const SidebarShell = forwardRef<HTMLDivElement, SidebarShellProps>(
                 )}
               >
                 <SurfaceProvider value={floatingLevel}>{children}</SurfaceProvider>
+                {railElement}
               </aside>
             ) : (
               <aside
@@ -254,26 +278,8 @@ const SidebarShell = forwardRef<HTMLDivElement, SidebarShellProps>(
                 )}
               >
                 {children}
+                {railElement}
               </aside>
-            )}
-            {rail && (
-              <SidebarRail
-                tooltipOpen={railTooltipOpen}
-                className={cn(
-                  // The floating card sits inside the panel's p-2 gutter, so the
-                  // grab strip (and its hover hairline) moves in to straddle the
-                  // card's edge instead of the panel's.
-                  variant === 'floating' &&
-                    (side === 'left' ? 'right-1 after:right-[3.5px]' : 'left-1 after:left-[3.5px]'),
-                  // Cards are vertically inset and rounded — the hover hairline
-                  // hugs the card's straight run: fully transparent through the
-                  // corner radius, then fading in over 24px (mirrored at the
-                  // bottom). The radius rides the shape system via CSS vars.
-                  variant !== 'sidebar' &&
-                    'after:inset-y-2 after:[mask-image:linear-gradient(to_bottom,transparent_var(--rail-fade-start),black_var(--rail-fade-end),black_calc(100%-var(--rail-fade-end)),transparent_calc(100%-var(--rail-fade-start)))]',
-                )}
-                style={variant !== 'sidebar' ? railFadeVars(shape.bgRadius) : undefined}
-              />
             )}
           </motion.div>
         )}
