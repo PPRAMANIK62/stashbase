@@ -104,7 +104,7 @@ test('Claude appends the chosen Persona before hidden StashBase routing policy',
   // The policy is the one text a runtime always sees, so the choice between
   // proposing a revision and writing it has to be stated here.
   assert.match(appended, /suggest_edits/);
-  assert.match(appended, /Write the file directly/);
+  assert.match(appended, /Write changes to project files directly/);
   assert.match(appended, /Prefer primary research notes\./);
   assert.notEqual(appended, persona);
 });

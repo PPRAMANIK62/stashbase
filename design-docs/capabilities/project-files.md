@@ -91,14 +91,12 @@ refused after a fresh source check; a proposal handed to a window is consumed on
 reported rather than silently retried. A new proposal cannot replace a review
 already open on that document.
 
-An Agent proposes a revision when it changes a few sentences to a few paragraphs
-of prose in an existing Markdown document. It writes directly for a new file, a
-draft it created in the same conversation, a rewrite of most of a document, one
-change repeated across many files, frontmatter, a file that is not Markdown, or
-a mechanical change such as a rename or a link update. The reader's stated
-preference wins either way, and a refused proposal is reported rather than
-written directly. This is standing guidance to the Agent, not a gate: the
-runtime's permissions still decide what a write needs.
+An Agent writes its changes directly and does not hold them back for review.
+It proposes a revision only when the reader asks to see a change to an existing
+Markdown document before it lands, and a refused proposal is reported rather
+than written directly. This is standing guidance to the Agent, not a gate: the
+runtime's permissions still decide what a write needs. Reviewing a change after
+it lands is the reader's choice, described in Turn Review below.
 
 The selection toolbar leads with a **Heading** menu: Text, Heading 1, Heading 2
 and Heading 3, with the selection's current kind checked. A choice turns every
