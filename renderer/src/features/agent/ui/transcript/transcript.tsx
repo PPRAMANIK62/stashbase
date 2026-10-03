@@ -14,13 +14,7 @@ import { segmentFileMentions, type AgentContextItem } from '@/features/agent/dom
 import { agentQuestions } from '@/features/agent/domain/question';
 import { latestUserBlock, type AgentTranscriptBlock } from '@/features/agent/domain/session';
 import type { AgentPermissionDecision } from '@/features/agent/domain/session-command';
-import {
-  dayLabel,
-  promptTimeLabel,
-  replyTimeLabel,
-  startOfLocalDay,
-  transcriptDayBreaks,
-} from '@/features/agent/domain/time';
+import { promptTimeLabel, replyTimeLabel, transcriptDayBreaks } from '@/features/agent/domain/time';
 import type { AgentRuntimeUpdateView } from '@/features/agent/hooks/use-agent-runtime-update';
 import { SentContextTiles } from '@/features/agent/ui/composer/context-tiles';
 import { useShape } from '@/lib/shape-context';
@@ -35,10 +29,12 @@ import {
   visibleActivitySteps,
   type AgentActivityStep,
 } from './activity';
+import { DayDivider } from './day-divider';
 import { AgentMarkdown } from './markdown';
 import { AgentQuestionCard } from './question-card';
 import { AgentRevisionCard, type AgentRevisionReview } from './revision-card';
 import { closingReplies } from './transcript-order';
+import { AgentTurnChangesCard, type AgentTurnChangeReview } from './turn-changes-card';
 import { TurnFailure } from './turn-failure';
 
 export { closingReplies } from './transcript-order';
@@ -69,21 +65,6 @@ function CopyAction({ label, text }: { label: string; text: string }) {
       label={copied ? 'Copied' : label}
       onClick={copy}
     />
-  );
-}
-
-function DayDivider({ at, now }: { at: number; now: number }) {
-  const label = dayLabel(startOfLocalDay(at), startOfLocalDay(now));
-  return (
-    <div
-      aria-label={label}
-      className="flex items-center gap-3 text-[11px] text-muted-foreground select-none not-first:mt-2"
-      role="separator"
-    >
-      <span aria-hidden className="h-px flex-1 bg-border" />
-      {label}
-      <span aria-hidden className="h-px flex-1 bg-border" />
-    </div>
   );
 }
 
@@ -124,6 +105,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   onEditPrompt,
   onOpenExternal,
   onOpenSource,
+  onReviewTurnChange,
   sourceFor,
   onPermission,
   onRetry,
@@ -142,6 +124,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
   onEditPrompt?: ((blockId: string) => void) | undefined;
   onOpenExternal(href: string): void;
   onOpenSource?: ((source: SourceReference, phrase: string | null) => void) | undefined;
+  onReviewTurnChange?: ((review: AgentTurnChangeReview) => void) | undefined;
   sourceFor?: ((path: string) => SourceReference | null) | undefined;
   onPermission(
     toolUseId: string,
@@ -249,6 +232,17 @@ const TranscriptBlock = memo(function TranscriptBlock({
   if (block.kind === 'revision') {
     return <AgentRevisionCard name={basePathName(block.path)} review={review} />;
   }
+  if (block.kind === 'turn-changes') {
+    return (
+      <AgentTurnChangesCard
+        files={block.files}
+        onOpenSource={onOpenSource}
+        onReviewTurnChange={onReviewTurnChange}
+        sourceFor={sourceFor}
+        turnId={block.turnId}
+      />
+    );
+  }
   if (block.kind === 'error') {
     return <TurnFailure block={block} onRetry={onRetry} runtimeUpdate={runtimeUpdate} />;
   }
@@ -267,6 +261,7 @@ export const AgentTranscript = memo(function AgentTranscript({
   onOpenSource,
   onPermission,
   onRetry,
+  onReviewTurnChange,
   revisionFor,
   runtimeUpdate,
   sourceFor,
@@ -288,6 +283,8 @@ export const AgentTranscript = memo(function AgentTranscript({
     decision?: AgentPermissionDecision,
   ): boolean;
   onRetry(errorBlockId: string): boolean;
+  /** Opens what a turn changed in one file as a review inside the document. */
+  onReviewTurnChange?: ((review: AgentTurnChangeReview) => void) | undefined;
   revisionFor?: ((path: string, proposalId: string) => AgentRevisionReview | null) | undefined;
   /** The in-place update of the conversation's runtime, offered on a turn
    *  the runtime was too old for. Absent where nothing can run one. */
@@ -372,6 +369,7 @@ export const AgentTranscript = memo(function AgentTranscript({
               onEditPrompt={onEditPrompt}
               onOpenExternal={onOpenExternal}
               onOpenSource={onOpenSource}
+              onReviewTurnChange={onReviewTurnChange}
               sourceFor={sourceFor}
               onPermission={decide}
               onRetry={onRetry}

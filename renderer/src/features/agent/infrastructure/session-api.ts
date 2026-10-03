@@ -206,7 +206,7 @@ function sessionEvent(event: AgentServerEvent): AgentSessionEvent | null {
     case 'steer-result':
       return null;
     case 'turn-changes':
-      return null;
+      return { files: event.files, kind: 'turn-changed', turnId: event.turnId };
   }
 }
 

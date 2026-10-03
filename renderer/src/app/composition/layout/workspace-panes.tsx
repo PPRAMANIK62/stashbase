@@ -49,6 +49,8 @@ export interface WorkspacePanesProps {
   onCreateDraft(): void;
   onPrepare(source: SourceReference): void;
   onReprocess(source: SourceReference): void;
+  /** Opens what an Agent turn changed in one file as a review inside it. */
+  onReviewTurnChange(request: { source: SourceReference; turnId: string }): void;
   onShowDocuments(): void;
   /** The reviews open across this folder's documents, by folder-relative path.
    *  The one cross-feature hop in the revision card, and it goes through here:
@@ -70,6 +72,7 @@ export function WorkspacePanes({
   onCreateDraft,
   onPrepare,
   onReprocess,
+  onReviewTurnChange,
   onShowDocuments,
   revisions,
   session,
@@ -107,6 +110,10 @@ export function WorkspacePanes({
             onShowDocuments();
           }}
           onReprocess={onReprocess}
+          onReviewTurnChange={(request) => {
+            onReviewTurnChange(request);
+            onShowDocuments();
+          }}
           // The bundled runtime's only gate is the account, so the picker's
           // row starts the same browser sign-in the sidebar's footer row does.
           onSignIn={(signal) => (signal ? account.signInAndWait(signal) : account.signIn())}

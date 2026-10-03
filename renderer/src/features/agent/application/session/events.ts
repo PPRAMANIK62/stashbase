@@ -117,6 +117,13 @@ export function applyAgentSessionEvent(context: AgentEventContext, event: AgentS
       transition(event);
       context.notifyFilesChanged([event.path]);
       return;
+    case 'turn-changed':
+      transition(event);
+      // The host compared the folder itself, so this names files a shell
+      // command wrote too. Reloading them now is also what lets an open
+      // editor reach the version a review of this turn is gated on.
+      context.notifyFilesChanged(event.files.map((file) => file.path));
+      return;
     case 'text':
       transition({ delta: event.delta, id: nextBlockId('reply'), kind: 'append-text' });
       return;
