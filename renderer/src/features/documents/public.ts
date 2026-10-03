@@ -14,8 +14,11 @@ export {
   type DocumentTabsRuntime,
 } from './application/tabs-runtime';
 export type { DocumentRuntime } from './application/document-runtime';
-export { documentRevisionPickupMessage } from './application/failure-messages';
-export { openDocumentRevision } from './application/open-revision';
+export {
+  documentRevisionPickupMessage,
+  turnChangeReviewMessage,
+} from './application/failure-messages';
+export { openDocumentRevision, openTurnChangeReview } from './application/open-revision';
 export type { DocumentRevisionProposal, DrainedRevisions } from './application/ports';
 export { createDocumentAdapters, type DocumentAdapters } from './infrastructure/adapters';
 export { useDocumentCommands } from './hooks/use-document-commands';

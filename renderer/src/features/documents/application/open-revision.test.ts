@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import { documentTabsRuntimeOptions, sourceApi, textSource } from '@/test/fakes/documents';
+import {
+  documentTabsRuntimeOptions,
+  sourceApi,
+  textSource,
+  turnChangesApi,
+} from '@/test/fakes/documents';
 
-import { openDocumentRevision } from './open-revision';
-import type { DocumentRevisionProposal } from './ports';
+import { openDocumentRevision, openTurnChangeReview } from './open-revision';
+import { DocumentTurnChangesError, type DocumentRevisionProposal } from './ports';
 import { createDocumentTabsRuntime } from './tabs-runtime';
 
 const folderPath = '/project/notes';
@@ -162,5 +167,88 @@ describe('opening a parked revision on a document', () => {
       'not-verified',
     );
     expect(document.store.getState().revision).toEqual({ kind: 'idle' });
+  });
+});
+
+describe('opening what an Agent turn changed as a reversed review', () => {
+  const AFTER = '# Plan\n\nWritten by the turn.\n';
+  const AFTER_VERSION = 'sha256:after';
+
+  async function turnDocument(content = AFTER) {
+    const document = await openDocument();
+    document.reconcile(textSource({ content, version: AFTER_VERSION }));
+    return document;
+  }
+
+  function ports(
+    before: string,
+    disk = { content: AFTER, version: AFTER_VERSION },
+    load?: () => Promise<never>,
+  ) {
+    return {
+      source: sourceApi({ load: vi.fn(async () => textSource(disk)) }),
+      turnChanges: turnChangesApi({
+        load:
+          load ??
+          vi.fn(async ({ source, turnId }) => ({
+            afterVersion: AFTER_VERSION,
+            before,
+            source,
+            turnId,
+          })),
+      }),
+    };
+  }
+
+  it('offers the text from before the turn against what the turn left', async () => {
+    const document = await turnDocument();
+
+    await expect(openTurnChangeReview(document, 'turn-1', ports(BASE))).resolves.toBeNull();
+
+    const revision = document.store.getState().revision;
+    expect(revision.kind === 'idle' ? null : revision.review).toMatchObject({
+      baseVersion: AFTER_VERSION,
+      origin: { kind: 'turn', turnId: 'turn-1' },
+      proposal: BASE,
+    });
+  });
+
+  it('refuses a file that changed after the turn ended', async () => {
+    const document = await turnDocument();
+
+    await expect(
+      openTurnChangeReview(
+        document,
+        'turn-1',
+        ports(BASE, { content: '# Edited later\n', version: 'sha256:later' }),
+      ),
+    ).resolves.toBe('stale-version');
+    expect(document.store.getState().revision).toEqual({ kind: 'idle' });
+  });
+
+  it('reports a turn the host no longer holds as expired', async () => {
+    const document = await turnDocument();
+    const expired = vi.fn(async () => {
+      throw new DocumentTurnChangesError('expired', 'gone');
+    });
+
+    await expect(
+      openTurnChangeReview(document, 'turn-1', ports(BASE, undefined, expired)),
+    ).resolves.toBe('expired');
+  });
+
+  it('refuses a turn that changed the frontmatter', async () => {
+    const document = await turnDocument(`---\ntitle: New\n---\n${AFTER}`);
+
+    await expect(
+      openTurnChangeReview(
+        document,
+        'turn-1',
+        ports(`---\ntitle: Old\n---\n${BASE}`, {
+          content: `---\ntitle: New\n---\n${AFTER}`,
+          version: AFTER_VERSION,
+        }),
+      ),
+    ).resolves.toBe('frontmatter-changed');
   });
 });

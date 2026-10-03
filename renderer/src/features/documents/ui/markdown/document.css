@@ -700,3 +700,53 @@
 .markdown-crepe .milkdown .milkdown-diff-reject:hover {
   background: var(--diff-remove-line);
 }
+
+/* A turn review runs the plugin in reverse: the editor holds what the turn
+   wrote and the offered text is what came before. So the plugin's deletion is
+   the turn's addition and its inserted widget is the turn's removal, and the
+   two colours and the strikethrough swap back here, so an addition reads as
+   one. The per-change controls become Undo and Keep with matching glyphs. */
+.markdown-crepe[data-review-reversed] .milkdown {
+  --crepe-color-diff-added: var(--diff-remove);
+  --crepe-color-diff-removed: var(--diff-add);
+  --crepe-color-diff-added-bg: color-mix(in oklab, var(--diff-remove) 8%, transparent);
+  --crepe-color-diff-added-text: color-mix(in oklab, var(--diff-remove) 78%, var(--foreground));
+  --crepe-color-diff-removed-bg: color-mix(in oklab, var(--diff-add) 9%, transparent);
+  --crepe-color-diff-removed-text: var(--diff-add);
+}
+
+.markdown-crepe[data-review-reversed] .milkdown .milkdown-diff-removed {
+  text-decoration: none;
+}
+
+.markdown-crepe[data-review-reversed] .milkdown .milkdown-diff-added {
+  text-decoration: line-through;
+}
+
+.markdown-crepe[data-review-reversed] .milkdown .milkdown-diff-removed-block {
+  border-left-color: color-mix(in oklab, var(--diff-add) 70%, transparent);
+  opacity: 1;
+}
+
+.markdown-crepe[data-review-reversed] .milkdown .milkdown-diff-added-block {
+  border-left-color: color-mix(in oklab, var(--diff-remove) 70%, transparent);
+  opacity: 0.8;
+}
+
+.markdown-crepe[data-review-reversed] .milkdown .milkdown-diff-accept::before {
+  background-color: var(--diff-remove);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 14 4 9l5-5'/%3E%3Cpath d='M4 9h10.5a5.5 5.5 0 0 1 0 11H11'/%3E%3C/svg%3E");
+}
+
+.markdown-crepe[data-review-reversed] .milkdown .milkdown-diff-reject::before {
+  background-color: var(--diff-add);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+}
+
+.markdown-crepe[data-review-reversed] .milkdown .milkdown-diff-accept:hover {
+  background: var(--diff-remove-line);
+}
+
+.markdown-crepe[data-review-reversed] .milkdown .milkdown-diff-reject:hover {
+  background: var(--diff-add-line);
+}

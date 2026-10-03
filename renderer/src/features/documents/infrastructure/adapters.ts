@@ -2,6 +2,7 @@ import type {
   DocumentAssetPort,
   DocumentRevisionsPort,
   DocumentSourcePort,
+  DocumentTurnChangesPort,
   DocumentWindowLifecyclePort,
   DocxPreviewPort,
   GenericFilePreviewPort,
@@ -14,6 +15,7 @@ import { createDocxPreviewAdapter } from './docx-preview-api';
 import { createGenericFilePreviewAdapter } from './generic-preview-api';
 import { createDocumentRevisionsAdapter } from './revision-api';
 import { createDocumentSourceAdapter } from './source-api';
+import { createDocumentTurnChangesAdapter } from './turn-change-api';
 import { createDocumentWindowLifecycleAdapter } from './window-lifecycle';
 
 /** Every port the Documents feature needs a real implementation of, in one
@@ -24,6 +26,7 @@ export interface DocumentAdapters {
   genericPreview: GenericFilePreviewPort;
   revisions: DocumentRevisionsPort;
   source: DocumentSourcePort;
+  turnChanges: DocumentTurnChangesPort;
   windowLifecycle: DocumentWindowLifecyclePort;
 }
 
@@ -52,6 +55,7 @@ export function createDocumentAdapters({
     genericPreview: createGenericFilePreviewAdapter(http),
     revisions: createDocumentRevisionsAdapter(http),
     source: createDocumentSourceAdapter(http),
+    turnChanges: createDocumentTurnChangesAdapter(http),
     windowLifecycle: createDocumentWindowLifecycleAdapter(windowLifecycle),
   };
 }

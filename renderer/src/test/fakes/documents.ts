@@ -6,6 +6,7 @@ import type {
   DocumentQueryScope,
   DocumentRevisionsPort,
   DocumentSourcePort,
+  DocumentTurnChangesPort,
   DocumentWindowLifecyclePort,
   DocxPreviewPort,
   GenericFilePreviewPort,
@@ -64,6 +65,20 @@ export function revisionsApi(
   return { drain: vi.fn(async () => ({ proposals: [], unresolved: [] })), ...overrides };
 }
 
+export function turnChangesApi(
+  overrides: Partial<DocumentTurnChangesPort> = {},
+): DocumentTurnChangesPort {
+  return {
+    load: vi.fn(async ({ source, turnId }) => ({
+      afterVersion: 'v1',
+      before: '# Plan',
+      source,
+      turnId,
+    })),
+    ...overrides,
+  };
+}
+
 export function documentWindowLifecycle(
   overrides: Partial<DocumentWindowLifecyclePort> = {},
 ): DocumentWindowLifecyclePort {
@@ -105,6 +120,7 @@ export function documentAdapters(overrides: Partial<DocumentAdapters> = {}): Doc
     genericPreview: genericPreviewApi(),
     revisions: revisionsApi(),
     source: sourceApi(),
+    turnChanges: turnChangesApi(),
     windowLifecycle: documentWindowLifecycle(),
     ...overrides,
   };

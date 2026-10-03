@@ -100,6 +100,29 @@ export interface DocumentRevisionsPort {
   drain(folderPath: string, signal: AbortSignal): Promise<DrainedRevisions>;
 }
 
+/** What one Markdown file held before an Agent turn, kept by the host so the
+ *  reader can review the turn inside the document. `afterVersion` is the
+ *  version the turn left on disk; a file that moved on since then is no longer
+ *  the text the turn produced. */
+export interface DocumentTurnChange {
+  readonly afterVersion: string;
+  readonly before: string;
+  readonly source: SourceReference;
+  readonly turnId: string;
+}
+
+export interface DocumentTurnChangesPort {
+  /** The file's text from before `turnId`. Refused `expired` once the host
+   *  no longer holds that turn or that file in it. */
+  load(
+    request: { source: SourceReference; turnId: string },
+    signal: AbortSignal,
+  ): Promise<DocumentTurnChange>;
+}
+
+export type DocumentTurnChangesError = FeatureError<'expired'>;
+export const DocumentTurnChangesError = featureErrorClass<'expired'>('DocumentTurnChangesError');
+
 export type DocumentRevisionsFailureKind = TransportFailureKind;
 export type DocumentRevisionsError = FeatureError;
 export const DocumentRevisionsError = featureErrorClass('DocumentRevisionsError');

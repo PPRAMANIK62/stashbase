@@ -15,11 +15,19 @@ import type { DocumentState } from './document';
 
 /** Who offered the proposal. The Agent panel and the developer harness are
  *  the same mechanism with different provenance, so they are variants of one
- *  union rather than two review shapes. No
- *  variant carries anything beyond the tag: the host records no instruction
+ *  union rather than two review shapes. The host records no instruction
  *  behind a parked proposal, and a field nothing can fill is a lie the type
- *  would then bless. */
-export type RevisionOrigin = { kind: 'agent' } | { kind: 'developer' };
+ *  would then bless, so only the turn variant carries more than its tag.
+ *
+ *  A `turn` review runs the same mechanism in reverse. The document already
+ *  holds what an Agent turn wrote, and the proposal is the text from before
+ *  the turn, so accepting a change undoes it and ending the review keeps the
+ *  turn's work byte-identical. `baseVersion` is the version the turn left, so
+ *  the stale gate refuses a file that moved on after the turn. */
+export type RevisionOrigin =
+  | { kind: 'agent' }
+  | { kind: 'developer' }
+  | { kind: 'turn'; turnId: string };
 
 /** The two ways to end a whole review at once. The document's own header bar
  *  and the Agent panel both drive these, so one review cannot be resolved two

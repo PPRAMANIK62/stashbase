@@ -126,6 +126,7 @@ export function MarkdownDocument({
     active: reviewActive,
     attach: attachReview,
     bar: reviewBar,
+    reversed: reviewReversed,
   } = useRevisionReview({ creationState, revision });
   const askAgentRun = useAskAgent(onAskAgent, source);
   const pendingAnchor = useStore(navigation.store, (state) =>
@@ -373,7 +374,11 @@ export function MarkdownDocument({
           Could not open this link in your browser.
         </div>
       )}
-      <div className={cn('markdown-crepe', readOnly && 'markdown-crepe-readonly')} ref={hostRef} />
+      <div
+        className={cn('markdown-crepe', readOnly && 'markdown-crepe-readonly')}
+        data-review-reversed={reviewReversed || undefined}
+        ref={hostRef}
+      />
     </div>
   );
 }
