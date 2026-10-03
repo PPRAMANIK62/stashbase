@@ -513,6 +513,19 @@ export async function listIndexableTextFilesUnderAsync(
   return out;
 }
 
+/** Markdown sources a person can open from the tree under the absolute `root`.
+ *  Dot-notes stay out the way the workspace listing keeps them out, so a
+ *  hidden derived note is never reported as something the reader can review. */
+export async function walkMarkdownSourcesAsync(
+  root: string,
+  fn: (rel: string, full: string) => Promise<void>,
+): Promise<void> {
+  await walkAsync(root, '', async (rel, full, entry) => {
+    if (!entry.isFile() || entry.name.startsWith('.') || detectFormat(rel) !== 'md') return;
+    await fn(rel, full);
+  });
+}
+
 function readTextPrefix(full: string, size: number, format: FileFormat): string {
   const fd = fs.openSync(full, 'r');
   try {

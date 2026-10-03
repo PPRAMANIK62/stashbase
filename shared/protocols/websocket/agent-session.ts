@@ -59,6 +59,21 @@ export const agentClientEventSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("set-mode"), mode: boundedText(64) }).strict(),
 ]);
 
+/** One Markdown file an Agent turn left different on disk. `path` is absolute
+ *  POSIX; the counts are lines, not hunks. */
+export const agentTurnChangedFileSchema = z
+  .object({
+    path: boundedText(16_384),
+    change: z.enum(["created", "edited", "deleted"]),
+    additions: z.number().int().nonnegative(),
+    deletions: z.number().int().nonnegative(),
+  })
+  .strict();
+
+/** A turn that rewrites more files than this has stopped being something a
+ *  person reviews file by file; the host reports the first ones by path. */
+export const MAX_TURN_CHANGED_FILES = 500;
+
 export const agentServerEventSchema = z.union([
   z.object({ t: z.literal("ready") }).strict(),
   z.object({ t: z.literal("session-id"), id: boundedText(512) }).strict(),
@@ -131,6 +146,13 @@ export const agentServerEventSchema = z.union([
     })
     .strict(),
   z.object({ t: z.literal("turn-end"), isError: z.boolean() }).strict(),
+  z
+    .object({
+      t: z.literal("turn-changes"),
+      turnId: boundedText(512),
+      files: z.array(agentTurnChangedFileSchema).max(MAX_TURN_CHANGED_FILES),
+    })
+    .strict(),
   z.object({ t: z.literal("notice"), message: boundedText(2_000) }).strict(),
   z
     .object({
@@ -170,4 +192,5 @@ export type AgentModel = z.infer<typeof agentModelSchema>;
 export type AgentSkill = z.infer<typeof agentSkillSchema>;
 export type AgentClientEvent = z.infer<typeof agentClientEventSchema>;
 export type AgentServerEvent = z.infer<typeof agentServerEventSchema>;
+export type AgentTurnChangedFile = z.infer<typeof agentTurnChangedFileSchema>;
 export type AgentSessionConnectWire = z.infer<typeof agentSessionConnectSchema>;
