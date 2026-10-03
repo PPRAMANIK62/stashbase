@@ -117,6 +117,28 @@ refused with a visible reason; its metadata is never silently omitted from a rev
 File diffs, save-conflict comparisons, and Agent tool approvals have their own
 flows. Other editable formats currently have no inline revision surface.
 
+### Turn Review
+
+After an Agent turn changes Markdown files, the conversation shows what changed
+in that turn: each file with its added and removed line counts. Nothing opens on
+its own. An edited file offers **Review**, which opens it with the turn's
+changes marked in the prose, against the text the file held before the turn.
+Each change has Undo and Keep; Undo all and Keep all resolve the remaining set.
+Undo restores the earlier text through the document's ordinary versioned save;
+keeping every change leaves the file byte-identical. A created file offers Open,
+and a deleted file is only named.
+
+This works the same for every Agent runtime and every way a turn writes,
+including shell commands, because the host compares the project's Markdown
+before the prompt reaches the runtime with what is on disk when the turn ends.
+Anything that changed in between is shown as the turn's, including an edit the
+reader or another conversation made meanwhile. A file that changed again after
+the turn is refused with a visible reason rather than reviewed against newer
+text, as is a turn that changed frontmatter. The earlier text is kept in memory
+for a bounded number of recent turns and hours; after that, or after a restart,
+the review reports that the turn's changes are no longer available. A
+conversation reopened from history does not show its earlier turns' changes.
+
 ## Related Journeys
 
 [J02](../journeys/README.md#j02-add-and-open-a-folder),

@@ -104,6 +104,17 @@ preview, content editing, and rename/delete are separate permissions.
   they orphan. A proposal is handed
   to one window and forgotten, so delivery is at most once and a failed handoff is
   reported to the reader rather than retried.
+- Turn changes are host state owned by `server/turn-changes.ts`. Native runtime
+  writes and shell commands never pass through the host, so `attachAgentRuntime`
+  wraps every Agent socket bound to a folder: a prompt and everything after it
+  wait until the folder's Markdown baseline exists, and the runtime's `turn-end`
+  triggers a rescan and a `turn-changes` event. This is the one seam shared by every
+  runtime; adapters carry no tracking of their own. Tracking is best effort: a
+  failed scan leaves the turn untracked and never delays or fails it. Scans skip
+  hidden derived notes and are bounded by file size, count and bytes; recorded
+  turns are bounded per folder and by age, live in memory only, and retire with
+  their folder. Anything that changed during a turn is attributed to it, including
+  a concurrent session's or the reader's own edit.
 - Rename/move/delete validate before cancelling work, await native-handle release,
   mutate, retire current AppData-derived/index identity, then rediscover and notify.
   Retired extraction filenames never authorize sibling-file migration or deletion. Generic
@@ -457,6 +468,14 @@ registered host boundaries; renderer shared types are a different layer.
   patch carries the reviewed document's trailing empty paragraph into a parsed
   proposal, which Markdown cannot spell. A Milkdown upgrade carries the patch,
   or retires it against the revision engine test.
+- A turn review is that same review reversed, not a second diff surface: the
+  editor holds the file the turn left, the offer is the text from before it, and
+  the offer's base version is the version the turn left, so the existing stale
+  gate refuses a file that moved on. Taking a change undoes it through the
+  ordinary save; ending the review keeps the source byte-identical. The origin
+  `{ kind: 'turn' }` selects the Undo/Keep labels and the swapped colours.
+  Upstream keeps its original label config object, so `revision-adapter.ts`
+  supplies the labels through getters set on each start.
 - Surface recovery remounts the smallest boundary. Shell remount loses live buffers
   and reloads only saved source files. HTTP loss must not reload the app.
   Raw failures are mapped to feature-owned messages and recovery kinds.
