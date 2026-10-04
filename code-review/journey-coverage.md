@@ -714,6 +714,19 @@ once. The signal offers an update attempt, not a claimed minimum version or
 guaranteed account access. Not proven: a real Codex update and successful provider
 turn through the packaged application for this failure.
 
+**Model-picker update entry (2026-10-04):** `ui/composer/thinking.tsx` also
+offers the native updater in the model list before a turn fails, using the
+host's `updatable` capability and `use-agent-runtime-update.ts`. The mounted
+workspace regression starts with only an older model, invokes Update Codex,
+then verifies reconnection publishes the replacement catalog and keeps the
+unsent draft without sending a prompt. A refused update preserves the draft
+and connection and reports its failure in the picker. The `ModelPicker` Story
+covers the entry's composition and accessibility. These use controlled ports;
+they do not establish which models a real updated Codex account can access.
+The built Storybook model picker was inspected in Chrome: the update action
+appears below the model choices. This is a
+source UI check with controlled ports, not an installed Codex update.
+
 **Newer-model offer (2026-09-23):** Claude learns from its server which models
 an account may use, including ones the installed build is too old to run, and
 caches that answer in `~/.claude.json` as `additionalModelOptionsCache`.

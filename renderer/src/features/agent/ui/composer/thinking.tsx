@@ -5,7 +5,7 @@
  *  at the composer's right edge beside Send, where the reader looks last
  *  before sending; the runtime, its permission mode, and the persona keep
  *  the left. */
-import { ChevronDown, ChevronLeft, ChevronRight, Zap } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Zap } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 import type { Agent } from '@/features/agent/domain/agent-catalog';
 import { modelChoice, type ModelChoice } from '@/features/agent/domain/model-choice';
 import type { AgentSessionState } from '@/features/agent/domain/session';
+import type { AgentRuntimeUpdateView } from '@/features/agent/hooks/use-agent-runtime-update';
 import { cn } from '@/lib/utils';
 
 import { NARROW_LABEL, NARROWEST_LABEL, NARROWEST_TRIGGER } from './narrow';
@@ -66,6 +67,7 @@ export interface AgentThinkingControlProps {
   onModelChange(model: string | null): void;
   /** Called when the trigger is pressed, so the catalog can be re-read. */
   onRequestCatalog(): void;
+  runtimeUpdate?: AgentRuntimeUpdateView | undefined;
 }
 
 /** The first layer: the levels the chosen model accepts, with the model row
@@ -144,12 +146,14 @@ function ModelLayer({
   effort,
   onEffortLayer,
   onModelChange,
+  runtimeUpdate,
   state,
 }: {
   choice: ModelChoice;
   effort: boolean;
   onEffortLayer(): void;
   onModelChange(model: string | null): void;
+  runtimeUpdate?: AgentRuntimeUpdateView | undefined;
   state: ThinkingState;
 }) {
   const runtimeNamesDefault =
@@ -164,6 +168,7 @@ function ModelLayer({
         <MenuItem
           checked={choice.model === null}
           closeOnClick
+          disabled={runtimeUpdate?.busy === true}
           label="Default"
           layout="wrap"
           onSelect={() => onModelChange(null)}
@@ -173,6 +178,7 @@ function ModelLayer({
         <MenuItem
           checked={model.id === choice.model?.id}
           closeOnClick
+          disabled={runtimeUpdate?.busy === true}
           // A runtime's model labels are aliases: "Opus" is whichever Opus
           // that build runs. The release it resolves to is in the runtime's
           // own description, which is the only place a reader can see that
@@ -185,6 +191,27 @@ function ModelLayer({
           onSelect={() => onModelChange(model.id)}
         />
       ))}
+      {runtimeUpdate && (
+        <>
+          <DropdownSeparator />
+          {/* An action, not a choice: one line under its icon like Back,
+              so it does not outweigh the models it sits beneath. */}
+          <MenuItem
+            closeOnClick={false}
+            disabled={runtimeUpdate.busy}
+            icon={RefreshCw}
+            label={
+              runtimeUpdate.busy
+                ? `Updating ${runtimeUpdate.label}…`
+                : `Update ${runtimeUpdate.label}`
+            }
+            onSelect={() => runtimeUpdate.update()}
+          />
+          {runtimeUpdate.failure && (
+            <DropdownLabel role="alert">{runtimeUpdate.failure}</DropdownLabel>
+          )}
+        </>
+      )}
     </>
   );
 }
@@ -196,6 +223,7 @@ export function AgentThinkingControl({
   onEffortChange,
   onModelChange,
   onRequestCatalog,
+  runtimeUpdate,
   state,
 }: AgentThinkingControlProps) {
   const { effort, models } = activeAgent.abilities;
@@ -277,6 +305,7 @@ export function AgentThinkingControl({
             effort={effort}
             onEffortLayer={() => setLayer('effort')}
             onModelChange={onModelChange}
+            runtimeUpdate={runtimeUpdate}
             state={state}
           />
         )}

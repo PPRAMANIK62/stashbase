@@ -165,6 +165,84 @@ describe('Agent workspace', () => {
     ).not.toBeNull();
   });
 
+  it.each(['success', 'failure'])(
+    'updates Codex from the model picker before sending: %s preserves the draft',
+    async (outcome) => {
+      const { listeners, port, sent } = agentSessionPort();
+      const codex = { ...CODEX_AGENT, updatable: true };
+      let finishUpdate!: () => void;
+      const updating = new Promise<void>((resolve) => {
+        finishUpdate = resolve;
+      });
+      const prepareAgent = vi.fn(async () => {
+        await updating;
+        return {
+          agents: [
+            outcome === 'success'
+              ? codex
+              : { ...codex, ready: false, setupFailure: 'Codex update failed' },
+          ],
+        };
+      });
+      const { runtime } = renderWorkspace(port, [codex], undefined, undefined, { prepareAgent });
+      await userEvent.click(await screen.findByRole('button', { name: 'Provider: Default' }));
+      await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Codex' }));
+      await userEvent.type(screen.getByRole('textbox', { name: 'Message' }), 'Keep this draft');
+      await userEvent.click(screen.getByRole('button', { name: 'Model and thinking: Default' }));
+      act(() => {
+        listeners[0]?.onEvent({
+          kind: 'models',
+          activeModel: null,
+          fallback: null,
+          models: [{ id: 'older-model', label: 'Older model', isDefault: true }],
+        });
+        listeners[0]?.onEvent({ kind: 'ready' });
+      });
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Model. Older model' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: /Update Codex/u }));
+      await waitFor(() =>
+        expect(prepareAgent).toHaveBeenCalledWith('codex', 'update', expect.anything()),
+      );
+      expect(
+        screen.getByRole('menuitem', { name: /Updating Codex/u }).getAttribute('aria-disabled'),
+      ).toBe('true');
+      expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(0);
+      await userEvent.keyboard('{Escape}');
+      expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Model and thinking: Older model' }),
+      );
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Model. Older model' }));
+
+      await act(async () => {
+        finishUpdate();
+      });
+      await waitFor(() => expect(listeners).toHaveLength(outcome === 'success' ? 2 : 1));
+      // Only a completed update creates a replacement connection.
+      act(() => {
+        listeners[1]?.onEvent({
+          kind: 'models',
+          activeModel: null,
+          fallback: null,
+          models: [{ id: 'new-model', label: 'New model', isDefault: true }],
+        });
+        listeners[1]?.onEvent({ kind: 'ready' });
+      });
+      const result = await screen.findByRole(
+        outcome === 'success' ? 'menuitemradio' : 'alert',
+        outcome === 'success' ? { name: 'New model' } : {},
+      );
+      expect(result.textContent).toContain(
+        outcome === 'success' ? 'New model' : 'Codex update failed',
+      );
+      expect(screen.queryByRole('menuitemradio', { name: 'Older model' }) === null).toBe(
+        outcome === 'success',
+      );
+      expect(draftOf(runtime)).toBe('Keep this draft');
+      expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(0);
+    },
+  );
+
   it('starts the first composer turn and presents an explicit permission decision', async () => {
     const { listeners, port, sent } = agentSessionPort();
     const { runtime } = renderWorkspace(port);

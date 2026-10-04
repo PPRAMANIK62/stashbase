@@ -351,6 +351,11 @@ stable status without download, retry, or a new durable demand latch.
   retaining the native error. Neither signal alone changes failure recovery;
   no version minimum or account entitlement is inferred. A replacement process
   starts with no remembered metadata warnings.
+  The model picker exposes an updater only when the host advertises `updatable`.
+  This explicit action shares the failed-turn update owner, but has no request
+  to resend. Reconnection reads models from the replacement native process;
+  catalog memory never supplies a fabricated new model. The composer retains
+  drafts and blocks Send and provider changes during the update.
 
 ## Credentials and External Access
 

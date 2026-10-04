@@ -27,7 +27,15 @@ const abilities: Agent['abilities'] = {
 };
 
 const agents: Agent[] = [
-  { abilities, id: 'codex', label: 'Codex', models: [], needsSignIn: false, ready: true },
+  {
+    abilities,
+    id: 'codex',
+    label: 'Codex',
+    models: [],
+    needsSignIn: false,
+    ready: true,
+    updatable: true,
+  },
   { abilities, id: 'claude', label: 'Claude', models: [], needsSignIn: false, ready: true },
   { abilities, id: 'stashbase', label: 'Default', models: [], needsSignIn: false, ready: true },
 ];
@@ -260,6 +268,16 @@ export const FullWorkspace: Story = { play: readyWorkspace };
 export const EmptyWorkspace: Story = {
   args: { empty: true },
   play: readyWorkspace,
+};
+
+export const ModelPicker: Story = {
+  args: { empty: true },
+  play: async () => {
+    await readyWorkspace();
+    await userEvent.click(screen.getByRole('button', { name: /^Model and thinking:/ }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /^Model\./ }));
+    await screen.findByRole('menuitem', { name: /Update Codex/ });
+  },
 };
 
 export const BoundContext: Story = {
