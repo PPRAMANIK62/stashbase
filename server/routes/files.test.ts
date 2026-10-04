@@ -5,12 +5,62 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import express from "express";
+import { workspaceFilesSchema } from "../../shared/protocols/http/files.ts";
 
 import { fileVersion } from "../files.ts";
 import { filesystemPath } from "../filesystem-path.ts";
 import { clearCurrentFolder, removeRecentAsync, openProjectFolder } from "../folder.ts";
 import { requireFolder } from "../http.ts";
 import { mount } from "./files.ts";
+import { getWorkspacePreferences, setWorkspacePreferences } from "../app-config.ts";
+import { mount as mountWorkspacePreferences } from "./workspace-preferences.ts";
+
+test('folder-explicit workspace listings apply the saved hidden-file preference', async () => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-listing-preference-'));
+  const root = path.join(scratch, 'project');
+  const peer = path.join(scratch, 'peer');
+  const previous = getWorkspacePreferences();
+  fs.mkdirSync(path.join(root, '.custom'), { recursive: true });
+  fs.mkdirSync(peer);
+  fs.writeFileSync(path.join(root, '.custom', 'note.md'), '# Hidden project note');
+  fs.writeFileSync(path.join(root, 'draft.md'), '# Project draft');
+  fs.writeFileSync(path.join(peer, 'peer.md'), '# Another project');
+  await openProjectFolder(root);
+  await openProjectFolder(peer);
+  const app = express();
+  app.use(express.json());
+  mount(app);
+  mountWorkspacePreferences(app);
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve) => server.once('listening', resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  const base = `http://127.0.0.1:${address.port}`;
+  try {
+    for (const shown of [false, true, false]) {
+      const saved = await fetch(`${base}/api/workspace-preferences`, {
+        method: 'PUT', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ showHiddenFiles: shown }),
+      });
+      assert.equal(saved.status, 200);
+      const response = await fetch(`${base}/api/files?folder=${encodeURIComponent(root)}`);
+      assert.equal(response.status, 200);
+      const listing = workspaceFilesSchema.parse(await response.json());
+      assert.equal(listing.showHiddenFiles, shown);
+      assert.deepEqual(listing.files.map((file) => file.name),
+        shown ? ['.custom/note.md', 'draft.md'] : ['draft.md']);
+    }
+    const refused = await fetch(`${base}/api/files?folder=${encodeURIComponent(scratch)}`);
+    assert.equal(refused.status, 400, 'listing preferences do not grant project membership');
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    setWorkspacePreferences(previous);
+    clearCurrentFolder();
+    await removeRecentAsync(root);
+    await removeRecentAsync(peer);
+    fs.rmSync(scratch, { force: true, recursive: true });
+  }
+});
 
 test("versioned document route accepts JSON through the shared source authority", async (t) => {
   // This route contract owns source bytes, not the Python daemon lifecycle.

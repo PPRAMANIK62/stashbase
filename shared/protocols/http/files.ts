@@ -43,8 +43,7 @@ export const workspaceFilesSchema = z
     folder: z.string().trim().min(1).max(255),
     folders: z.array(workspaceFolderSchema),
     /** The visibility the server actually applied. Echoed so every window's
-     * menu tracks server truth rather than its own optimistic toggle. An
-     * explicit member listing is Agent-facing and always reports false. */
+     * menu tracks server truth, including folder-explicit workspace listings. */
     showHiddenFiles: z.boolean(),
   })
   .strict();

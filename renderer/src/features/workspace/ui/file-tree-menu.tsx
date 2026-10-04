@@ -79,7 +79,7 @@ function actionsFor(
         icon: shown ? Eye : EyeOff,
         label: 'Show hidden files',
         run: toggle,
-        title: 'List eligible hidden folders such as .github and .vscode',
+        title: 'Show additional hidden folders; project configuration is always visible',
       });
     }
     return rows;

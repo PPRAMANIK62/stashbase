@@ -298,6 +298,11 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   `pnpm test:electron`, and `pnpm test:electron:smoke` cover format capabilities, source identity,
   hidden-file policy, tab/history behavior, save barriers, shared version
   authority, conflicts, and failure handling.
+  `server/__tests__/file-listing.test.ts` exercises root and nested project
+  configuration/skills with hidden-file visibility both off and on, sync/async
+  listing parity, protected/derived exclusions, and unchanged index eligibility.
+  `server/routes/files.test.ts` verifies preference changes through folder-explicit
+  workspace requests, including project isolation and refusal of unregistered roots.
   `pnpm test:config` covers strict durable preferences.
   `reading-text-menu.test.tsx`, the Appearance domain/infrastructure/surface
   suites, `shared/protocols/http/appearance.test.ts`, and
@@ -320,6 +325,18 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   `selection-toolbar.test.ts` runs the Heading menu against a real Milkdown
   editor, covering toolbar order, the checked block kind, paragraph/heading
   conversion, menu dismissal, and Ask Agent as the last item.
+- **Project configuration visibility runtime pass (2026-09-30):** the built
+  macOS source app used isolated configuration and a supplied folder-picker result.
+  All five recognized configuration directories appeared with hidden files off.
+  Toggling off → on → off showed and hid an unrecognized dot-directory, retained
+  the configuration directories, kept caches unexpandable, and hid VCS/product state.
+  Files opened a writing skill under the fixture's `.agents` directory; Quick Open
+  found and opened a `.claude` skill. The expanded tree and document were reviewed by eye.
+  A release-candidate rerun on 2026-10-04 after integrating current main confirmed
+  all five default-visible directories and opened the `.agents` writing skill
+  through the built desktop tree; its rendered document was reviewed by eye.
+  Telemetry was unavailable in the isolated test configuration.
+  These passes did not exercise a native picker or a packaged, signed application.
 - **Reading typography runtime pass (2026-09-26):** the built macOS source app,
   with isolated configuration and telemetry disabled, opened this repository's
   README in Documents. The document reading menu changed Serif to Sans and the

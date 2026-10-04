@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { runWithFolderRoot } from '../folder.ts';
 import { listFilesAndFolders, listFilesAndFoldersAsync } from '../file-listing.ts';
+import { shouldIndexFilePath } from '../indexable.ts';
 
 test('file-listing reports the truthful workbench tree without traversing excluded infrastructure', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-listing-test-'));
@@ -135,6 +136,42 @@ test('file-listing reports the truthful workbench tree without traversing exclud
   }
 });
 
+test('project configuration stays visible with hidden files off without becoming index eligible', async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-listing-skills-'));
+  const projectFiles = [
+    '.agents/skills/writing/SKILL.md',
+    '.claude/skills/editing/SKILL.md',
+    '.codex/config.toml',
+    '.github/workflows/ci.yml',
+    '.vscode/settings.json',
+  ];
+  const visiblePaths = projectFiles.flatMap((name) => [name, `chapter/${name}`]);
+  try {
+    for (const name of [...visiblePaths, '.agents/.stashbase/state.md', '.agents/.git/private.md', '.agents/.cache/cached.md']) {
+      fs.mkdirSync(path.dirname(path.join(tempDir, name)), { recursive: true });
+      fs.writeFileSync(path.join(tempDir, name), name.endsWith('.json') ? '{}' : '# Project configuration');
+    }
+    fs.writeFileSync(path.join(tempDir, '.agents/skills/writing/.draft.md'), '# Hidden note');
+    fs.writeFileSync(path.join(tempDir, 'note.md'), '# Project source');
+
+    await runWithFolderRoot(tempDir, async () => {
+      for (const opts of [{}, { showHidden: false }, { showHidden: true }]) {
+        const listing = listFilesAndFolders(opts);
+        assert.deepEqual(await listFilesAndFoldersAsync(opts), listing);
+        assert.deepEqual(listing.files.map((file) => file.name).sort(), [...visiblePaths, 'note.md'].sort());
+        for (const name of projectFiles) {
+          const directory = name.split('/')[0];
+          assert.ok(listing.folders.some((folder) => folder.path === directory && !folder.kind));
+          assert.ok(listing.folders.some((folder) => folder.path === `chapter/${directory}` && !folder.kind));
+        }
+        assert.deepEqual(listing.files.map((file) => file.name).filter(shouldIndexFilePath), ['note.md']);
+      }
+    });
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('show-hidden listings surface eligible dot-directories while protecting VCS, excluded, and derived state', async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-listing-hidden-dirs-'));
   try {
@@ -142,13 +179,13 @@ test('show-hidden listings surface eligible dot-directories while protecting VCS
     fs.writeFileSync(path.join(tempDir, '.env'), 'TOKEN=local');
 
     // Eligible user-owned hidden directory with nested content.
-    fs.mkdirSync(path.join(tempDir, '.github', 'workflows'), { recursive: true });
-    fs.writeFileSync(path.join(tempDir, '.github', 'README.md'), '# CI docs');
-    fs.writeFileSync(path.join(tempDir, '.github', 'workflows', 'ci.yml'), 'on: push');
+    fs.mkdirSync(path.join(tempDir, '.custom', 'workflows'), { recursive: true });
+    fs.writeFileSync(path.join(tempDir, '.custom', 'README.md'), '# CI docs');
+    fs.writeFileSync(path.join(tempDir, '.custom', 'workflows', 'ci.yml'), 'on: push');
     // Junk metadata and the hidden dot-note namespace stay hidden even
     // inside a surfaced hidden directory.
-    fs.writeFileSync(path.join(tempDir, '.github', '.DS_Store'), '');
-    fs.writeFileSync(path.join(tempDir, '.github', '.private.md'), '# hidden dot-note');
+    fs.writeFileSync(path.join(tempDir, '.custom', '.DS_Store'), '');
+    fs.writeFileSync(path.join(tempDir, '.custom', '.private.md'), '# hidden dot-note');
 
     // VCS databases must never surface or be traversed in either mode.
     fs.mkdirSync(path.join(tempDir, '.git'));
@@ -171,8 +208,7 @@ test('show-hidden listings surface eligible dot-directories while protecting VCS
     }));
     assert.deepEqual(hiddenOnAsync, hiddenOn, 'async HTTP listing must preserve hidden-visibility classification');
 
-    // Default view: current behavior exactly — dotfiles visible, every
-    // dot-directory absent.
+    // Other dot-directories still require opting in; ordinary dotfiles stay visible.
     const offFolders = hiddenOff.folders.map((f) => f.path);
     const offFiles = hiddenOff.files.map((f) => f.name);
     assert.deepEqual(offFolders, []);
@@ -183,13 +219,13 @@ test('show-hidden listings surface eligible dot-directories while protecting VCS
     const onFolders = hiddenOn.folders;
     const onFolderPaths = onFolders.map((f) => f.path);
     const onFiles = hiddenOn.files.map((f) => f.name);
-    assert.ok(onFolderPaths.includes('.github'));
-    assert.ok(onFolderPaths.includes('.github/workflows'));
-    assert.equal(onFolders.find((f) => f.path === '.github')?.kind, undefined);
-    assert.ok(onFiles.includes('.github/README.md'));
-    assert.ok(onFiles.includes('.github/workflows/ci.yml'));
+    assert.ok(onFolderPaths.includes('.custom'));
+    assert.ok(onFolderPaths.includes('.custom/workflows'));
+    assert.equal(onFolders.find((f) => f.path === '.custom')?.kind, undefined);
+    assert.ok(onFiles.includes('.custom/README.md'));
+    assert.ok(onFiles.includes('.custom/workflows/ci.yml'));
     assert.ok(onFiles.includes('.env'), 'ordinary dotfiles keep their current behavior');
-    assert.equal(hiddenOn.files.find((f) => f.name === '.github/workflows/ci.yml')?.format, 'generic');
+    assert.equal(hiddenOn.files.find((f) => f.name === '.custom/workflows/ci.yml')?.format, 'generic');
 
     // Protected internals stay invisible and untraversed.
     assert.ok(!onFolderPaths.includes('.git'), 'VCS databases never surface');
@@ -202,8 +238,8 @@ test('show-hidden listings surface eligible dot-directories while protecting VCS
       || name.startsWith('.stashbase/')
       || name.startsWith('.stashbase-')
     ));
-    assert.ok(!onFiles.includes('.github/.DS_Store'), 'junk dot-files stay hidden');
-    assert.ok(!onFiles.includes('.github/.private.md'), 'the hidden dot-note namespace stays hidden');
+    assert.ok(!onFiles.includes('.custom/.DS_Store'), 'junk dot-files stay hidden');
+    assert.ok(!onFiles.includes('.custom/.private.md'), 'the hidden dot-note namespace stays hidden');
 
     // Hidden excluded caches remain bounded excluded rows, not traversals.
     assert.equal(onFolders.find((f) => f.path === '.cache')?.kind, 'excluded');
@@ -216,7 +252,7 @@ test('show-hidden listings surface eligible dot-directories while protecting VCS
 test('show-hidden async traversal yields while scanning a large eligible dot-directory', async (t) => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-listing-hidden-yield-'));
   try {
-    const hiddenDir = path.join(tempDir, '.github');
+    const hiddenDir = path.join(tempDir, '.custom');
     fs.mkdirSync(hiddenDir);
     for (let i = 0; i < 2_050; i += 1) {
       fs.writeFileSync(path.join(hiddenDir, `file-${String(i).padStart(4, '0')}.md`), '# note');

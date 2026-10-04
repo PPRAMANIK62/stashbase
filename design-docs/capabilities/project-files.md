@@ -35,7 +35,12 @@ defines those distinctions; [Project Context](project-context.md) owns preparati
 - Renaming or deleting a source never migrates or deletes neighboring files
   merely because their names match retired extraction formats. Current derived
   data is owned separately in AppData.
-- Hidden-file visibility changes browsing only. It neither widens tool/search
+- User-maintained project configuration (`.agents`, `.claude`, `.codex`, `.github`,
+  and `.vscode`), including skills, is visible by default in Files and Quick Open
+  even when hidden-file visibility is off. Other eligible dot-directories follow
+  that preference. VCS databases, product state, and derived data stay hidden;
+  visible dependency/cache directories remain unexpanded placeholders.
+  Hidden-file visibility changes browsing only. It neither widens tool/search
   access nor discards open edits.
 - Project import creates source files; same-name imports keep both copies using
   a new name. A partial import retries only refused files. Chat attachments are

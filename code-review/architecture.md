@@ -68,6 +68,11 @@ Journey-specific entry points and evidence stay in [Journey Coverage](journey-co
 - Workbench visibility can include generic files and excluded placeholders.
   That does not grant preparation, retrieval, or MCP access. Derived artifacts
   never become visible source results or writable targets.
+  `server/file-listing.ts` owns browsing visibility, including default-visible
+  project configuration directories; `server/indexable.ts` retains dot-directory
+  exclusions for preparation and retrieval. Workspace listings apply the browsing
+  preference with either explicit project scope or window scope; Agent/MCP directory
+  discovery uses the separate Project Operations surface.
 
 The shared entry experience is owned by [Entering a Project](../design-docs/capabilities/project-entry.md).
 The renderer owns one acquisition/entry operation per window. Electron serializes
