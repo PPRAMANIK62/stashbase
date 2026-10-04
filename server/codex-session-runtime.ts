@@ -110,6 +110,10 @@ export class CodexSession implements AttributedAgentSession {
   private heldModel: string | undefined;
   private activeModel: string | undefined;
   private models: AgentModel[] = [];
+  /** Native metadata gaps belong to this process generation. A later refusal
+   * of the same model can offer the updater without treating every account
+   * rejection (or every advisory warning) as a version problem. */
+  private modelsWithoutMetadata = new Set<string>();
   private skills = new Map<string, { name: string; path: string }>();
   private skillSequence = 0;
   readonly windowId: string;
@@ -209,6 +213,7 @@ export class CodexSession implements AttributedAgentSession {
   }
 
   private spawnAppServer(cwd: string): void {
+    this.modelsWithoutMetadata.clear();
     const proc = this.spawnProcess(cwd, {
       STASHBASE_WINDOW_ID: this.windowId,
       // Session identity for host-side MCP tools (create_project): request
@@ -405,7 +410,16 @@ export class CodexSession implements AttributedAgentSession {
   /** Turn-scoped runtime errors carry their classified failure kind so the
    * renderer can offer the matching recovery without parsing the message. */
   private sendTurnError(message: string): void {
-    this.send(agentTurnErrorEvent(message));
+    const event = agentTurnErrorEvent(message);
+    if (!event.failure && this.isModelCompatibilityFailure(message)) {
+      event.failure = { kind: 'runtime-outdated' };
+    }
+    this.send(event);
+  }
+
+  private isModelCompatibilityFailure(message: string): boolean {
+    const model = /The '([^'\r\n]+)' model is not supported when using Codex with a ChatGPT account\./i.exec(message)?.[1];
+    return !!model && this.modelsWithoutMetadata.has(model);
   }
 
   /** Development-only: play the armed turn-failure script through the normal
@@ -836,6 +850,8 @@ export class CodexSession implements AttributedAgentSession {
       case 'guardianWarning':
       case 'configWarning': {
         const message = notificationMessage(params);
+        const model = /Model metadata for `([^`\r\n]+)` not found\./i.exec(message)?.[1];
+        if (model) this.modelsWithoutMetadata.add(model);
         if (message) this.send({ t: 'notice', message });
         break;
       }

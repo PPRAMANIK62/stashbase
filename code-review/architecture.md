@@ -250,7 +250,7 @@ stable status without download, retry, or a new durable demand latch.
   output. Own temporary scripts and descendant cancellation; neither cleanup nor
   shell wrappers may mask failure. Do not redirect official installs into private
   paths or destructively rewrite user PATH. Platform details live beside the installer.
-- A model an installed runtime is too old to run is that runtime's own
+- A proactive offer for a model an installed runtime is too old to run is that runtime's own
   statement, read from its own state and passed through unchanged; StashBase
   compares no versions and infers no requirement, and the renderer only renders
   what the runtime said. A file that is absent, unreadable, or differently
@@ -345,6 +345,12 @@ stable status without download, retry, or a new durable demand latch.
   never become terminal errors. Recover by structured kind: authentication needs
   process/session refresh, credits/restrictions need account recovery, transient
   failures may resend. Raw socket loss has bounded retry then manual recovery.
+  The Codex adapter correlates native missing-model-metadata warnings with a
+  subsequent ChatGPT model rejection for the same model in that process
+  generation, offering the existing `runtime-outdated` update recovery while
+  retaining the native error. Neither signal alone changes failure recovery;
+  no version minimum or account entitlement is inferred. A replacement process
+  starts with no remembered metadata warnings.
 
 ## Credentials and External Access
 

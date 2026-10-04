@@ -692,11 +692,27 @@ descriptor and schema fields, the hook's reconnect-and-resend and refused-update
 paths, the transcript's action swap, and the Settings action. Codex offers the
 same Settings update through its own update subcommand, verified on an isolated
 npm-prefix copy of 0.153.4 that moved to 0.155.0; its catalog comes from the
-installed app-server, so an old Codex hides newer models rather than refusing
-them, and the chat-side update action never triggers for it. A Codex model
+installed app-server. An old catalog can hide newer models, but the native
+configuration can still name one and fail at inference (see the Codex recovery
+entry below). A Codex model
 chosen while its catalog is still being read is now held for that read instead
 of being refused as unavailable. Not proven: the packaged application running
 a real update end to end.
+
+**Codex model compatibility recovery (2026-10-04):** an older runtime using
+`gpt-6.1-sol` from native configuration reported missing model metadata and then
+a ChatGPT model rejection. The prior classifier emitted a plain turn error, so
+the chat offered only Retry. `server/codex-session-runtime.ts` now associates
+those two native messages by model within the app-server generation and sends
+the existing `runtime-outdated` recovery kind. This exposes Update Codex through
+the existing updater/reconnect/resend flow without rewriting the user's model.
+Adapter regressions replay the reported warning and JSON error through terminal
+notifications, failed completion, and RPC rejection; warnings alone, another
+model's warning, service-tier warnings, and unrelated errors do not trigger it.
+The native error is retained, warnings remain advisory, and a failed turn settles
+once. The signal offers an update attempt, not a claimed minimum version or
+guaranteed account access. Not proven: a real Codex update and successful provider
+turn through the packaged application for this failure.
 
 **Newer-model offer (2026-09-23):** Claude learns from its server which models
 an account may use, including ones the installed build is too old to run, and
