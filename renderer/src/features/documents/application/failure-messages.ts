@@ -16,7 +16,7 @@ import {
   type FeatureFailureKind,
 } from '@/shared/domain/feature-error';
 
-import type { RevisionPickupFailure } from './open-revision';
+import type { RevisionPickupFailure, TurnChangeReviewFailure } from './open-revision';
 import type {
   DocumentAssetFailureKind,
   DocumentSaveFailureKind,
@@ -132,6 +132,36 @@ export function documentRevisionPickupMessage(
   name: string,
 ): string {
   return `${DOCUMENT_REVISION_PICKUP_MESSAGES[failure](name)} ${REVISION_NOT_KEPT}`;
+}
+
+/** Why a turn's changes could not be shown inside the document the reader
+ *  asked to review. Unlike a drained proposal nothing is lost: the file
+ *  already holds what the turn wrote. */
+const TURN_CHANGE_REVIEW_MESSAGES: Readonly<
+  Record<TurnChangeReviewFailure | 'outside-folder', (name: string) => string>
+> = {
+  expired: (name) => `The changes that turn made to ${name} are no longer available to review.`,
+  'frontmatter-changed': (name) =>
+    `That turn changed the frontmatter of ${name}, which cannot be reviewed in place.`,
+  'no-changes': (name) =>
+    `${name} matches what it held before that turn, so there is nothing to review.`,
+  'not-editable': (name) => `${name} cannot be reviewed in place.`,
+  'not-opened': (name) => `${name} did not open, so that turn's changes cannot be shown.`,
+  'not-verified': (name) =>
+    `The current text of ${name} could not be checked, so that turn's changes cannot be shown.`,
+  'outside-folder': (name) => `${name} is not in the folder this window has open.`,
+  'review-in-progress': (name) => `Finish the review already open on ${name} first.`,
+  'stale-version': (name) =>
+    `${name} changed after that turn, so its changes cannot be shown inline.`,
+};
+
+/** The sentence a reader sees when a turn review they asked for did not
+ *  open. `name` is the document's own name, not a path. */
+export function turnChangeReviewMessage(
+  failure: TurnChangeReviewFailure | 'outside-folder',
+  name: string,
+): string {
+  return TURN_CHANGE_REVIEW_MESSAGES[failure](name);
 }
 
 export function documentFailure<Extra extends string = never>(

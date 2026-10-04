@@ -64,6 +64,7 @@ function ChatWorkspace({
   onOpenExternal,
   onOpenSource,
   onReprocess,
+  onReviewTurnChange,
   revisionFor,
   runtime,
   active,
@@ -206,6 +207,7 @@ function ChatWorkspace({
               onOpenSource={onOpenSource}
               onPermission={active.replyPermission}
               onRetry={active.retry}
+              onReviewTurnChange={onReviewTurnChange}
               revisionFor={revisionFor}
               runtimeUpdate={runtimeUpdate}
               sourceFor={sourceFor}

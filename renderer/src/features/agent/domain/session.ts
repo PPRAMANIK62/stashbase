@@ -43,6 +43,7 @@ import {
   finishTool,
   recordFileChange,
   recordRevisionProposal,
+  recordTurnChanges,
   replyToolPermission,
   requestToolPermission,
   settledToolName,
@@ -72,6 +73,7 @@ export {
   agentTurnFailureIsRetryable,
   latestUserBlock,
   type AgentTranscriptBlock,
+  type AgentTurnChangedFile,
 } from './session-transcript';
 
 /** Moves the turn inside a live connection. Any other connection has no turn
@@ -224,6 +226,15 @@ export function transitionAgentSession(
       return { ...state, transcript: finishedToolTranscript(state, action) };
     case 'file-changed':
       return sameTranscript(state, recordFileChange(state.transcript, action));
+    case 'turn-changed':
+      return sameTranscript(
+        state,
+        recordTurnChanges(
+          state.transcript,
+          action,
+          agentActiveTurn(state.connection)?.promptBlockId ?? null,
+        ),
+      );
     case 'permission-requested':
       return { ...state, transcript: requestToolPermission(state.transcript, action) };
     case 'reply-permission':

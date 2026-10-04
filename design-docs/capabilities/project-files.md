@@ -91,14 +91,12 @@ refused after a fresh source check; a proposal handed to a window is consumed on
 reported rather than silently retried. A new proposal cannot replace a review
 already open on that document.
 
-An Agent proposes a revision when it changes a few sentences to a few paragraphs
-of prose in an existing Markdown document. It writes directly for a new file, a
-draft it created in the same conversation, a rewrite of most of a document, one
-change repeated across many files, frontmatter, a file that is not Markdown, or
-a mechanical change such as a rename or a link update. The reader's stated
-preference wins either way, and a refused proposal is reported rather than
-written directly. This is standing guidance to the Agent, not a gate: the
-runtime's permissions still decide what a write needs.
+An Agent writes its changes directly and does not hold them back for review.
+It proposes a revision only when the reader asks to see a change to an existing
+Markdown document before it lands, and a refused proposal is reported rather
+than written directly. This is standing guidance to the Agent, not a gate: the
+runtime's permissions still decide what a write needs. Reviewing a change after
+it lands is the reader's choice, described in Turn Review below.
 
 The selection toolbar leads with a **Heading** menu: Text, Heading 1, Heading 2
 and Heading 3, with the selection's current kind checked. A choice turns every
@@ -116,6 +114,28 @@ refused with a visible reason; its metadata is never silently omitted from a rev
 
 File diffs, save-conflict comparisons, and Agent tool approvals have their own
 flows. Other editable formats currently have no inline revision surface.
+
+### Turn Review
+
+After an Agent turn changes Markdown files, the conversation shows what changed
+in that turn: each file with its added and removed line counts. Nothing opens on
+its own. An edited file offers **Review**, which opens it with the turn's
+changes marked in the prose, against the text the file held before the turn.
+Each change has Undo and Keep; Undo all and Keep all resolve the remaining set.
+Undo restores the earlier text through the document's ordinary versioned save;
+keeping every change leaves the file byte-identical. A created file offers Open,
+and a deleted file is only named.
+
+This works the same for every Agent runtime and every way a turn writes,
+including shell commands, because the host compares the project's Markdown
+before the prompt reaches the runtime with what is on disk when the turn ends.
+Anything that changed in between is shown as the turn's, including an edit the
+reader or another conversation made meanwhile. A file that changed again after
+the turn is refused with a visible reason rather than reviewed against newer
+text, as is a turn that changed frontmatter. The earlier text is kept in memory
+for a bounded number of recent turns and hours; after that, or after a restart,
+the review reports that the turn's changes are no longer available. A
+conversation reopened from history does not show its earlier turns' changes.
 
 ## Related Journeys
 

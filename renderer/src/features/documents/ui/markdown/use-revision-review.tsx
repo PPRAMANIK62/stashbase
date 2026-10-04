@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { splitLeadingYamlFrontmatter } from '@/features/documents/domain/markdown';
 import type { DocumentRevision, RevisionControls } from '@/features/documents/domain/revision';
 
-import { MarkdownReviewBar } from './review-bar';
+import { MarkdownReviewBar, reviewWording } from './review-bar';
 import { attachRevisionReview, type RevisionSurface } from './revision-adapter';
 
 /** What the surface needs from the document runtime, and what it reports back
@@ -35,6 +35,10 @@ export interface RevisionReviewBinding {
   /** True while a review holds the document, which is also what stops a
    *  background reconcile replacing the text that review describes. */
   active: boolean;
+  /** True while a turn review is open. It runs the plugin in reverse, so the
+   *  turn's own text is what the plugin marks as a deletion, and the surface
+   *  swaps the two colours back. */
+  reversed: boolean;
   /** Registers the review plugins on a freshly built editor, before it is
    *  created. Answers the release to run when that editor goes away. Stable
    *  across renders, so the effect that builds the editor can depend on it
@@ -89,7 +93,11 @@ export function useRevisionReview({
     }
     if (openIdRef.current === state.review.id) return;
     openIdRef.current = state.review.id;
-    surface.start(splitLeadingYamlFrontmatter(state.review.proposal).body);
+    const wording = reviewWording(state.review.origin);
+    surface.start(splitLeadingYamlFrontmatter(state.review.proposal).body, {
+      accept: wording.accept,
+      reject: wording.reject,
+    });
   }, [creationState, state]);
 
   return {
@@ -101,7 +109,9 @@ export function useRevisionReview({
           onAcceptAll={() => surfaceRef.current?.acceptAll()}
           onRejectAll={() => surfaceRef.current?.clear()}
           pending={state.pending}
+          wording={reviewWording(state.review.origin)}
         />
       ) : null,
+    reversed: state.kind !== 'idle' && state.review.origin.kind === 'turn',
   };
 }

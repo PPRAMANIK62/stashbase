@@ -211,7 +211,7 @@ function PatchView({ label, patch }: { label: string; patch: string }) {
   );
 }
 
-function Counts({ additions, deletions }: { additions: number; deletions: number }) {
+export function Counts({ additions, deletions }: { additions: number; deletions: number }) {
   if (additions === 0 && deletions === 0) return null;
   return (
     <span

@@ -146,6 +146,7 @@ function WorkspaceWindow() {
     api: docs.adapters.revisions,
     documents,
     sourceApi: docs.adapters.source,
+    turnChangesApi: docs.adapters.turnChanges,
     workspace,
   });
 
@@ -274,6 +275,7 @@ function WorkspaceWindow() {
             onCreateDraft={newDraft}
             onPrepare={preparation.prepare}
             onReprocess={refresh.reprocess}
+            onReviewTurnChange={revisions.reviewTurnChange}
             onShowDocuments={() => chrome.navigator.selectMode('documents')}
             revisions={openRevisions}
             session={session}

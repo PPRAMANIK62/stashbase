@@ -274,6 +274,10 @@ Inline review: `renderer/src/features/documents/domain/revision.ts`,
 `renderer/src/features/documents/hooks/use-revision-proposals.ts`, and
 `renderer/src/features/documents/ui/markdown/revision-adapter.ts` over a patched
 `@milkdown/plugin-diff` (`patches/`).
+Turn review: `renderer/src/features/documents/application/open-revision.ts`
+(`openTurnChangeReview`), `infrastructure/turn-change-api.ts`, and the reversed
+labels and colours in `ui/markdown/revision-adapter.ts`, `review-bar.tsx` and
+`document.css`; host `server/turn-changes.ts` and `server/routes/turn-changes.ts`.
 Ask Agent on a selection: `renderer/src/features/documents/ui/markdown/selection-markdown.ts`
 and `selection-toolbar.ts`, bound in `renderer/src/app/shell.tsx`, which saves the
 documents, shows the chat pane, and hands the passage to the Agent workspace.
@@ -915,7 +919,9 @@ owns that rule and the history restore.
 
 **Implementation:** Renderer: `renderer/src/features/agent/application/session-runtime.ts`, `renderer/src/features/documents/application/document-runtime.ts`, `renderer/src/app/composition/layout/workspace-panes.tsx`.
 Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction.ts`,
-`server/document-revisions.ts`, `server/project-operations/index.ts`.
+`server/document-revisions.ts`, `server/project-operations/index.ts`,
+`server/turn-changes.ts` (turn baselines at the `attachAgentRuntime` seam), and
+`renderer/src/features/agent/ui/transcript/turn-changes-card.tsx`.
 
 **Status:** Release-dependent.
 
@@ -948,6 +954,23 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
   held only its name without it. Not proven: that a real runtime follows the
   guidance turn after turn. It is a standing instruction, not a gate, and no
   conversation was driven after the change.
+- **Turn review (2026-10-04):** every turn on a folder-bound Agent socket is
+  bracketed by a Markdown baseline taken before the prompt reaches the runtime
+  and a rescan at `turn-end`; the Chat card offers Review per edited file, which
+  opens a reversed inline review (Undo/Keep). The runtime policy now has Agents
+  write directly and propose with `suggest_edits` only on request.
+  `server/turn-changes.test.ts` covers created/edited/deleted detection for
+  untooled writes, hidden-note and size exclusion, retention, prompt hold and
+  ordering, capture failure, and a refused prompt's baseline;
+  `server/routes/turn-changes.test.ts` covers scope, expiry and repeatable reads;
+  `open-revision.test.ts`, `turn-change-api.test.ts`, `document-revision.test.tsx`,
+  `turn-changes-card.test.tsx`, `session.test.ts` and `events.test.ts` cover the
+  renderer path. A driven dev-build pass with a real Claude turn showed the card,
+  the reversed review with Undo/Keep labels and swapped colours, a per-change
+  Undo saving, Keep all, a stale refusal on a second Review, and a later
+  `suggest_edits` proposal reading Accept/Reject again. Not proven: Codex and the
+  Default runtime driven at runtime (they share the socket seam but were not
+  run), a packaged build, and large-vault scan cost per prompt.
 - **Citations (2026-09-25):** `renderer/src/features/agent/domain/citation.ts`
   reads a `#:~:text=` phrase from a reply's local link; the transcript hands it
   to `locatePassage` in `use-document-sources.ts`, which opens the file with a

@@ -71,9 +71,17 @@ export interface RevisionSurface {
   /** Ends the review without reserializing: the source stays byte-identical
    *  unless something was accepted. */
   clear(): void;
-  /** Opens a review on `proposalBody`. A proposal that turns out to hold no
-   *  change reports zero rather than opening one. */
-  start(proposalBody: string): void;
+  /** Opens a review on `proposalBody` whose per-change controls read
+   *  `labels`. A proposal that turns out to hold no change reports zero
+   *  rather than opening one. */
+  start(proposalBody: string, labels: RevisionChangeLabels): void;
+}
+
+/** The words on each change's two controls: the one that takes the offered
+ *  text and the one that leaves the document as it is. */
+interface RevisionChangeLabels {
+  accept: string;
+  reject: string;
 }
 
 /**
@@ -90,6 +98,11 @@ export function attachRevisionReview(
    *  A plain number could not: zero is also what the watcher last sent before
    *  any review existed. */
   let lastReported: number | null = 0;
+  // Upstream reads the two labels off its config each time it rebuilds the
+  // decorations, but keeps the config object it was created with, so a later
+  // `context.update` never reaches it. Getters over this record are how one
+  // editor can say Accept for a proposal and Undo for a turn review.
+  const labels: RevisionChangeLabels = { accept: 'Accept', reject: 'Reject' };
   const publish = (view: EditorView) => {
     const pending = pendingIn(view);
     if (pending === lastReported) return;
@@ -106,6 +119,12 @@ export function attachRevisionReview(
       context.update(diffComponentConfig.key, (previous) => ({
         ...previous,
         customBlockTypes: CUSTOM_BLOCK_TYPES,
+        get acceptLabel() {
+          return labels.accept;
+        },
+        get rejectLabel() {
+          return labels.reject;
+        },
       }));
     })
     .use(diff)
@@ -134,7 +153,9 @@ export function attachRevisionReview(
   return {
     acceptAll: () => run(acceptAllDiffsCmd),
     clear: () => run(clearDiffReviewCmd),
-    start: (proposalBody) => {
+    start: (proposalBody, next) => {
+      labels.accept = next.accept;
+      labels.reject = next.reject;
       lastReported = null;
       run(startDiffReviewCmd, proposalBody);
       // A proposal that parses to the document it revises opens a review with
