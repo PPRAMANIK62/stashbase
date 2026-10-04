@@ -47,7 +47,7 @@ function FileAction({
     return onOpenSource ? (
       <Button
         aria-label={`Open ${name}`}
-        className="-mr-2.5"
+        className="-mr-2.5 text-[12px]"
         onClick={() => onOpenSource(source, null)}
         size="compact"
         variant="ghost"
@@ -59,7 +59,7 @@ function FileAction({
   return onReview ? (
     <Button
       aria-label={`Review changes to ${name}`}
-      className="-mr-2.5"
+      className="-mr-2.5 text-[12px]"
       onClick={() => onReview(source)}
       size="compact"
       variant="ghost"
