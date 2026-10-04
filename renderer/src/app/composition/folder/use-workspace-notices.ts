@@ -24,8 +24,8 @@ export interface WorkspaceNotice {
  * reader's behalf, which they may dismiss; the host disagreeing about which
  * folder this window is on, which only resolves when the host answers again;
  * and a revision an agent parked that could not be shown. Nothing here offers
- * setup: the strip carries only what happened to the reader's own work, never
- * an invitation to turn something on.
+ * setup. The strip's only invitation is the one-time sign-in banner, which
+ * the settings feature owns and `WorkspaceNoticeStrip` appends after these.
  */
 export function useWorkspaceNotices({
   dismissPreparationFailure,

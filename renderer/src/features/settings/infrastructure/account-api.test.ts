@@ -16,6 +16,7 @@ describe('account API', () => {
           avatarUrl: '/api/account/avatar',
           displayName: 'Ada Lovelace',
           email: 'ada@example.com',
+          offers: ['sign-in', 'retired-offer'],
           signedIn: true,
         },
         status: 200,
@@ -26,6 +27,7 @@ describe('account API', () => {
       avatarUrl: '/api/account/avatar',
       displayName: 'Ada Lovelace',
       email: 'ada@example.com',
+      offers: ['sign-in'],
       signedIn: true,
     });
   });
@@ -93,7 +95,13 @@ describe('account API', () => {
   it('signs out and answers with the signed-out account', async () => {
     const request = vi.fn(async () => ({ body: { signedIn: false }, status: 200 }));
     const account = await createAccountAdapter({ request }, ORIGIN, noFetch).signOut(signal);
-    expect(account).toEqual({ avatarUrl: null, displayName: null, email: null, signedIn: false });
+    expect(account).toEqual({
+      avatarUrl: null,
+      displayName: null,
+      email: null,
+      offers: [],
+      signedIn: false,
+    });
     expect(request).toHaveBeenCalledWith({ method: 'DELETE', path: '/api/account', signal });
   });
 

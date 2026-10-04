@@ -1,11 +1,14 @@
 import { telemetry } from './telemetry.ts';
 import packageJson from '../package.json' with { type: 'json' };
 import crypto from 'node:crypto';
-import type { HostedAccountState, HostedAgentAllowance, HostedOAuthProvider, HostedOAuthPurpose, HostedOAuthStart, HostedOAuthStatus } from '../shared/account.ts';
+import type { HostedAccountState, HostedAgentAllowance, HostedBillingPlan, HostedBillingRedirect, HostedBillingStatus, HostedOAuthProvider, HostedOAuthPurpose, HostedOAuthStart, HostedOAuthStatus } from '../shared/account.ts';
 
 export type {
   HostedAccountState,
   HostedAgentAllowance,
+  HostedBillingPlan,
+  HostedBillingRedirect,
+  HostedBillingStatus,
   HostedOAuthProvider,
   HostedOAuthPurpose,
   HostedOAuthStart,
@@ -13,6 +16,8 @@ export type {
 } from '../shared/account.ts';
 import {
   getHostedAccountSession,
+  markAccountOfferSeen,
+  pendingAccountOffers,
   setHostedAccountSession,
   type HostedAccountSession,
 } from './app-config.ts';
@@ -238,6 +243,8 @@ export async function exchangeHostedOAuthCode(flowId: string, authCode: string):
     }
     const session = sessionFrom(payload);
     setHostedAccountSession(session);
+    // A completed sign-in answers the sign-in banner for good.
+    markAccountOfferSeen('sign-in');
     flow.state = 'exchanged';
     return session;
   } catch (error: unknown) {
@@ -475,13 +482,78 @@ export async function fetchHostedAgentAllowance(
   return payload as HostedAgentAllowance;
 }
 
+// Billing pages are Stripe-hosted. Anything else in a billing answer is
+// refused before it can reach the system browser.
+const STRIPE_BILLING_HOSTS = new Set(['checkout.stripe.com', 'billing.stripe.com']);
+
+export function stripeBillingUrl(value: unknown): string {
+  let url: URL;
+  try { url = new URL(String(value)); } catch { throw new Error('Billing returned an unexpected page.'); }
+  if (url.protocol !== 'https:' || !STRIPE_BILLING_HOSTS.has(url.hostname) || url.username || url.password) {
+    throw new Error('Billing returned an unexpected page.');
+  }
+  return url.href;
+}
+
+/** One signed-in billing call. The desktop token stays in this process: the
+ * renderer receives plans, status, or a Stripe page URL, never a credential. */
+async function hostedBillingRequest<T>(
+  path: string,
+  init: { method: 'GET' | 'POST'; body?: unknown },
+  options: { forceRefreshToken?: boolean } = {},
+): Promise<T> {
+  const token = await hostedAccessToken({ forceRefresh: options.forceRefreshToken });
+  const response = await fetch(`${STASHBASE_API_URL}${path}`, {
+    method: init.method,
+    headers: {
+      authorization: `Bearer ${token}`,
+      'x-stashbase-client-version': CLIENT_VERSION,
+      ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+    },
+    ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+  });
+  const payload = await jsonBody<T & ErrorPayload>(response);
+  if (response.status === 401 && !options.forceRefreshToken) {
+    return hostedBillingRequest(path, init, { forceRefreshToken: true });
+  }
+  if (!response.ok) throw new Error(messageOf(payload, `Billing is temporarily unavailable (HTTP ${response.status}).`));
+  return payload as T;
+}
+
+export async function fetchHostedBillingPlans(): Promise<HostedBillingPlan[]> {
+  const response = await fetch(`${STASHBASE_API_URL}/v1/billing/plans`, {
+    headers: { 'x-stashbase-client-version': CLIENT_VERSION },
+  });
+  const payload = await jsonBody<{ plans?: HostedBillingPlan[] } & ErrorPayload>(response);
+  if (!response.ok || !Array.isArray(payload?.plans)) {
+    throw new Error(messageOf(payload, `Billing is temporarily unavailable (HTTP ${response.status}).`));
+  }
+  return payload.plans;
+}
+
+export function fetchHostedBillingStatus(): Promise<HostedBillingStatus> {
+  return hostedBillingRequest('/v1/billing/status', { method: 'GET' });
+}
+
+export async function createHostedCheckout(priceId: string): Promise<HostedBillingRedirect> {
+  const answer = await hostedBillingRequest<{ url?: unknown }>('/v1/billing/checkout', { method: 'POST', body: { priceId } });
+  return { url: stripeBillingUrl(answer.url) };
+}
+
+export async function createHostedBillingPortal(): Promise<HostedBillingRedirect> {
+  const answer = await hostedBillingRequest<{ url?: unknown }>('/v1/billing/portal', { method: 'POST' });
+  return { url: stripeBillingUrl(answer.url) };
+}
+
 export async function hostedAccountState(_refresh = false): Promise<HostedAccountState> {
   let session = getHostedAccountSession();
-  if (!session) return { signedIn: false };
+  const offers = pendingAccountOffers();
+  if (!session) return { signedIn: false, offers };
   void hydrateHostedProfile(session).catch(() => { /* display-only profile data never gates account or local workflows */ });
   session = getHostedAccountSession() ?? session;
   return {
     signedIn: true,
+    offers,
     email: session.email,
     ...(session.displayName ? { displayName: session.displayName } : {}),
     ...(session.avatarUrl ? { avatarUrl: '/api/account/avatar' } : {}),

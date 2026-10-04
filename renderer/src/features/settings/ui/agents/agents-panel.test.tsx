@@ -3,13 +3,19 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { failureMessage } from '@/features/settings/application/failure-messages';
-import type { AccountPort, AgentRuntimePort } from '@/features/settings/application/ports';
+import {
+  AgentRuntimeError,
+  type AccountPort,
+  type AgentRuntimePort,
+} from '@/features/settings/application/ports';
 import type { AgentCatalog, AgentRuntime } from '@/features/settings/domain/agent-catalog';
+import type { BillingStatus } from '@/features/settings/domain/billing';
 import { AccountProvider } from '@/features/settings/hooks/account-context';
 import {
   accountPort,
   agentRuntime,
   agentRuntimePort,
+  FREE_BILLING,
   SIGNED_IN_ACCOUNT,
 } from '@/test/fakes/settings';
 import { withQueryClient } from '@/test/query';
@@ -93,12 +99,74 @@ describe('AgentRuntimesPanel', () => {
     expect(await screen.findByText('Ada Lovelace · ada@example.com')).not.toBeNull();
     expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
     expect(await screen.findByText('Agent credits')).not.toBeNull();
-    await user.click(screen.getByRole('button', { name: 'Plans and billing' }));
-    expect(rendered.onOpenExternal).toHaveBeenCalledWith('https://stashbase.ai/pricing/');
+    expect(rendered.onOpenExternal).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Sign out' }));
     await waitFor(() => expect(account.signOut).toHaveBeenCalledOnce());
     expect(await screen.findByRole('button', { name: 'Sign in' })).not.toBeNull();
+  });
+
+  it('opens Checkout for a plan and waits for the API to confirm rights', async () => {
+    // The browser coming back proves nothing: the plans stay hidden until the
+    // hosted API reports the subscription paid, then credits are read again.
+    let status: BillingStatus = FREE_BILLING;
+    const port = agentRuntimePort({
+      getBillingStatus: vi.fn(async () => status),
+    });
+    const rendered = renderPanel(port, accountPort(SIGNED_IN_ACCOUNT));
+    const user = userEvent.setup();
+
+    expect(await screen.findByText(/Have a promotion code\?/)).not.toBeNull();
+    const subscribe = await screen.findAllByRole('button', { name: 'Subscribe' });
+    expect(subscribe).toHaveLength(2);
+    await user.click(subscribe[1] as HTMLElement);
+
+    expect(port.startCheckout).toHaveBeenCalledWith('price_pro', expect.anything());
+    expect(rendered.onOpenExternal).toHaveBeenCalledWith(
+      'https://checkout.stripe.com/c/pay/cs_test',
+    );
+    expect(await screen.findByText('Waiting for payment in your browser.')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Subscribe' })).toBeNull();
+
+    const allowanceReads = vi.mocked(port.getAllowance).mock.calls.length;
+    status = {
+      cancelAtPeriodEnd: false,
+      canManage: true,
+      paidThrough: '2099-11-05T00:00:00.000Z',
+      planName: 'Pro',
+      status: 'active',
+    };
+    window.dispatchEvent(new Event('focus'));
+
+    expect(await screen.findByText(/^Pro · Paid through/)).not.toBeNull();
+    await waitFor(() =>
+      expect(vi.mocked(port.getAllowance).mock.calls.length).toBeGreaterThan(allowanceReads),
+    );
+    await user.click(screen.getByRole('button', { name: 'Manage' }));
+    await waitFor(() =>
+      expect(rendered.onOpenExternal).toHaveBeenLastCalledWith(
+        'https://billing.stripe.com/p/session/test',
+      ),
+    );
+  });
+
+  it('keeps the plans after a refused Checkout and reads the rights again', async () => {
+    const port = agentRuntimePort({
+      startCheckout: vi.fn(async () => {
+        throw new AgentRuntimeError('unavailable', 'Billing is temporarily unavailable.');
+      }),
+    });
+    const rendered = renderPanel(port, accountPort(SIGNED_IN_ACCOUNT));
+    const user = userEvent.setup();
+
+    await user.click(
+      (await screen.findAllByRole('button', { name: 'Subscribe' }))[0] as HTMLElement,
+    );
+
+    expect(await screen.findByText('Could not open the payment page. Try again.')).not.toBeNull();
+    await waitFor(() => expect(port.getBillingStatus).toHaveBeenCalledTimes(2));
+    expect(rendered.onOpenExternal).not.toHaveBeenCalled();
+    expect(screen.getAllByRole('button', { name: 'Subscribe' })).toHaveLength(2);
   });
 
   it('installs a not-yet-installed runtime and writes the response into the catalog', async () => {

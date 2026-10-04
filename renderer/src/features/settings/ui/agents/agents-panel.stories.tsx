@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import type { AccountPort, AgentRuntimePort } from '@/features/settings/application/ports';
 import type { AgentCatalog, AgentRuntime } from '@/features/settings/domain/agent-catalog';
+import type { BillingStatus } from '@/features/settings/domain/billing';
 import { AccountProvider } from '@/features/settings/hooks/account-context';
 
 import { AgentRuntimesPanel } from './agents-panel';
@@ -44,6 +45,14 @@ const stashbase: AgentRuntime = {
   version: null,
 };
 
+const FREE: BillingStatus = {
+  cancelAtPeriodEnd: false,
+  canManage: false,
+  paidThrough: null,
+  planName: null,
+  status: 'free',
+};
+
 function fakePort(): AgentRuntimePort {
   return {
     getAllowance: async () => ({
@@ -53,11 +62,54 @@ function fakePort(): AgentRuntimePort {
       cacheReadTokens: 0,
       windowEndsAt: null,
     }),
+    getBillingPlans: async () => [
+      {
+        amount: 1000,
+        available: true,
+        currency: 'usd',
+        interval: 'month',
+        name: 'Plus',
+        priceId: 'price_plus',
+      },
+      {
+        amount: 2000,
+        available: true,
+        currency: 'usd',
+        interval: 'month',
+        name: 'Pro',
+        priceId: 'price_pro',
+      },
+    ],
+    getBillingStatus: async () => FREE,
     listAgents: async () => catalog([codex, claude, stashbase]),
+    openBillingPortal: async () => 'https://billing.stripe.com/p/session/story',
     prepareAgent: async () => catalog([codex, claude, stashbase]),
+    startCheckout: async () => 'https://checkout.stripe.com/c/pay/story',
     updateDebug: async () => catalog([codex, claude, stashbase]),
   };
 }
+
+/** A Plus subscriber: the plan list gives way to the Portal. */
+function subscribedPort(): AgentRuntimePort {
+  return {
+    ...fakePort(),
+    getBillingStatus: async () => ({
+      cancelAtPeriodEnd: false,
+      canManage: true,
+      paidThrough: '2099-11-05T00:00:00.000Z',
+      planName: 'Plus',
+      status: 'active',
+    }),
+  };
+}
+
+const SIGNED_OUT = {
+  avatarUrl: null,
+  displayName: null,
+  email: null,
+  offers: [],
+  signedIn: false,
+} as const;
 
 const signedIn: AccountPort = {
   avatar: async () => null,
@@ -65,10 +117,13 @@ const signedIn: AccountPort = {
     avatarUrl: null,
     displayName: 'Ada Lovelace',
     email: 'ada@example.com',
+    offers: [],
     signedIn: true,
   }),
   signInStatus: async () => ({ state: 'pending' }),
-  signOut: async () => ({ avatarUrl: null, displayName: null, email: null, signedIn: false }),
+  markOfferSeen: async () => SIGNED_OUT,
+  resetOffers: async () => SIGNED_OUT,
+  signOut: async () => SIGNED_OUT,
   startSignIn: async () => ({ flowId: 'flow', url: 'https://accounts.example/sign-in' }),
 };
 
@@ -77,7 +132,7 @@ const signedIn: AccountPort = {
  *  same sign-in in the same shape. */
 const signedOut: AccountPort = {
   ...signedIn,
-  load: async () => ({ avatarUrl: null, displayName: null, email: null, signedIn: false }),
+  load: async () => SIGNED_OUT,
 };
 
 function accountRequiredPort(): AgentRuntimePort {
@@ -135,6 +190,8 @@ export default meta;
 type Story = StoryObj<typeof Harness>;
 
 export const Ready: Story = { args: { account: signedIn, port: fakePort() } };
+
+export const Subscribed: Story = { args: { account: signedIn, port: subscribedPort() } };
 
 export const NeedsSignIn: Story = { args: { account: signedOut, port: accountRequiredPort() } };
 

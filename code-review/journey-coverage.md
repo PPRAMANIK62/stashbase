@@ -587,11 +587,32 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
-**Default Agent billing:** Settings -> Agents exposes Plans and billing through
-`settings/hooks/use-account.ts` and `settings/ui/agents/agents-panel.tsx`. The
-website and hosted API own Checkout, subscription state, and paid allowance
-ceilings; the existing allowance query refreshes the desktop. The panel test
-checks the fixed external destination. Hosted API integration tests cover
+**Default Agent billing:** Settings -> Agents shows the subscription, reached also
+from the sidebar account menu, through
+`settings/hooks/use-billing.ts` and `settings/ui/agents/subscription-rows.tsx`.
+`server/hosted-account.ts` calls the hosted billing plans, status, Checkout, and
+Portal endpoints with the desktop session and admits only Stripe-hosted pages;
+`server/routes/account.ts` exposes them to the renderer. The hosted API owns
+Checkout, subscription state, and paid allowance ceilings; the website remains a
+separate purchase path. A host test covers the bearer token, one refresh after
+401, and refusal of a non-Stripe or non-HTTPS page. Panel tests cover Checkout
+for a chosen plan, waiting until the status read confirms paid rights, the
+following allowance refresh, Portal for a subscriber, and a refused Checkout that
+keeps the plans and reads rights again. A sidebar test opens it from the account
+menu's Plans and billing. The one-time sign-in banner is
+`settings/hooks/use-account-offers.ts`, appended to the notice strip by
+`app/composition/layout/workspace-notice-strip.tsx`; the host stores answered
+offers in `server/app-config.ts`. A host test covers sign-in answering it,
+sign-out keeping it answered, and the Developer tools reset; an App test covers
+Not now. A macOS source-runtime pass on 2026-10-05 used the built renderer and
+an isolated empty configuration: the banner appeared without a project, Not now
+removed it, and it stayed dismissed after a clean quit and relaunch. The signed-out
+Agents panel remained usable. The built subscription and turn-change Stories were
+also visually inspected. The subscription fixture entered its slow-confirmation
+state after the two-minute wait, kept Subscribe hidden, resumed waiting with
+Refresh, and restored the plans with Stop waiting. A website test covers the
+app-return hint without a browser session. Real Checkout from the packaged app
+and promotion entry at Checkout from that path remain unverified. Hosted API integration tests cover
 account isolation, idempotent Checkout recovery, paid-through expiry, tier changes
 without usage resets, and settlement after cancellation. The built Settings Story
 was visually inspected with a signed-in fixture; built website browser checks

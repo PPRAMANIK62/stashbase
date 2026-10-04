@@ -7,6 +7,7 @@ import type { AgentRuntimeAction } from '@/features/settings/domain/agent-runtim
 import { useAccountView } from '@/features/settings/hooks/account-context';
 import type { AccountViewModel } from '@/features/settings/hooks/use-account';
 import { useAgentRuntimes } from '@/features/settings/hooks/use-agent-runtimes';
+import { useBilling } from '@/features/settings/hooks/use-billing';
 import {
   SettingsGroup,
   SettingsList,
@@ -18,6 +19,7 @@ import { FailureNotice } from '@/shared/ui/failure-notice';
 
 import { AllowanceRow } from './allowance-row';
 import { RuntimeRow } from './runtime-row';
+import { SubscriptionRows } from './subscription-rows';
 
 export interface AgentRuntimesPanelProps {
   agentRuntimeApi: AgentRuntimePort;
@@ -87,6 +89,8 @@ function AccountRow({ account }: { account: AccountViewModel }) {
 export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps) {
   const account = useAccountView();
   const runtimes = useAgentRuntimes(agentRuntimeApi);
+  const signedIn = account.account?.signedIn ?? false;
+  const billing = useBilling(agentRuntimeApi, account.openExternal, signedIn);
 
   const onAction = (action: AgentRuntimeAction, runtime: AgentRuntime) => {
     if (action.kind === 'login') runtimes.login(runtime.id);
@@ -102,19 +106,7 @@ export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps)
       <SettingsGroup title="Default">
         <SettingsList as="ul">
           <AccountRow account={account} />
-          {account.account?.signedIn && (
-            <SettingsRow
-              as="li"
-              detail="Choose more Default Agent credits or manage your subscription with the same account on the website."
-              title="Subscription"
-              trail={
-                <Button onClick={account.openBilling} size="compact" variant="tertiary">
-                  Plans and billing
-                </Button>
-              }
-            />
-          )}
-          {account.account?.signedIn && (allowance.allowance || allowance.failed) && (
+          {signedIn && (allowance.allowance || allowance.failed) && (
             <>
               {allowance.allowance ? (
                 <AllowanceRow allowance={allowance.allowance} />
@@ -127,6 +119,7 @@ export function AgentRuntimesPanel({ agentRuntimeApi }: AgentRuntimesPanelProps)
               )}
             </>
           )}
+          {signedIn && <SubscriptionRows billing={billing} />}
           {catalog.runtimes
             .filter((runtime) => runtime.id === 'stashbase')
             .map((runtime) => (

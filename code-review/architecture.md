@@ -387,9 +387,10 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   Turn/channel retirement cancels body reads and pending upstream work; awaited
   credential acquisition cannot forward a request after retirement.
   Hosted quota/accounting and Stripe billing stay external; the desktop exposes
-  bounded usage and a fixed website Plans and billing link. Browser billing uses
-  its own authenticated session, explicitly displaying the account; desktop
-  account tokens never appear in links or Stripe configuration.
+  bounded usage, plans, and subscription status. The host requests Checkout and
+  Portal pages with the account session and hands the renderer only a verified
+  Stripe-hosted URL; desktop account tokens never appear in links or Stripe
+  configuration. Website billing uses its own browser session.
   Child environment and AppData HOME/config isolate ambient secrets and user config.
 - Built-in HTTP and external MCP share Project Operations. Streamable HTTP checks
   the current Settings token on every POST; rotation invalidates old tokens.

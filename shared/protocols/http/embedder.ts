@@ -8,6 +8,7 @@ export const hostedAccountStateSchema = z
     avatarUrl: z.string().max(4096).optional(),
     displayName: z.string().max(240).optional(),
     email: z.string().max(320).optional(),
+    offers: z.array(z.string().max(64)).max(8).optional(),
     signedIn: z.boolean(),
   })
   .passthrough();
@@ -39,6 +40,8 @@ export const embedderKeySaveResponseSchema = z
     warning: z.string().max(1000).optional(),
   })
   .passthrough();
+
+export const hostedAccountOfferSchema = z.enum(['sign-in']);
 
 export const hostedOAuthStartRequestSchema = z
   .object({

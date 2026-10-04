@@ -7,12 +7,17 @@
  * about search, and no search surface reads the account.
  */
 
+/** A one-time banner about the account: sign in while signed out. */
+export type AccountOffer = 'sign-in';
+
 export interface HostedAccount {
   /** The server's own route for the provider's picture, or null when the
    *  provider gave none. The picture itself is fetched as bytes. */
   readonly avatarUrl: string | null;
   readonly displayName: string | null;
   readonly email: string | null;
+  /** Offers this installation has not shown to completion yet. */
+  readonly offers: readonly AccountOffer[];
   readonly signedIn: boolean;
 }
 
