@@ -607,6 +607,48 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Valid-stream interruption (2026-10-06):** a live desktop WebSocket capture
+recorded the renderer sending `close` immediately after an ordinary text delta
+at 00:41:40 local time, while the host subsequently delivered the remaining
+text and a successful `turn-end`. Every received frame passed the shared schema.
+`infrastructure/session-api.ts` had included event consumers in its invalid-frame
+catch, relabeling their exceptions and closing the native session. It now delivers
+validated events outside that catch. The adapter regression verifies that a
+consumer exception preserves its original error, does not enter invalid-response
+recovery, and does not prevent the next terminal event from being delivered.
+The exposed consumer exception was React's maximum update-depth guard during
+text delivery. An isolated browser App reproduced it when the captured turns
+arrived over a real WebSocket; timer-based delivery did not. React instrumentation
+located the pending updates in `ChatHistoryPopover`: `useConversationHistory`
+flattened the unstable `useQueries` result array on every render, repeatedly
+resetting the list cursor during streaming. Query-level combination now preserves
+unchanged history data. The keyboard regression fails before this change because
+ArrowDown selects the first chat again, and passes afterward. Both captured turns
+then completed over the same real WebSocket without a consumer exception. This
+fixture uses local captured messages and fake non-Agent ports; packaged behavior
+and unrelated network interruptions remain unverified.
+All renderer checks passed across the gate and reruns, including 1,638 tests
+with coverage and 146 Story accessibility cases, plus documentation and built
+Electron smoke. The isolated worktree needed an explicit allowlist for linked
+dependencies; two test workers resolved three timeout-only failures. The fix was
+then copied unchanged into the primary checkout, where both new regression
+suites also passed.
+
+**Interrupted-turn cause (2026-10-05):** `ui/work-status.tsx` now exposes the
+closed/failed connection's reported cause beside Outcome unknown; the separate
+connection notice had been suppressed in this state, hiding useful runtime
+errors. The mounted workspace regression covers a native exit during a turn,
+retained partial output and draft, one reconnect action, continued uncertainty
+after reconnection, and no automatic prompt replay. `InterruptedTurn` provides
+the composition fixture. The reported live chat preserved its complete reply in
+Claude history while the renderer stopped displaying it partway through; the
+host stayed up across that interruption. Neither the hotel network nor a specific
+native/transport failure has been established as the cause of that incident.
+Validation passed all 12 renderer gates, documentation checks, and the built
+Electron smoke. The built Storybook fixture was inspected in Chrome with its
+specific cause and single recovery action visible. This verifies presentation
+with controlled events, not the cause or repair of the reported interruption.
+
 **Claude background completion (2026-10-05):** `server/agent.ts` requests native
 session-state events and waits for `idle` before publishing `turn-end`, retaining
 the latest result for the outcome. A live Claude 2.1.280 SDK probe reproduced a

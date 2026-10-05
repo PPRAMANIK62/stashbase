@@ -294,12 +294,16 @@ export function createAgentSessionAdapter(
           listener.onInvalidResponse();
           return;
         }
+        let event: AgentSessionEvent | null;
         try {
-          const event = sessionEvent(agentServerEventSchema.parse(JSON.parse(message.data)));
-          if (event) listener.onEvent(event);
+          event = sessionEvent(agentServerEventSchema.parse(JSON.parse(message.data)));
         } catch {
           listener.onInvalidResponse();
+          return;
         }
+        // A consumer exception is not a malformed frame. Let its original
+        // error surface without closing a valid native stream as a wire failure.
+        if (event) listener.onEvent(event);
       };
       const onClose = () => listener.onClose();
       socket.addEventListener('message', onMessage);

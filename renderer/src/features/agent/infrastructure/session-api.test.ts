@@ -5,6 +5,34 @@ import { httpClient } from '@/test/fakes/http';
 import { createAgentSessionAdapter } from './session-api';
 
 describe('Agent session API', () => {
+  it('does not label a consumer failure as a malformed server response', () => {
+    let receive: (message: { data: unknown }) => void = vi.fn();
+    const failure = new Error('Consumer failed while applying a valid text event');
+    const invalid = vi.fn();
+    const onEvent = vi.fn().mockImplementationOnce(() => {
+      throw failure;
+    });
+    const socket = {
+      readyState: 1,
+      addEventListener(type: string, listener: typeof receive) {
+        if (type === 'message') receive = listener;
+      },
+      removeEventListener: vi.fn(),
+      close: vi.fn(),
+      send: vi.fn(),
+    };
+    createAgentSessionAdapter(httpClient(), 'http://127.0.0.1:1', () => socket).connect(
+      { agent: 'claude', scope: { kind: 'folder', path: '/Research' } },
+      { onClose: vi.fn(), onEvent, onInvalidResponse: invalid },
+    );
+    expect(() => receive({ data: JSON.stringify({ t: 'text', delta: 'A valid reply' }) })).toThrow(
+      failure,
+    );
+    expect(invalid).not.toHaveBeenCalled();
+    receive({ data: JSON.stringify({ t: 'turn-end', isError: false }) });
+    expect(onEvent).toHaveBeenLastCalledWith({ kind: 'turn-ended', isError: false });
+  });
+
   it('opens the shared socket without exposing renderer-owned window identity', () => {
     let opened = '';
     const socket = {

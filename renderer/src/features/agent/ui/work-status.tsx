@@ -14,6 +14,10 @@ export function AgentWorkStatus({
 }) {
   const state = useStore(session.store);
   const status = agentWorkStatus(state);
+  const interruption =
+    state.connection.kind === 'closed' || state.connection.kind === 'failed'
+      ? state.connection.message?.trim()
+      : undefined;
   const failure = state.transcript.findLast((block) => block.kind === 'error');
   const needsRepair =
     failure?.kind === 'error' &&
@@ -25,9 +29,9 @@ export function AgentWorkStatus({
       <span role="status">{status}</span>
       {state.delivery === 'unknown' && (
         <>
+          <span>{interruption || 'The connection was interrupted.'}</span>
           <span>
-            The connection was interrupted. Review the conversation before sending again; file
-            changes may already have happened.
+            Review the conversation before sending again; file changes may already have happened.
           </span>
           <Button size="compact" variant="ghost" onClick={session.reconnect}>
             Reconnect and review

@@ -22,6 +22,35 @@ import { registerWorkspaceCleanup, renderWorkspace } from './workspace.harness';
 registerWorkspaceCleanup();
 
 describe('Agent workspace', () => {
+  it('shows the native exit cause when an interrupted turn has an unknown outcome', async () => {
+    const { port, listeners, sent } = agentSessionPort();
+    const { runtime } = renderWorkspace(port);
+    await agentGateLifted();
+    const session = runtime.activeSession();
+    await act(async () => {
+      session.start();
+      listeners[0]?.onEvent({ kind: 'identified', id: 'interrupted-chat' });
+      listeners[0]?.onEvent({ kind: 'ready' });
+      await session.sendPrompt('Revise the introduction');
+      listeners[0]?.onEvent({ kind: 'text', delta: 'Partial reply' });
+      session.setDraft('My next thought');
+      listeners[0]?.onEvent({
+        kind: 'exited',
+        message: 'Claude stream failed: connection reset by peer.',
+      });
+    });
+    expect(screen.getByText('Outcome unknown')).not.toBeNull();
+    expect(screen.getByText('Claude stream failed: connection reset by peer.')).not.toBeNull();
+    expect(screen.getByText('Partial reply')).not.toBeNull();
+    expect(session.store.getState().draft).toBe('My next thought');
+    expect(screen.getAllByRole('button', { name: /Reconnect/ })).toHaveLength(1);
+    await userEvent.click(screen.getByRole('button', { name: 'Reconnect and review' }));
+    await act(async () => listeners[1]?.onEvent({ kind: 'ready' }));
+    expect(screen.getByText('Outcome unknown')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'I’ve reviewed it — continue' })).not.toBeNull();
+    expect(sent.filter((command) => command.kind === 'prompt')).toHaveLength(1);
+  });
+
   it('holds the setup offer back until the catalog has answered', async () => {
     let answer!: (catalog: { agents: Agent[] }) => void;
     const answered = new Promise<{ agents: Agent[] }>((resolve) => {

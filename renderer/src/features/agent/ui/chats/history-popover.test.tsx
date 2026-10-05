@@ -57,6 +57,19 @@ function renderPopover() {
 }
 
 describe('ChatHistoryPopover', () => {
+  it('keeps the keyboard selection when the unchanged history is read again', async () => {
+    const { entries, restore } = renderPopover();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Chat history' }));
+    const search = await screen.findByRole('combobox', { name: 'Search chat titles' });
+    await waitFor(() => expect(search).toBe(document.activeElement));
+    await screen.findByRole('option', { name: 'Refine Gallery subtitle, 2d' });
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(restore).toHaveBeenCalledWith(entries[1]);
+  });
+
   it('lists the recent chats with their age, filters by title, and restores the chosen one', async () => {
     const { entries, restore } = renderPopover();
     const user = userEvent.setup();

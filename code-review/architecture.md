@@ -350,6 +350,11 @@ stable status without download, retry, or a new durable demand latch.
   never become terminal errors. Recover by structured kind: authentication needs
   process/session refresh, credits/restrictions need account recovery, transient
   failures may resend. Raw socket loss has bounded retry then manual recovery.
+  Unknown-outcome presentation retains a closed/failed connection's supplied
+  cause with the review action; it never infers a network failure from uncertainty.
+  Renderer socket decoding catches only wire validation/translation failures.
+  Consumer exceptions retain their original error and must not invoke invalid-frame
+  recovery, which would close an otherwise valid native stream.
   The Codex adapter correlates native missing-model-metadata warnings with a
   subsequent ChatGPT model rejection for the same model in that process
   generation, offering the existing `runtime-outdated` update recovery while

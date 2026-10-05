@@ -90,6 +90,9 @@ repair, an outdated runtime, provider limits, transport loss, and turn failure s
 recovery addresses the actual cause. An outdated runtime updates in place from
 the failed turn; the conversation reconnects on it and resends the refused
 request. A failed history load never becomes an empty conversation.
+An unknown outcome keeps the runtime or connection's reported failure visible
+beside the review action; it must not replace a known cause with a generic
+network explanation. Reconnecting alone does not establish what finished.
 
 When Codex reports missing metadata for a model and then refuses that same
 model, the failed turn offers **Update Codex** through this recovery flow.

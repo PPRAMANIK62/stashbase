@@ -68,12 +68,14 @@ function WorkspacePreview({
   context = false,
   docked = false,
   empty = false,
+  interrupted = false,
   ready = true,
   skills = false,
 }: {
   context?: boolean;
   docked?: boolean;
   empty?: boolean;
+  interrupted?: boolean;
   /** False draws the window a reader meets before any runtime is set up. */
   ready?: boolean;
   skills?: boolean;
@@ -106,6 +108,12 @@ function WorkspacePreview({
           queueMicrotask(() => {
             listener.onEvent({ error: null, kind: 'skills', skills: SKILLS, state: 'available' });
             listener.onEvent({ kind: 'ready' });
+            if (interrupted) {
+              listener.onEvent({
+                kind: 'exited',
+                message: 'Agent stream failed: connection reset by peer.',
+              });
+            }
           });
           return { close: () => undefined, send: () => true };
         },
@@ -133,7 +141,12 @@ function WorkspacePreview({
           supportedEfforts: ['low', 'medium', 'high'],
         },
       ],
-      connection: empty ? { kind: 'draft' } : { kind: 'live', turn: null },
+      connection: interrupted
+        ? { kind: 'closed', message: 'Agent stream failed: connection reset by peer.' }
+        : empty
+          ? { kind: 'draft' }
+          : { kind: 'live', turn: null },
+      delivery: interrupted ? 'unknown' : 'idle',
       title: empty ? 'Untitled' : 'Screenshot research',
       transcript: empty
         ? []
@@ -226,7 +239,7 @@ function WorkspacePreview({
       queueMicrotask(() => session.setSkill('review'));
     }
     return next;
-  }, [context, empty, skills]);
+  }, [context, empty, interrupted, skills]);
 
   useEffect(() => () => runtime.dispose(), [runtime]);
 
@@ -264,6 +277,14 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const FullWorkspace: Story = { play: readyWorkspace };
+
+export const InterruptedTurn: Story = {
+  args: { interrupted: true },
+  play: async () => {
+    await readyWorkspace();
+    await screen.findByText('Agent stream failed: connection reset by peer.');
+  },
+};
 
 export const EmptyWorkspace: Story = {
   args: { empty: true },

@@ -3,8 +3,13 @@
  *  and the rename and removal mutations that rewrite that cache in place.
  *  A rename can start from a sidebar row or from the open Chat's own header,
  *  so the mutation is shared and only the caller's failure surface differs. */
-import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import {
+  useMutation,
+  useQueries,
+  useQueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
+import { useState } from 'react';
 
 import {
   agentFailure,
@@ -99,6 +104,19 @@ export function useRenameConversation(runtime: AgentWorkspaceRuntime) {
   };
 }
 
+/** useQueries returns a new result array on each render. Combining at the
+ * query boundary preserves unchanged history rows, so streaming a reply does
+ * not continuously reset the history popover's keyboard selection. */
+function combineHistory(queries: UseQueryResult<AgentHistoryEntry[]>[]) {
+  const history = queries.flatMap((query) => query.data ?? []);
+  return {
+    history,
+    failedAgents: AGENT_ORDER.filter((_, index) => queries[index]?.isError),
+    loading: queries.some((query) => query.isLoading) && history.length === 0,
+    refetch: queries.map((query) => query.refetch),
+  };
+}
+
 export function useConversationHistory(runtime: AgentWorkspaceRuntime, scope: AgentScope) {
   const queryClient = useQueryClient();
   const signalFor = useRequestSignals<'remove' | 'rename'>();
@@ -116,7 +134,8 @@ export function useConversationHistory(runtime: AgentWorkspaceRuntime, scope: Ag
   // this hook does not have, so a chat written by a `claude` run outside the
   // app still turns up. With rows retained that refetch now happens BEHIND the
   // list the reader is already looking at instead of in front of it.
-  const queries = useQueries({
+  const result = useQueries({
+    combine: combineHistory,
     queries: AGENT_ORDER.map((agent) => ({
       queryKey: historyQueryKey(agent, scope),
       queryFn: ({ signal }: { signal: AbortSignal }) => runtime.listHistory(agent, scope, signal),
@@ -126,8 +145,7 @@ export function useConversationHistory(runtime: AgentWorkspaceRuntime, scope: Ag
     })),
   });
 
-  const history = useMemo(() => queries.flatMap((query) => query.data ?? []), [queries]);
-  const failedAgents = AGENT_ORDER.filter((_, index) => queries[index]?.isError);
+  const { history, failedAgents } = result;
   const historyFailure =
     failedAgents.length > 0
       ? `Chats unavailable for ${failedAgents.map(agentLabel).join(', ')}.`
@@ -153,7 +171,7 @@ export function useConversationHistory(runtime: AgentWorkspaceRuntime, scope: Ag
     clearMutationFailure: () => setMutationFailure(null),
     history,
     historyFailure,
-    historyLoading: queries.some((query) => query.isLoading) && history.length === 0,
+    historyLoading: result.loading,
     mutationFailure,
     mutationPending: rename.isPending || remove.isPending,
     remove: async (entry: AgentHistoryEntry): Promise<AgentHistoryMutation> => {
@@ -172,6 +190,6 @@ export function useConversationHistory(runtime: AgentWorkspaceRuntime, scope: Ag
         return { kind: 'refused', reason: failureKind(error) };
       }
     },
-    retry: () => Promise.all(queries.map((query) => query.refetch())),
+    retry: () => Promise.all(result.refetch.map((refetch) => refetch())),
   };
 }
