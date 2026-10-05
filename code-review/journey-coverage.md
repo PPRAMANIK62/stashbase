@@ -607,6 +607,20 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
+**Claude background completion (2026-10-05):** `server/agent.ts` requests native
+session-state events and waits for `idle` before publishing `turn-end`, retaining
+the latest result for the outcome. A live Claude 2.1.280 SDK probe reproduced a
+successful waiting reply before a background Agent finished, followed by another
+result after its continuation. With state events enabled, `idle` followed that
+continuation; interrupting during the wait stopped the child and emitted `idle`
+without another result. Adapter regressions cover the waiting interval, child
+completion before the parent reply, queue admission, duplicate idle, a failed
+continuation, and cancellation racing acknowledgement. Result-only native CLIs
+retain their existing terminal behavior. Validation passed 226 Agent tests,
+host types, Electron boundary tests and built smoke, and documentation checks.
+The live probe exercised the SDK protocol, not the application UI; the changed
+journey through the built desktop and packaged behavior remain unverified.
+
 **Default Agent billing:** Settings -> Agents shows the subscription, reached also
 from the sidebar account menu, through
 `settings/hooks/use-billing.ts` and `settings/ui/agents/subscription-rows.tsx`.

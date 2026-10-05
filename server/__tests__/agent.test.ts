@@ -1,5 +1,6 @@
 import './isolated-home.ts';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -154,6 +155,13 @@ function claudeSuccessResult(): SDKMessage {
     uuid: 'test-result',
     session_id: 'test-session',
   } as unknown as SDKMessage;
+}
+
+function claudeSessionState(state: 'running' | 'requires_action' | 'idle'): SDKMessage {
+  return {
+    type: 'system', subtype: 'session_state_changed', state,
+    uuid: randomUUID(), session_id: 'test-session',
+  };
 }
 
 function streamingClaudeQuery(prompt: AsyncIterable<unknown>, sessionId = 'test-session'): Query {
@@ -311,7 +319,7 @@ function claudeRetryMessage(): SDKMessage {
 async function startScriptedClaudeTurn(
   t: { after(callback: () => void): void },
   windowId: string,
-  messages: SDKMessage[],
+  messages: SDKMessage[] | AsyncIterable<SDKMessage>,
   interrupt: () => Promise<void> = async () => {},
 ): Promise<{
   ws: FakeAgentWebSocket;
@@ -325,10 +333,15 @@ async function startScriptedClaudeTurn(
   const messageGate = new Promise<void>((resolve) => { releaseMessages = resolve; });
   let finishStream!: () => void;
   const streamGate = new Promise<void>((resolve) => { finishStream = resolve; });
+  let emitSessionState = false;
   const nativeQuery = {
     async *[Symbol.asyncIterator]() {
       await messageGate;
-      for (const message of messages) yield message;
+      for await (const message of messages) {
+        // The installed CLI only emits state transitions when requested.
+        if (message.type === 'system' && message.subtype === 'session_state_changed' && !emitSessionState) continue;
+        yield message;
+      }
       await streamGate;
     },
     supportedModels: async () => [],
@@ -346,7 +359,10 @@ async function startScriptedClaudeTurn(
     'default',
     undefined,
     undefined,
-    (() => nativeQuery) as never,
+    ((request: { options: { env: NodeJS.ProcessEnv } }) => {
+      emitSessionState = request.options.env.CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS === '1';
+      return nativeQuery;
+    }) as never,
     () => '/fake/claude',
   );
   t.after(() => {
@@ -872,6 +888,104 @@ test('Claude startup failure puts its cause on the terminal exit', async (t) => 
   assert.equal(events.some((event) => event.t === 'ready'), false);
   assert.equal(events.some((event) => event.t === 'error'), false);
   assert.match(events.find((event) => event.t === 'exit')?.message ?? '', /Claude CLI not found/);
+});
+
+test('Claude keeps the turn running until background work and its continuation become idle', async (t) => {
+  let continueAgent!: () => void;
+  const backgroundGate = new Promise<void>((resolve) => { continueAgent = resolve; });
+  let finishContinuation!: () => void;
+  const continuationGate = new Promise<void>((resolve) => { finishContinuation = resolve; });
+  let becomeIdle!: () => void;
+  const idleGate = new Promise<void>((resolve) => { becomeIdle = resolve; });
+  t.after(() => { continueAgent(); finishContinuation(); becomeIdle(); });
+  async function* messages(): AsyncIterable<SDKMessage> {
+    yield claudeSessionState('running');
+    yield {
+      type: 'system', subtype: 'task_started', task_id: 'research',
+      description: 'Verify sources', task_type: 'local_agent',
+      uuid: randomUUID(), session_id: 'test-session',
+    };
+    yield claudeSuccessResult();
+    await backgroundGate;
+    yield {
+      type: 'system', subtype: 'task_notification', task_id: 'research',
+      status: 'completed', output_file: '/tmp/research.output', summary: 'Sources verified',
+      uuid: randomUUID(), session_id: 'test-session',
+    };
+    await continuationGate;
+    yield claudeSuccessResult();
+    await idleGate;
+    yield claudeSessionState('idle');
+    yield claudeSessionState('idle');
+  }
+  const turn = await startScriptedClaudeTurn(t, 'claude-background-window', messages());
+  turn.releaseMessages();
+  await settle();
+  turn.ws.emit('message', JSON.stringify({ t: 'prompt', text: 'concurrent follow-up' }));
+  assert.deepEqual(turn.turnEvents(), [{ t: 'turn-start' }],
+    'Completed must not be published while the subagent is still running');
+  continueAgent();
+  await settle();
+  assert.deepEqual(turn.turnEvents(), [{ t: 'turn-start' }],
+    'A subagent notification must not finish its parent continuation');
+  finishContinuation();
+  await settle();
+  assert.deepEqual(turn.turnEvents(), [{ t: 'turn-start' }],
+    'The last result still waits for native idle');
+  becomeIdle();
+  await settle();
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' }, { t: 'turn-end', isError: false },
+  ]);
+  turn.ws.emit('message', JSON.stringify({ t: 'prompt', text: 'next turn' }));
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' }, { t: 'turn-end', isError: false }, { t: 'turn-start' },
+  ]);
+});
+
+test('Claude reports a failed continuation instead of its earlier successful result', async (t) => {
+  const turn = await startScriptedClaudeTurn(t, 'claude-continuation-failed-window', [
+    claudeSessionState('running'),
+    claudeSuccessResult(),
+    claudeSessionState('requires_action'),
+    claudeSessionState('running'),
+    claudeErrorResult('error_during_execution', ['Continuation failed']),
+    claudeSessionState('idle'),
+  ]);
+  turn.releaseMessages();
+  await settle();
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' },
+    { t: 'error', message: 'Continuation failed' },
+    { t: 'turn-end', isError: true },
+  ]);
+});
+
+test('Claude stopping background work waits for both native idle and interrupt acknowledgement', async (t) => {
+  let becomeIdle!: () => void;
+  const idleGate = new Promise<void>((resolve) => { becomeIdle = resolve; });
+  let acknowledge!: () => void;
+  const interruptGate = new Promise<void>((resolve) => { acknowledge = resolve; });
+  t.after(() => { becomeIdle(); acknowledge(); });
+  async function* messages(): AsyncIterable<SDKMessage> {
+    yield claudeSessionState('running');
+    yield claudeSuccessResult();
+    await idleGate;
+    // The live CLI interrupts background agents without another result.
+    yield claudeSessionState('idle');
+  }
+  const turn = await startScriptedClaudeTurn(t, 'claude-background-stop-window', messages(), () => interruptGate);
+  turn.releaseMessages();
+  await settle();
+  turn.ws.emit('message', JSON.stringify({ t: 'interrupt' }));
+  becomeIdle();
+  await settle();
+  assert.deepEqual(turn.turnEvents(), [{ t: 'turn-start' }]);
+  acknowledge();
+  await settle();
+  assert.deepEqual(turn.turnEvents(), [
+    { t: 'turn-start' }, { t: 'turn-end', isError: false },
+  ]);
 });
 
 test('Claude final errors are normalized, bounded, and ordered before turn-end', async (t) => {

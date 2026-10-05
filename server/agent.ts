@@ -305,6 +305,8 @@ export class AgentSession implements AttributedAgentSession {
   private closed = false;
   private turnActive = false;
   private turnGeneration = 0;
+  private nativeSessionStateSeen = false;
+  private pendingResult: ClaudeResultMessage | null = null;
   private interruptRequested = false;
   private interruptTask: Promise<void> | null = null;
   private nativeDerivedReadRedirected = new Set<string>();
@@ -470,6 +472,9 @@ export class AgentSession implements AttributedAgentSession {
           settingSources: ['user', 'project', 'local'],
           env: {
             ...agentCliEnv({}, [commandDir(claudeCodeExecutable)]),
+            // A result can precede background-agent completion. Ask the CLI
+            // for its authoritative idle transition after all continuations.
+            CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: '1',
             // Route this session's MCP tools back to this window's host.
             STASHBASE_WINDOW_ID: this.windowId,
             // Session identity for host-side MCP tools (create_project):
@@ -557,6 +562,15 @@ export class AgentSession implements AttributedAgentSession {
       this.send(active);
     }
     if (msg.type === 'system' && msg.subtype === 'commands_changed') this.publishSkillCommands(msg.commands);
+    if (msg.type === 'system' && msg.subtype === 'session_state_changed') {
+      this.nativeSessionStateSeen = true;
+      if (msg.state === 'idle' && this.pendingResult) {
+        const result = this.pendingResult;
+        this.pendingResult = null;
+        this.completeClaudeTurn(result);
+      }
+      return;
+    }
     if (msg.type === 'system' && msg.subtype === 'api_retry') {
       log.info(`Claude SDK is retrying: attempt ${msg.attempt} of ${msg.max_retries} (delay ${msg.retry_delay_ms}ms)`);
       return;
@@ -607,15 +621,12 @@ export class AgentSession implements AttributedAgentSession {
         break;
       }
       case 'result': {
-        const pendingInterrupt = this.interruptTask;
-        if (pendingInterrupt) {
-          const resultGeneration = this.turnGeneration;
-          void pendingInterrupt.then(() => {
-            if (this.turnGeneration === resultGeneration) this.onClaudeResult(msg);
-          });
-        } else {
-          this.onClaudeResult(msg);
-        }
+        if (!this.turnActive) break;
+        // Streaming input stays open across turns. Claude can emit a success
+        // result while a subagent still runs, then another for its continuation.
+        // CLIs that do not publish session state retain their result boundary.
+        if (this.nativeSessionStateSeen) this.pendingResult = msg;
+        else this.completeClaudeTurn(msg);
         break;
       }
       default:
@@ -623,14 +634,27 @@ export class AgentSession implements AttributedAgentSession {
     }
   }
 
+  private completeClaudeTurn(msg: ClaudeResultMessage): void {
+    const pendingInterrupt = this.interruptTask;
+    if (pendingInterrupt) {
+      const resultGeneration = this.turnGeneration;
+      void pendingInterrupt.then(() => {
+        if (!this.closed && this.turnGeneration === resultGeneration) this.onClaudeResult(msg);
+      });
+    } else {
+      this.onClaudeResult(msg);
+    }
+  }
+
   private onClaudeResult(msg: ClaudeResultMessage): void {
-    // The SDK result is terminal authority for one active turn. Ignore
-    // duplicate or late terminal messages before they can append another
+    // Idle (or result for a CLI without state events) closes one active turn.
+    // Ignore duplicate or late terminal messages before they can append another
     // persistent error or settle a queued follow-up twice.
     if (!this.turnActive) return;
     const isError = msg.is_error === true;
     const wasCancelled = this.interruptRequested;
     this.turnActive = false;
+    this.pendingResult = null;
     this.interruptRequested = false;
     this.interruptTask = null;
 
@@ -747,6 +771,7 @@ export class AgentSession implements AttributedAgentSession {
           if (simulated) { this.playSimulatedTurnFailure(simulated); break; }
         }
         this.turnActive = true;
+        this.pendingResult = null;
         this.turnGeneration += 1;
         this.interruptRequested = false;
         this.send({ t: 'turn-start' });

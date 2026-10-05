@@ -37,6 +37,8 @@ once setup succeeds; changed work or cancelled consent rejects late completion.
   Refused delivery retains it; uncertain delivery forbids automatic resend.
 - One turn runs per conversation. Follow-ups queue explicitly; normal completion
   may advance the queue. Stop, failure, or connection loss pauses it.
+  Waiting for a background subagent and processing its result remain part of
+  that turn; an interim reply must not show Completed or release queued work.
 - Validate context before sending. Opening a document does not attach it; missing
   or changed context needs replacement, refresh, or explicit removal.
 - The Agent pane beside Documents suggests the document in front of the reader

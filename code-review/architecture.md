@@ -266,6 +266,11 @@ stable status without download, retry, or a new durable demand latch.
   Process death settles pending RPCs/turns, and generation guards reject late
   messages. An ambiguous timed-out start retires its generation before retry.
   Claude replacement waits for native iterator/query cleanup after verifying scope.
+- Claude requests native session-state events and ends a turn at `idle`, using
+  its latest result for success/failure. Intermediate results while background
+  agents run do not release the turn or its queue. Native runtimes that emit no
+  state events retain the result boundary. Stop still requires native completion
+  and interrupt acknowledgement; process death remains a failed session exit.
 - Project Agent preferences are explicit choices in Node-owned app config, keyed
   by registered project scope. Readiness and history restore never write them.
   Thinking effort is stored separately per Agent in that project. Composer choices
