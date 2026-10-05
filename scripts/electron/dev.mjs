@@ -38,6 +38,8 @@ export async function waitForDevelopmentServers(timeoutMs = 120_000) {
 }
 
 export async function runDevelopmentElectron() {
+  // Main and preload load generated modules even when Vite serves the renderer.
+  await import("./boundary.mjs");
   await waitForDevelopmentServers();
   const child = spawn(electronPath, ["."], {
     cwd: process.cwd(),

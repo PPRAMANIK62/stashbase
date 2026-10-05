@@ -34,6 +34,10 @@ The launch commands use POSIX shell syntax to clear an inherited
 `ELECTRON_RUN_AS_NODE`. On Windows, clear that variable in your shell before
 running `pnpm electron` or `pnpm dev`.
 
+`pnpm dev` rebuilds Electron's main/preload boundary before launching the desktop
+and waits for both development servers. Restart it after changing Electron or
+shared boundary code so the desktop uses the updated modules.
+
 For local PDF and image OCR extraction from this checkout, run
 `pnpm setup:python-extract`. To build the independent PDF/OCR component payload,
 run `pnpm build:python-extract-sidecar`.

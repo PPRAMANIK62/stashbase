@@ -134,6 +134,10 @@ Host/services: `electron/main.cjs`, `server/folder.ts`.
   `pnpm test:updates`, `pnpm test:electron`, `pnpm test:electron:smoke`,
   and `pnpm test:agent`. Key persistence survives daemon reconfiguration
   failure; these tests do not prove rollback of saved configuration.
+  `scripts/electron/dev.test.mjs` builds real boundary sources in an isolated
+  fixture and loads them in a substitute desktop child, covering missing/stale
+  development output and refusing launch after a build failure. It does not
+  establish native Electron or renderer behavior.
 - **Driven Runtime Pass:** a 2026-09-16 isolated built-server pass verified that
   first launch creates an empty default home and no project membership; restart
   preserves existing unregistered files, and explicit open registers only the
