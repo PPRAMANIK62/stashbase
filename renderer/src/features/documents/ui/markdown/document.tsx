@@ -29,6 +29,7 @@ import type { DocumentHeading } from '@/features/documents/domain/outline';
 import type { DocumentSelection } from '@/features/documents/domain/selection';
 import { cn } from '@/lib/utils';
 import type { SourceReference } from '@/shared/domain/source-reference';
+import { prefersReducedMotion } from '@/shared/runtime/appearance-surface';
 import { writeToClipboard } from '@/shared/ui/clipboard';
 
 import { watchMarkdownChanges } from './changes';
@@ -52,6 +53,7 @@ import {
 import { useAskAgent } from './selection-markdown';
 import { selectionToolbar } from './selection-toolbar';
 import { useRevisionReview, type RevisionBinding } from './use-revision-review';
+import { attachWritingAids, createWordCounter, WordCount } from './writing-aids';
 
 type CreationState = 'creating' | 'failed' | 'ready';
 
@@ -122,6 +124,7 @@ export function MarkdownDocument({
   const [creationState, setCreationState] = useState<CreationState>('creating');
   const [headings, setHeadings] = useState<DocumentHeading[]>([]);
   const [linkFailure, setLinkFailure] = useState(false);
+  const [wordCounter] = useState(createWordCounter);
   const {
     active: reviewActive,
     attach: attachReview,
@@ -187,6 +190,7 @@ export function MarkdownDocument({
     };
     refreshHeadingsRef.current = updateHeadings;
     editor.setReadonly(readOnlyRef.current);
+    attachWritingAids(editor, wordCounter);
     watchMarkdownChanges(editor, (markdown) => {
       if (readOnlyRef.current || suppressChangeRef.current) return;
       onChangeRef.current(frontmatterRef.current + markdown);
@@ -214,7 +218,7 @@ export function MarkdownDocument({
       }
       stopCreation();
     };
-  }, [askAgentRun, attachReview, attempt, navigation, tabId]);
+  }, [askAgentRun, attachReview, attempt, navigation, tabId, wordCounter]);
 
   useEffect(() => {
     editorRef.current?.setReadonly(readOnly);
@@ -287,8 +291,7 @@ export function MarkdownDocument({
           hostRef.current,
           heading,
           currentEditorView(editorRef.current),
-          hostRef.current?.ownerDocument.defaultView?.matchMedia('(prefers-reduced-motion: reduce)')
-            .matches ?? true,
+          prefersReducedMotion(hostRef.current?.ownerDocument.defaultView),
         ),
     );
   }, [active, activeHeading, creationState, headings, navigation, tabId]);
@@ -379,6 +382,7 @@ export function MarkdownDocument({
         data-review-reversed={reviewReversed || undefined}
         ref={hostRef}
       />
+      {creationState === 'ready' && <WordCount counter={wordCounter} />}
     </div>
   );
 }

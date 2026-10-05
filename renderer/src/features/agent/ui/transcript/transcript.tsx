@@ -222,7 +222,7 @@ const TranscriptBlock = memo(function TranscriptBlock({
     );
   }
   if (block.kind === 'thinking') {
-    return <p className="text-[13px] leading-5 text-muted-foreground">{block.text}</p>;
+    return <p className="text-ui-13 leading-5 text-muted-foreground">{block.text}</p>;
   }
   if (block.kind === 'notice') {
     return (

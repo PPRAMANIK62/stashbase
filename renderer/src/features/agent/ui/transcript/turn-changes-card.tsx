@@ -47,7 +47,7 @@ function FileAction({
     return onOpenSource ? (
       <Button
         aria-label={`Open ${name}`}
-        className="-mr-2.5 text-[12px]"
+        className="-mr-2.5 text-ui-12"
         onClick={() => onOpenSource(source, null)}
         size="compact"
         variant="ghost"
@@ -59,7 +59,7 @@ function FileAction({
   return onReview ? (
     <Button
       aria-label={`Review changes to ${name}`}
-      className="-mr-2.5 text-[12px]"
+      className="-mr-2.5 text-ui-12"
       onClick={() => onReview(source)}
       size="compact"
       variant="ghost"
@@ -93,7 +93,7 @@ export function AgentTurnChangesCard({
       className={cn('border border-border bg-surface-2 px-3 pt-2.5 pb-1', shape.panel)}
     >
       <h3
-        className="flex items-center gap-2 pb-1 text-[12px] font-medium text-muted-foreground"
+        className="flex items-center gap-2 pb-1 text-ui-12 font-medium text-muted-foreground"
         id={headingId}
       >
         <FileDiff aria-hidden className="size-3.5 shrink-0" strokeWidth={1.5} />
@@ -107,7 +107,7 @@ export function AgentTurnChangesCard({
           const directory = shown.slice(0, shown.length - name.length).replace(/[\\/]$/u, '');
           return (
             <li
-              className={cn('flex min-h-7 items-center gap-2 text-[12px]', shape.item)}
+              className={cn('flex min-h-7 items-center gap-2 text-ui-12', shape.item)}
               key={file.path}
             >
               <FileTypeIcon

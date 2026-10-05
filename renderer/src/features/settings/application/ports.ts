@@ -12,6 +12,7 @@ import type {
 import type {
   AppearanceChange,
   AppearancePreferences,
+  SystemFont,
 } from '@/features/settings/domain/appearance';
 import type { BillingPlan, BillingStatus } from '@/features/settings/domain/billing';
 import type { LocalComponentStatus } from '@/features/settings/domain/local-component';
@@ -48,11 +49,19 @@ export type AgentRuntimeFailureKind = TransportFailureKind;
 export type AgentRuntimeError = FeatureError;
 export const AgentRuntimeError = featureErrorClass('AgentRuntimeError');
 
-/** Both calls resolve the full triple, because the server's answer is what the
+/** Both calls resolve the full record, because the server's answer is what the
  *  window applies. */
 export interface AppearancePort {
   load(signal: AbortSignal): Promise<AppearancePreferences>;
   update(change: AppearanceChange, signal: AbortSignal): Promise<AppearancePreferences>;
+}
+
+/** What this computer offers the appearance settings: its installed fonts and
+ *  the languages its spellchecker knows. Both stay on the device. */
+export interface SystemTextPort {
+  listFonts(): Promise<readonly SystemFont[]>;
+  /** Empty where the system picks the language itself (macOS). */
+  spellcheckLanguages(): Promise<readonly string[]>;
 }
 
 /** The StashBase account, which identifies the bundled Agent's free or subscribed credits. A
