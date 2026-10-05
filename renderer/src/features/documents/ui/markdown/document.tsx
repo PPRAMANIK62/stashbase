@@ -53,7 +53,7 @@ import {
 import { useAskAgent } from './selection-markdown';
 import { selectionToolbar } from './selection-toolbar';
 import { useRevisionReview, type RevisionBinding } from './use-revision-review';
-import { attachWritingAids, WordCount } from './writing-aids';
+import { attachWritingAids, createWordCounter, WordCount } from './writing-aids';
 
 type CreationState = 'creating' | 'failed' | 'ready';
 
@@ -124,7 +124,7 @@ export function MarkdownDocument({
   const [creationState, setCreationState] = useState<CreationState>('creating');
   const [headings, setHeadings] = useState<DocumentHeading[]>([]);
   const [linkFailure, setLinkFailure] = useState(false);
-  const [wordCount, setWordCount] = useState(0);
+  const [wordCounter] = useState(createWordCounter);
   const {
     active: reviewActive,
     attach: attachReview,
@@ -190,7 +190,7 @@ export function MarkdownDocument({
     };
     refreshHeadingsRef.current = updateHeadings;
     editor.setReadonly(readOnlyRef.current);
-    attachWritingAids(editor, setWordCount);
+    attachWritingAids(editor, wordCounter);
     watchMarkdownChanges(editor, (markdown) => {
       if (readOnlyRef.current || suppressChangeRef.current) return;
       onChangeRef.current(frontmatterRef.current + markdown);
@@ -218,7 +218,7 @@ export function MarkdownDocument({
       }
       stopCreation();
     };
-  }, [askAgentRun, attachReview, attempt, navigation, tabId]);
+  }, [askAgentRun, attachReview, attempt, navigation, tabId, wordCounter]);
 
   useEffect(() => {
     editorRef.current?.setReadonly(readOnly);
@@ -382,7 +382,7 @@ export function MarkdownDocument({
         data-review-reversed={reviewReversed || undefined}
         ref={hostRef}
       />
-      {creationState === 'ready' && <WordCount count={wordCount} />}
+      {creationState === 'ready' && <WordCount counter={wordCounter} />}
     </div>
   );
 }

@@ -6,7 +6,7 @@ export function DayDivider({ at, now }: { at: number; now: number }) {
   return (
     <div
       aria-label={label}
-      className="flex items-center gap-3 text-[11px] text-muted-foreground select-none not-first:mt-2"
+      className="flex items-center gap-3 text-ui-11 text-muted-foreground select-none not-first:mt-2"
       role="separator"
     >
       <span aria-hidden className="h-px flex-1 bg-border" />

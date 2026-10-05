@@ -67,6 +67,7 @@ function harness(context, { remembered, capability = 'window.lifecycle', platfor
     platform,
     spellchecker: {
       availableSpellCheckerLanguages: ['en-US', 'fr'],
+      getSpellCheckerLanguages: () => ['en-US'],
       setSpellCheckerEnabled: (enabled) => spelling.enabled.push(enabled),
       setSpellCheckerLanguages: (languages) => spelling.languages.push(languages),
     },
@@ -124,7 +125,8 @@ test('a spellcheck language is set only where the platform offers a choice', asy
   const linux = harness(context);
   await linux.send({ ...DEFAULTS, spellcheckLanguage: 'fr' });
   await linux.send({ ...DEFAULTS, spellcheckLanguage: 'de' });
-  assert.deepEqual(linux.spelling.languages, [['fr']]);
+  await linux.send({ ...DEFAULTS, spellcheckLanguage: null });
+  assert.deepEqual(linux.spelling.languages, [['fr'], ['en-US']]);
 
   const mac = harness(context, { platform: 'darwin' });
   await mac.send({ ...DEFAULTS, spellcheckLanguage: 'fr' });

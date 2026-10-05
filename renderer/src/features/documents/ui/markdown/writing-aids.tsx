@@ -3,17 +3,56 @@ import type { Node as ProseMirrorNode } from '@milkdown/kit/prose/model';
 import { Plugin, type EditorState } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view';
 import { $prose } from '@milkdown/kit/utils';
+import { useSyncExternalStore } from 'react';
 
 import { appliedAppearance, useAppliedAppearance } from '@/shared/runtime/appearance-surface';
+
+/** Chinese and Japanese are written without spaces, so each ideograph or
+ *  kana counts as one, as word processors count them. */
+const UNSPACED = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu;
 
 /** Words as a reader counts them: runs of letters, digits, and joiners, so
  *  punctuation and Markdown syntax add nothing. */
 export function countWords(text: string): number {
-  return text.match(/[\p{L}\p{N}][\p{L}\p{N}'’_-]*/gu)?.length ?? 0;
+  const unspaced = text.match(UNSPACED)?.length ?? 0;
+  const spaced = text.replace(UNSPACED, ' ').match(/[\p{L}\p{N}][\p{L}\p{N}'’_-]*/gu);
+  return unspaced + (spaced?.length ?? 0);
 }
 
-function documentWords(doc: ProseMirrorNode): number {
-  return countWords(doc.textBetween(0, doc.content.size, ' ', ' '));
+/**
+ * The document's word count, counted only while something reads it. The
+ * editor hands over each new document; counting waits for the visible count
+ * to ask, so a hidden count costs nothing and a shown one re-renders only
+ * itself.
+ */
+export interface WordCounter {
+  update(doc: ProseMirrorNode): void;
+  subscribe(listener: () => void): () => void;
+  count(): number;
+}
+
+export function createWordCounter(): WordCounter {
+  let doc: ProseMirrorNode | null = null;
+  let counted: { doc: ProseMirrorNode; count: number } | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    update(next) {
+      if (doc === next) return;
+      doc = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    count() {
+      if (!doc) return 0;
+      if (counted?.doc !== doc) {
+        counted = { doc, count: countWords(doc.textBetween(0, doc.content.size, ' ', ' ')) };
+      }
+      return counted.count;
+    },
+  };
 }
 
 /** The top-level block the caret is in, marked for focus mode's dimming. */
@@ -42,26 +81,42 @@ function centerCaret(view: EditorView): void {
  * The editor's side of three writing settings. The current-block mark is
  * always kept so focus mode is a stylesheet switch; the caret is centered only
  * while typewriter scrolling is on, asked at each move so the setting applies
- * without rebuilding the editor; and the word count is reported on every
- * document change for the surface to show or not.
+ * without rebuilding the editor, and only for typing and keyboard moves, so a
+ * click places the caret where the reader pointed; and every new document
+ * reaches the word counter.
  */
-export function attachWritingAids(
-  editor: CrepeBuilder,
-  onWordCount: (count: number) => void,
-): void {
+export function attachWritingAids(editor: CrepeBuilder, counter: WordCounter): void {
+  let pointerPlaced = false;
   editor.editor.use(
     $prose(
       () =>
         new Plugin({
-          props: { decorations: currentBlock },
+          props: {
+            decorations: currentBlock,
+            handleDOMEvents: {
+              keydown: () => {
+                pointerPlaced = false;
+                return false;
+              },
+              mousedown: () => {
+                pointerPlaced = true;
+                return false;
+              },
+            },
+          },
           view: (view) => {
-            onWordCount(documentWords(view.state.doc));
+            counter.update(view.state.doc);
             return {
               update(next, previous) {
-                const edited = !previous.doc.eq(next.state.doc);
-                if (edited) onWordCount(documentWords(next.state.doc));
+                const edited = previous.doc !== next.state.doc;
+                if (edited) counter.update(next.state.doc);
                 const moved = edited || !previous.selection.eq(next.state.selection);
-                if (moved && next.hasFocus() && appliedAppearance()?.typewriterScrolling) {
+                if (
+                  moved &&
+                  (edited || !pointerPlaced) &&
+                  next.hasFocus() &&
+                  appliedAppearance()?.typewriterScrolling
+                ) {
                   centerCaret(next);
                 }
               },
@@ -73,8 +128,13 @@ export function attachWritingAids(
 }
 
 /** The document's word count in the corner, while the reader has it on. */
-export function WordCount({ count }: { count: number }) {
+export function WordCount({ counter }: { counter: WordCounter }) {
   if (!useAppliedAppearance()?.wordCount) return null;
+  return <WordCountLabel counter={counter} />;
+}
+
+function WordCountLabel({ counter }: { counter: WordCounter }) {
+  const count = useSyncExternalStore(counter.subscribe, counter.count, counter.count);
   return (
     <div className="markdown-word-count">
       {count === 1 ? '1 word' : `${count.toLocaleString()} words`}

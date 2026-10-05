@@ -25,6 +25,7 @@ interface NativeTheme {
 
 interface Spellchecker {
   readonly availableSpellCheckerLanguages: readonly string[];
+  getSpellCheckerLanguages(): string[];
   setSpellCheckerEnabled(enabled: boolean): void;
   setSpellCheckerLanguages(languages: string[]): void;
 }
@@ -81,6 +82,8 @@ export function registerAppearance(dependencies: AppearanceDependencies) {
   const fileSystem = dependencies.fileSystem ?? fs;
   let current = readRemembered(filePath, fileSystem);
   let backgrounds = themeBackgrounds('stashbase-light', 'stashbase-dark');
+  // Chromium starts from the system locale; a null language restores it.
+  const systemLanguages = spellchecker.getSpellCheckerLanguages();
 
   const backgroundColor = () =>
     nativeTheme.shouldUseDarkColors ? backgrounds.dark : backgrounds.light;
@@ -99,7 +102,8 @@ export function registerAppearance(dependencies: AppearanceDependencies) {
     // language list to choose from.
     if (dependencies.platform !== 'darwin') {
       const language = appearance.spellcheckLanguage;
-      if (language && spellchecker.availableSpellCheckerLanguages.includes(language)) {
+      if (language === null) spellchecker.setSpellCheckerLanguages(systemLanguages);
+      else if (spellchecker.availableSpellCheckerLanguages.includes(language)) {
         spellchecker.setSpellCheckerLanguages([language]);
       }
     }

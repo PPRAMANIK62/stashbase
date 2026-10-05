@@ -8,7 +8,7 @@ import { editorViewCtx } from '@milkdown/kit/core';
 import { TextSelection } from '@milkdown/kit/prose/state';
 import { afterEach, describe, expect, it } from 'vite-plus/test';
 
-import { attachWritingAids, countWords } from './writing-aids';
+import { attachWritingAids, countWords, createWordCounter } from './writing-aids';
 
 const opened: CrepeBuilder[] = [];
 
@@ -20,11 +20,11 @@ async function open(source: string) {
   const host = document.createElement('div');
   document.body.append(host);
   const editor = new CrepeBuilder({ root: host, defaultValue: source });
-  const counts: number[] = [];
-  attachWritingAids(editor, (count) => counts.push(count));
+  const counter = createWordCounter();
+  attachWritingAids(editor, counter);
   await editor.create();
   opened.push(editor);
-  return { counts, editor, host };
+  return { counter, editor, host };
 }
 
 describe('countWords', () => {
@@ -33,18 +33,24 @@ describe('countWords', () => {
     expect(countWords("It's a well-known fact — 42 of them, don't you think?")).toBe(10);
     expect(countWords('# Title\n\n- one\n- two **bold**')).toBe(4);
   });
+
+  it('counts each Chinese or Japanese character, which are written without spaces', () => {
+    expect(countWords('今天写了三段。')).toBe(6);
+    expect(countWords('用 StashBase 写作')).toBe(4);
+    expect(countWords('ひらがなとカタカナ')).toBe(9);
+  });
 });
 
 describe('attachWritingAids', () => {
-  it('reports the count at open and after every edit', async () => {
-    const { counts, editor } = await open('One two three.\n\nFour.');
-    expect(counts.at(-1)).toBe(4);
+  it('counts the document at open and after every edit', async () => {
+    const { counter, editor } = await open('One two three.\n\nFour.');
+    expect(counter.count()).toBe(4);
 
     editor.editor.action((ctx) => {
       const view = ctx.get(editorViewCtx);
       view.dispatch(view.state.tr.insertText(' five six', view.state.doc.content.size - 1));
     });
-    expect(counts.at(-1)).toBe(6);
+    expect(counter.count()).toBe(6);
   });
 
   it('marks only the block that holds the caret', async () => {

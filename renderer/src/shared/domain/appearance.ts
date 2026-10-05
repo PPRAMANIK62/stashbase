@@ -13,7 +13,7 @@ export interface AppearanceSurface {
   readonly readingTextSize: Scale;
   /** The included reading font; an installed `writingFont` overrides it. */
   readonly readingFont: 'serif' | 'sans';
-  /** Null keeps the bundled default: Inter for writing, Geist Mono for code. */
+  /** Null keeps the reading font above for writing and Geist Mono for code. */
   readonly writingFont: string | null;
   readonly codeFont: string | null;
   readonly lineSpacing: 'compact' | 'default' | 'relaxed';
