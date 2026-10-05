@@ -164,6 +164,43 @@ export const hostedAgentAllowanceSchema = z
   })
   .strict();
 
+/** `GET /api/account/billing/plans`: the hosted Stripe catalog. */
+export const hostedBillingPlanSchema = z
+  .object({
+    priceId: z.string().regex(/^price_[A-Za-z0-9]+$/),
+    planKey: z.string().min(1).max(64),
+    name: z.string().min(1).max(120),
+    amount: z.number().int().nonnegative(),
+    currency: z.string().min(3).max(3),
+    interval: z.enum(['month', 'year']),
+    available: z.boolean(),
+  })
+  .passthrough();
+
+export const hostedBillingPlansSchema = z
+  .object({ plans: z.array(hostedBillingPlanSchema).max(20) })
+  .passthrough();
+
+/** `GET /api/account/billing/status`: subscription rights the API confirmed. */
+export const hostedBillingStatusSchema = z
+  .object({
+    plan: hostedBillingPlanSchema.nullable(),
+    status: z.string().min(1).max(64),
+    paidThrough: z.string().nullable(),
+    cancelAtPeriodEnd: z.boolean(),
+    canManage: z.boolean(),
+  })
+  .passthrough();
+
+export const hostedBillingCheckoutRequestSchema = z
+  .object({ priceId: z.string().regex(/^price_[A-Za-z0-9]+$/) })
+  .strict();
+
+/** A Stripe-hosted Checkout or Customer Portal page. */
+export const hostedBillingRedirectSchema = z
+  .object({ url: z.string().url().max(4096) })
+  .passthrough();
+
 export const agentRuntimeFailureSchema = z
   .object({
     code: z.string().trim().min(1).max(64).optional(),
@@ -180,3 +217,5 @@ export type AgentUpgradeOfferWire = z.infer<typeof agentUpgradeOfferSchema>;
 export type AgentWire = z.infer<typeof agentSchema>;
 export type AgentsResponseWire = z.infer<typeof agentsResponseSchema>;
 export type HostedAgentAllowanceWire = z.infer<typeof hostedAgentAllowanceSchema>;
+export type HostedBillingPlanWire = z.infer<typeof hostedBillingPlanSchema>;
+export type HostedBillingStatusWire = z.infer<typeof hostedBillingStatusSchema>;

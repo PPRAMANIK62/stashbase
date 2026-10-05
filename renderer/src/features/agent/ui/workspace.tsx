@@ -64,6 +64,7 @@ function ChatWorkspace({
   onOpenExternal,
   onOpenSource,
   onReprocess,
+  onReviewTurnChange,
   revisionFor,
   runtime,
   active,
@@ -206,6 +207,7 @@ function ChatWorkspace({
               onOpenSource={onOpenSource}
               onPermission={active.replyPermission}
               onRetry={active.retry}
+              onReviewTurnChange={onReviewTurnChange}
               revisionFor={revisionFor}
               runtimeUpdate={runtimeUpdate}
               sourceFor={sourceFor}
@@ -270,7 +272,7 @@ function ChatWorkspace({
                         ? catalog.agents
                         : [selectedAgent, ...catalog.agents]
                     }
-                    disabled={busy || preferencesUnavailable}
+                    disabled={busy || runtimeUpdate.busy || preferencesUnavailable}
                     onAgentChange={(agent) => {
                       void runtime.chooseAgent(agent);
                     }}
@@ -293,6 +295,7 @@ function ChatWorkspace({
                     onEffortChange={active.setEffort}
                     onModelChange={active.setModel}
                     onRequestCatalog={active.start}
+                    runtimeUpdate={readyAgent.updatable ? runtimeUpdate : undefined}
                     state={{ ...state, activeTurn: busy || preferencesUnavailable }}
                   />
                 ) : null
@@ -300,6 +303,7 @@ function ChatWorkspace({
               sendable={
                 !catalog.loading &&
                 !catalog.error &&
+                !runtimeUpdate.busy &&
                 !preferencesUnavailable &&
                 state.delivery !== 'unknown' &&
                 state.delivery !== 'stopping' &&

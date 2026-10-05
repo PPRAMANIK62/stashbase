@@ -18,6 +18,7 @@ import type {
 } from '../shared/preferences.ts';
 import { normalizeAppearancePreferences } from '../shared/protocols/http/appearance.ts';
 import type { EmbedderProvider } from '../shared/embedding.ts';
+import type { HostedAccountOffer } from '../shared/account.ts';
 import { normalizeHostedDisplayName, parseGoogleAvatarUrl } from './hosted-account-profile.ts';
 
 export type {
@@ -101,6 +102,9 @@ export interface AppConfigFile {
   };
   account?: {
     session?: HostedAccountSession;
+    /** One-time account banners already taken up or declined. Kept outside
+     *  the session so signing out does not bring them back. */
+    offersSeen?: HostedAccountOffer[];
   };
   /** Settings-managed bearer credential and explicit exposure preference for
    *  the Streamable HTTP MCP transport. The token lives beside the existing
@@ -278,6 +282,33 @@ export function setHostedAccountSession(session: HostedAccountSession | undefine
     delete cfg.account?.session;
     if (cfg.account && Object.keys(cfg.account).length === 0) delete cfg.account;
   }
+  writeAppConfigStrict(cfg);
+}
+
+const ACCOUNT_OFFERS: readonly HostedAccountOffer[] = ['sign-in'];
+
+/** Offers still to show. An unreadable or malformed record shows them again,
+ *  which costs one dismissal rather than hiding sign-in. */
+export function pendingAccountOffers(): HostedAccountOffer[] {
+  const seen = readAppConfig().account?.offersSeen;
+  const list = Array.isArray(seen) ? seen : [];
+  return ACCOUNT_OFFERS.filter((offer) => !list.includes(offer));
+}
+
+export function markAccountOfferSeen(offer: HostedAccountOffer): void {
+  const cfg = readAppConfigStrict();
+  const seen = Array.isArray(cfg.account?.offersSeen) ? cfg.account.offersSeen : [];
+  if (seen.includes(offer)) return;
+  cfg.account = { ...(cfg.account ?? {}), offersSeen: [...seen.filter((item) => ACCOUNT_OFFERS.includes(item)), offer] };
+  writeAppConfigStrict(cfg);
+}
+
+/** Development reset: the next launch behaves like a first one for banners. */
+export function resetAccountOffers(): void {
+  const cfg = readAppConfigStrict();
+  if (!cfg.account?.offersSeen) return;
+  delete cfg.account.offersSeen;
+  if (Object.keys(cfg.account).length === 0) delete cfg.account;
   writeAppConfigStrict(cfg);
 }
 

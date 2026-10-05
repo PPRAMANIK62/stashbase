@@ -4,7 +4,8 @@
  *
  * A browser sign-in is tracked by its flow id and polled until the server
  * reports the flow finished. Either way the account changes, everything that
- * depends on it is re-read: the bundled Agent's readiness and credits.
+ * depends on it is re-read: the bundled Agent's readiness, credits, and
+ * subscription.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -12,7 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { settingsFailure } from '@/features/settings/application/failure-messages';
 import type { AccountPort } from '@/features/settings/application/ports';
 import { accountQuery, settingsQueryKeys } from '@/features/settings/application/queries';
-import type { HostedAccount } from '@/features/settings/domain/account';
+import type { AccountOffer, HostedAccount } from '@/features/settings/domain/account';
 import {
   anyBusy,
   firstCommandFailure,
@@ -24,7 +25,11 @@ const SIGN_IN_POLL_MS = 1_500;
 
 /** The keys a changed account invalidates, in the order a reader would notice
  *  them. The account itself is written from the command's answer. */
-const DEPENDENT_KEYS = [settingsQueryKeys.agentCatalog, settingsQueryKeys.agentAllowance] as const;
+const DEPENDENT_KEYS = [
+  settingsQueryKeys.agentCatalog,
+  settingsQueryKeys.agentAllowance,
+  settingsQueryKeys.billingStatus,
+] as const;
 
 export interface AccountViewModel {
   /** Null until the first read lands, or while it cannot. */
@@ -35,7 +40,8 @@ export interface AccountViewModel {
   readonly loading: boolean;
   readonly loadFailed: boolean;
   retryAccount(): void;
-  openBilling(): void;
+  /** Hands a page to the system browser, as sign-in does. */
+  openExternal(href: string): void;
   /** The browser round trip is open: started, and not yet reported finished. */
   readonly signInPending: boolean;
   /** A browser flow is open and its local wait can be stopped. */
@@ -47,6 +53,10 @@ export interface AccountViewModel {
   /** Waits for this explicit sign-in; aborting the caller never revokes browser authorization. */
   signInAndWait(signal: AbortSignal): Promise<boolean>;
   signOut(): void;
+  /** Records a one-time banner as taken up or declined. */
+  markOfferSeen(offer: AccountOffer): void;
+  /** Development: shows every one-time banner again. */
+  resetOffers(): void;
 }
 
 export function useAccount(
@@ -148,6 +158,28 @@ export function useAccount(
     },
   });
 
+  const writeAccount = (next: HostedAccount) => {
+    queryClient.setQueryData(settingsQueryKeys.account, next);
+  };
+  const markOfferSeen = useSettingsCommand<AccountOffer, HostedAccount>(
+    'markOfferSeen',
+    (offer: AccountOffer, signal) => port.markOfferSeen(offer, signal),
+    {
+      // The banner leaves at once; the answer confirms it.
+      onStart: (offer) => {
+        const current = queryClient.getQueryData<HostedAccount>(settingsQueryKeys.account);
+        if (current)
+          writeAccount({ ...current, offers: current.offers.filter((o) => o !== offer) });
+      },
+      onDone: writeAccount,
+    },
+  );
+  const resetOffers = useSettingsCommand(
+    'resetOffers',
+    (_input: void, signal) => port.resetOffers(signal),
+    { onDone: writeAccount },
+  );
+
   const signIn = () => {
     if (command.current || !account.data) return;
     command.current = 'sign-in';
@@ -160,7 +192,6 @@ export function useAccount(
   const signInPending = startSignIn.busy || signInFlow !== null;
 
   return {
-    openBilling: () => openExternal('https://stashbase.ai/pricing/'),
     account: account.data ?? null,
     busy: signInPending || anyBusy(signOut),
     failure:
@@ -169,6 +200,7 @@ export function useAccount(
       firstCommandFailure(startSignIn, signOut),
     loading: account.isFetching,
     loadFailed: account.isError,
+    openExternal,
     retryAccount: () => {
       void account.refetch({ cancelRefetch: false });
     },
@@ -191,6 +223,8 @@ export function useAccount(
     signInPending,
     canStopWaiting: signInFlow !== null,
     stopWaiting,
+    markOfferSeen: (offer) => markOfferSeen.run(offer),
+    resetOffers: () => resetOffers.run(),
     signOut: () => {
       if (command.current) return;
       command.current = 'sign-out';

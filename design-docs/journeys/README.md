@@ -141,6 +141,8 @@ save → continue the conversation.
 Writing creates ordinary local content without stealing document focus. Discussion is
 not publication or authorization for unrelated changes. A proposed Markdown revision
 waits for individual or whole-set review in the document; accepting uses ordinary saving.
+A turn's direct Markdown changes can be reviewed in the document on request;
+undoing uses ordinary saving and keeping leaves the file as the turn wrote it.
 
 ### Failure and Recovery
 

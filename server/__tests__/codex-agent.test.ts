@@ -995,6 +995,67 @@ test('Codex Session handles steer timeout without ending an active turn', async 
   session.dispose();
 });
 
+test('Codex model compatibility recovery correlates metadata warnings with the rejected model', async (t) => {
+  const model = 'gpt-6.1-sol';
+  const rejection = JSON.stringify({ type: 'error', status: 400, error: {
+    type: 'invalid_request_error',
+    message: `The '${model}' model is not supported when using Codex with a ChatGPT account.`,
+  } });
+  const warning = (id: string) => `Model metadata for \`${id}\` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.`;
+  const cases = [
+    { name: 'terminal notification', warning: warning(model), terminal: 'error', update: true },
+    { name: 'failed completion', warning: warning(model), terminal: 'completed', update: true },
+    { name: 'start rejection', warning: warning(model), terminal: 'rpc', update: true },
+    { name: 'no metadata warning', terminal: 'error', update: false },
+    { name: 'another model warning', warning: warning('another-model'), terminal: 'error', update: false },
+    { name: 'service tier warning alone', warning: `Configured service tier \`priority\` is not advertised as supported for model \`${model}\` and will be omitted from requests.`, terminal: 'error', update: false },
+    { name: 'unrelated failure', warning: warning(model), terminal: 'error', message: 'sandbox service offline', update: false },
+  ];
+  for (const scenario of cases) {
+    await t.test(scenario.name, async (t) => {
+      const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-model-recovery-'));
+      const windowId = 'model-recovery-window';
+      await runWithWindowId(windowId, () => openProjectFolder(folder));
+      const ws = new FakeWebSocket();
+      const native = catalogProcess([{ id: model }], { threadModel: model,
+        ...(scenario.terminal === 'rpc' ? { selectedTurnError: rejection } : {}),
+      });
+      const session = new CodexSession(
+        ws as unknown as WebSocket, windowId,
+        undefined, undefined, undefined, scenario.terminal === 'rpc' ? model : undefined, undefined, undefined,
+        () => native.proc as unknown as ChildProcessWithoutNullStreams,
+      );
+      t.after(() => {
+        session.dispose();
+        runWithWindowId(windowId, () => clearCurrentFolder());
+        fs.rmSync(folder, { recursive: true, force: true });
+      });
+      session.begin();
+      await settle();
+      if (scenario.warning) native.proc.stdout.write(`${JSON.stringify({ method: 'warning', params: { message: scenario.warning } })}\n`);
+      await settle();
+      const events = () => ws.sent.map((item) => JSON.parse(item));
+      assert.deepEqual(events().filter((event) => event.t === 'error' || event.t === 'turn-end'), []);
+      if (scenario.warning) assert.ok(events().some((event) => event.t === 'notice' && event.message === scenario.warning));
+
+      ws.emit('message', JSON.stringify({ t: 'prompt', text: 'hello' }));
+      await settle();
+      const message = scenario.message ?? rejection;
+      if (scenario.terminal === 'error') emitCodexError(native.proc, 'turn-1', message, false);
+      if (scenario.terminal !== 'rpc') emitCodexTurnCompleted(native.proc, 'turn-1', 'failed', message);
+      await settle();
+
+      assert.deepEqual(events().filter((event) => event.t === 'error'), [{
+        t: 'error', message,
+        ...(scenario.update ? { failure: { kind: 'runtime-outdated' } } : {}),
+      }]);
+      assert.deepEqual(events().filter((event) => event.t === 'turn-end'), [{ t: 'turn-end', isError: true }]);
+      assert.equal(native.requests.filter((request) => request.method === 'turn/start').length, 1);
+      assert.equal(ws.readyState, 1);
+    });
+  }
+});
+
 test('Codex Session failed turn completed with message preserves it', async (t) => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'stashbase-codex-err-preserve-'));
   await runWithWindowId('err-preserve-window', () => openProjectFolder(folder));

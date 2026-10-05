@@ -89,6 +89,18 @@ recovery addresses the actual cause. An outdated runtime updates in place from
 the failed turn; the conversation reconnects on it and resends the refused
 request. A failed history load never becomes an empty conversation.
 
+When Codex reports missing metadata for a model and then refuses that same
+model, the failed turn offers **Update Codex** through this recovery flow.
+Neither a metadata warning alone nor an account/model refusal alone establishes
+an outdated runtime. Updating is a recovery attempt, not a promise of model
+access; the original error remains visible and another model can be selected.
+
+The model picker also offers the installed runtime's updater before any turn
+fails, so a reader missing a new model can update where they choose models.
+Updating keeps the draft, disables sending during the update, and reconnects
+to read the runtime's model list again. It sends no draft automatically.
+Update failures stay visible in the picker and leave the conversation intact.
+
 Reconnect to the same session and establish uncertain outcomes before continuing.
 Retry uses the retained submission after checking context; Reuse message prepares
 a new turn without truncating history or replacing another draft. Neither restores

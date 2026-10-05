@@ -19,6 +19,7 @@ import type {
   AgentRuntimeStage,
   AgentAllowance,
 } from '@/features/settings/domain/agent-catalog';
+import type { BillingPlan, BillingStatus } from '@/features/settings/domain/billing';
 import {
   request,
   requestOptions,
@@ -31,12 +32,18 @@ import {
   agentRuntimeFailureSchema,
   agentsResponseSchema,
   hostedAgentAllowanceSchema,
+  hostedBillingCheckoutRequestSchema,
+  hostedBillingPlansSchema,
+  hostedBillingRedirectSchema,
+  hostedBillingStatusSchema,
   type AgentBootstrapFailureWire,
   type AgentBootstrapStatusWire,
   type AgentRuntimeDebugStateWire,
   type AgentsResponseWire,
   type AgentWire,
   type HostedAgentAllowanceWire,
+  type HostedBillingPlanWire,
+  type HostedBillingStatusWire,
 } from '@/protocols/http/agent-runtime';
 
 /** The service names a step after the mechanism that runs it; the track names
@@ -140,6 +147,30 @@ function toAllowance(wire: HostedAgentAllowanceWire): AgentAllowance {
   };
 }
 
+/** The catalog's plan key and Stripe product metadata have no reader. */
+function toBillingPlan(wire: HostedBillingPlanWire): BillingPlan {
+  return {
+    amount: wire.amount,
+    available: wire.available,
+    currency: wire.currency,
+    interval: wire.interval,
+    name: wire.name,
+    priceId: wire.priceId,
+  };
+}
+
+function toBillingStatus(wire: HostedBillingStatusWire): BillingStatus {
+  return {
+    cancelAtPeriodEnd: wire.cancelAtPeriodEnd,
+    canManage: wire.canManage,
+    paidThrough: wire.paidThrough,
+    planName: wire.plan?.name ?? null,
+    status: wire.status,
+  };
+}
+
+const BILLING_INVALID = 'Billing returned an invalid response.';
+
 function runtime(
   path: string,
   signal: AbortSignal,
@@ -206,6 +237,38 @@ export function createAgentRuntimeAdapter(client: HttpClient): AgentRuntimePort 
           schema: hostedAgentAllowanceSchema,
         }),
       );
+    },
+    async getBillingPlans(signal) {
+      const answer = await request(client, {
+        ...runtime('/api/account/billing/plans', signal, BILLING_INVALID, { method: 'GET' }),
+        schema: hostedBillingPlansSchema,
+      });
+      return answer.plans.map(toBillingPlan);
+    },
+    async getBillingStatus(signal) {
+      return toBillingStatus(
+        await request(client, {
+          ...runtime('/api/account/billing/status', signal, BILLING_INVALID, { method: 'GET' }),
+          schema: hostedBillingStatusSchema,
+        }),
+      );
+    },
+    async startCheckout(priceId, signal) {
+      const answer = await request(client, {
+        ...runtime('/api/account/billing/checkout', signal, BILLING_INVALID, {
+          body: hostedBillingCheckoutRequestSchema.parse({ priceId }),
+          method: 'POST',
+        }),
+        schema: hostedBillingRedirectSchema,
+      });
+      return answer.url;
+    },
+    async openBillingPortal(signal) {
+      const answer = await request(client, {
+        ...runtime('/api/account/billing/portal', signal, BILLING_INVALID, { method: 'POST' }),
+        schema: hostedBillingRedirectSchema,
+      });
+      return answer.url;
     },
   };
 }

@@ -9,12 +9,9 @@
  */
 import type { ReactNode } from 'react';
 
-import type { WorkspaceNotice } from '@/app/composition/folder/use-workspace-notices';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { agentSurfaceProps } from '@/features/agent/public';
 import type { WorkspaceSessionController } from '@/features/workspace/public';
-
-import { WorkspaceNotices } from './workspace-notices';
 
 import '@/app/shell.css';
 
@@ -24,7 +21,8 @@ export interface WorkspaceComposition {
   /** True while the project has a folder open to show. */
   hasActiveFolder: boolean;
   /** Refusals raised by work the reader did not ask about directly. */
-  notices: readonly WorkspaceNotice[];
+  /** The notice strip, composed by the shell inside the account provider. */
+  notices: ReactNode;
   /** The Agent beside the open document. */
   panes: ReactNode;
   session: WorkspaceSessionController;
@@ -64,7 +62,7 @@ export function WorkspaceLayout({
 
       <SidebarInset className="min-h-0 overflow-hidden">
         {titlebar}
-        <WorkspaceNotices notices={notices} />
+        {notices}
 
         <section aria-label="Agent workspace" className="min-h-0 flex-1" {...agentSurfaceProps}>
           {started ? (

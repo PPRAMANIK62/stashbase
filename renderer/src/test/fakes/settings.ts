@@ -18,6 +18,7 @@ import type {
 import type { HostedAccount } from '@/features/settings/domain/account';
 import type { AgentAllowance, AgentRuntime } from '@/features/settings/domain/agent-catalog';
 import type { AppearancePreferences } from '@/features/settings/domain/appearance';
+import type { BillingPlan, BillingStatus } from '@/features/settings/domain/billing';
 import type { EmbedderState } from '@/features/settings/domain/embedder';
 import type { McpAccess, McpHttpAccess } from '@/features/settings/domain/mcp-access';
 import { DEFAULT_APPEARANCE_PREFERENCES } from '@/protocols/http/appearance';
@@ -27,6 +28,7 @@ export const SIGNED_OUT_ACCOUNT: HostedAccount = {
   avatarUrl: null,
   displayName: null,
   email: null,
+  offers: [],
   signedIn: false,
 };
 
@@ -35,6 +37,7 @@ export const SIGNED_IN_ACCOUNT: HostedAccount = {
   avatarUrl: null,
   displayName: 'Ada Lovelace',
   email: 'ada@example.com',
+  offers: [],
   signedIn: true,
 };
 
@@ -47,6 +50,14 @@ export function accountPort(
   return {
     avatar: vi.fn(async () => null),
     load: vi.fn(async () => account),
+    markOfferSeen: vi.fn(async (offer) => ({
+      ...account,
+      offers: account.offers.filter((item) => item !== offer),
+    })),
+    resetOffers: vi.fn(async (): Promise<HostedAccount> => ({
+      ...account,
+      offers: ['sign-in'],
+    })),
     signInStatus: vi.fn(async () => ({ state: 'pending' as const })),
     signOut: vi.fn(async () => SIGNED_OUT_ACCOUNT),
     startSignIn: vi.fn(async () => ({
@@ -91,6 +102,33 @@ export const IDLE_ALLOWANCE: AgentAllowance = {
   windowEndsAt: null,
 };
 
+const BILLING_PLANS: readonly BillingPlan[] = [
+  {
+    amount: 1000,
+    available: true,
+    currency: 'usd',
+    interval: 'month',
+    name: 'Plus',
+    priceId: 'price_plus',
+  },
+  {
+    amount: 2000,
+    available: true,
+    currency: 'usd',
+    interval: 'month',
+    name: 'Pro',
+    priceId: 'price_pro',
+  },
+];
+
+export const FREE_BILLING: BillingStatus = {
+  cancelAtPeriodEnd: false,
+  canManage: false,
+  paidThrough: null,
+  planName: null,
+  status: 'free',
+};
+
 /** One prepared, StashBase-owned runtime. A test names only what its case is
  *  about; everything else is a runtime that is simply ready. */
 export function agentRuntime(overrides: Partial<AgentRuntime> = {}): AgentRuntime {
@@ -111,8 +149,12 @@ export function agentRuntimePort(overrides: Partial<AgentRuntimePort> = {}): Age
   const response = { debug: null, runtimes: [agentRuntime()] };
   return {
     getAllowance: vi.fn(async () => IDLE_ALLOWANCE),
+    getBillingPlans: vi.fn(async () => BILLING_PLANS),
+    getBillingStatus: vi.fn(async () => FREE_BILLING),
     listAgents: vi.fn(async () => response),
     prepareAgent: vi.fn(async () => response),
+    openBillingPortal: vi.fn(async () => 'https://billing.stripe.com/p/session/test'),
+    startCheckout: vi.fn(async () => 'https://checkout.stripe.com/c/pay/cs_test'),
     updateDebug: vi.fn(async () => response),
     ...overrides,
   };

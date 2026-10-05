@@ -277,6 +277,7 @@ export function WorkspaceSidebar({
             <li className="mx-2 my-1 h-px bg-border" role="none" />
             <SidebarAccountRow
               agentRuntimeApi={dependencies.settings.agentRuntimeApi}
+              onOpenPlans={() => settings.openSettings('agents')}
               onOpenSettings={() => settings.openSettings()}
             />
           </SidebarMenu>

@@ -1,12 +1,16 @@
 import express from 'express';
-import { getHostedAccountSession } from '../app-config.ts';
+import { getHostedAccountSession, markAccountOfferSeen, resetAccountOffers } from '../app-config.ts';
 import {
   beginHostedOAuth,
   createFailedHostedOAuthFlow,
+  createHostedBillingPortal,
+  createHostedCheckout,
   exchangeHostedOAuthCode,
   failHostedOAuth,
   finishHostedOAuth,
   fetchHostedAgentAllowance,
+  fetchHostedBillingPlans,
+  fetchHostedBillingStatus,
   hostedAccountState,
   hostedAccountAvatar,
   hostedOAuthStatus,
@@ -26,6 +30,7 @@ import { stopOpenCodeRuntime } from '../opencode-runtime.ts';
 const log = logger('routes/account');
 const OAUTH_PROVIDERS = new Set<HostedOAuthProvider>(['google']);
 const OAUTH_PURPOSES = new Set<HostedOAuthPurpose>(['account']);
+const PRICE_ID = /^price_[A-Za-z0-9]+$/;
 const OAUTH_RETURN_TOKEN_HEADER = 'x-stashbase-oauth-return-token';
 
 interface AccountRouteOptions {
@@ -54,6 +59,27 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
     res.json(await hostedAccountState(refresh));
   });
 
+  app.post('/api/account/offers/:offer/seen', async (req, res) => {
+    const offer = req.params.offer;
+    if (offer !== 'sign-in') return res.status(400).json({ error: 'Unknown offer.' });
+    try {
+      markAccountOfferSeen(offer);
+      res.json(await hostedAccountState());
+    } catch (error: unknown) {
+      res.status(500).json({ error: errorMessage(error) });
+    }
+  });
+
+  // Developer tools use this to see first-launch banners again.
+  app.delete('/api/account/offers', async (_req, res) => {
+    try {
+      resetAccountOffers();
+      res.json(await hostedAccountState());
+    } catch (error: unknown) {
+      res.status(500).json({ error: errorMessage(error) });
+    }
+  });
+
   app.get('/api/account/avatar', async (_req, res) => {
     try {
       const avatar = await hostedAccountAvatar();
@@ -73,6 +99,45 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
     try {
       if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
       res.json(await fetchHostedAgentAllowance());
+    } catch (error: unknown) {
+      res.status(502).json({ error: errorMessage(error) });
+    }
+  });
+
+  app.get('/api/account/billing/plans', async (_req, res) => {
+    try {
+      res.json({ plans: await fetchHostedBillingPlans() });
+    } catch (error: unknown) {
+      res.status(502).json({ error: errorMessage(error) });
+    }
+  });
+
+  app.get('/api/account/billing/status', async (_req, res) => {
+    try {
+      if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
+      res.json(await fetchHostedBillingStatus());
+    } catch (error: unknown) {
+      res.status(502).json({ error: errorMessage(error) });
+    }
+  });
+
+  app.post('/api/account/billing/checkout', async (req, res) => {
+    const priceId = req.body?.priceId;
+    if (typeof priceId !== 'string' || !PRICE_ID.test(priceId)) {
+      return res.status(400).json({ error: 'Choose a plan to subscribe to.' });
+    }
+    try {
+      if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
+      res.json(await createHostedCheckout(priceId));
+    } catch (error: unknown) {
+      res.status(502).json({ error: errorMessage(error) });
+    }
+  });
+
+  app.post('/api/account/billing/portal', async (_req, res) => {
+    try {
+      if (!getHostedAccountSession()) return res.status(401).json({ error: 'Sign in first.' });
+      res.json(await createHostedBillingPortal());
     } catch (error: unknown) {
       res.status(502).json({ error: errorMessage(error) });
     }
@@ -162,6 +227,6 @@ export function mount(app: express.Express, { appReturnToken }: AccountRouteOpti
     stopAgentRuntime('stashbase');
     await stopOpenCodeRuntime();
     await signOutHostedAccount();
-    res.json({ signedIn: false });
+    res.json(await hostedAccountState());
   });
 }

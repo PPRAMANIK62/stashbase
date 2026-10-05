@@ -91,7 +91,7 @@ describe('account row', () => {
     LAZY_TEST_MS,
   );
 
-  it('names the signed-in person and offers the credits and sign-out from a menu', async () => {
+  it('names the signed-in person and offers credits, plans, and sign-out from a menu', async () => {
     const account = accountPort(SIGNED_IN_ACCOUNT);
     const base = appDependencies();
     render(
@@ -113,14 +113,49 @@ describe('account row', () => {
     expect(within(menu).getByText('ada@example.com')).not.toBeNull();
     expect(within(menu).getByText('Agent credits')).not.toBeNull();
     expect(await within(menu).findByText('100%')).not.toBeNull();
-    // Settings and sign-out are the only actions in the menu.
-    expect(within(menu).getAllByRole('menuitem')).toHaveLength(2);
+    expect(within(menu).getAllByRole('menuitem')).toHaveLength(3);
     expect(within(menu).getByRole('menuitem', { name: 'Settings' })).not.toBeNull();
     expect(within(menu).getByRole('menuitem', { name: 'Sign out' })).not.toBeNull();
 
-    await user.click(within(menu).getByRole('menuitem', { name: 'Sign out' }));
+    // Plans and billing lands on the subscription, beside the credits.
+    await user.click(within(menu).getByRole('menuitem', { name: 'Plans and billing' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Settings' }));
+    expect(await dialog.findByText(/Have a promotion code\?/)).not.toBeNull();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull());
+
+    await user.click(screen.getByRole('button', { name: 'Account: Ada Lovelace' }));
+    await user.click(
+      within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Sign out' }),
+    );
     await waitFor(() => expect(account.signOut).toHaveBeenCalledOnce());
     expect(await screen.findByRole('button', { name: 'Sign in' })).not.toBeNull();
+  });
+});
+
+describe('account banners', () => {
+  it('offers sign-in once while signed out and remembers Not now', async () => {
+    const account = accountPort({ ...SIGNED_OUT_ACCOUNT, offers: ['sign-in'] });
+    const base = appDependencies();
+    render(
+      <Providers>
+        <App
+          dependencies={appDependencies({ settings: { ...base.settings, accountApi: account } })}
+        />
+      </Providers>,
+    );
+    const user = userEvent.setup();
+
+    expect(
+      await screen.findByText('Sign in for free Default Agent credits, valid for 7 days.'),
+    ).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Not now' }));
+    await waitFor(() =>
+      expect(account.markOfferSeen).toHaveBeenCalledWith('sign-in', expect.anything()),
+    );
+    expect(
+      screen.queryByText('Sign in for free Default Agent credits, valid for 7 days.'),
+    ).toBeNull();
   });
 });
 

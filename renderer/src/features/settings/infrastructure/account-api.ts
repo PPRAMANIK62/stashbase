@@ -10,6 +10,7 @@
  */
 import type { AccountPort } from '@/features/settings/application/ports';
 import type {
+  AccountOffer,
   HostedAccount,
   HostedSignIn,
   HostedSignInStatus,
@@ -18,6 +19,7 @@ import { settingsRequest } from '@/features/settings/infrastructure/settings-req
 import { request } from '@/platform/http/classify';
 import type { HttpClient } from '@/platform/http/client';
 import {
+  hostedAccountOfferSchema,
   hostedAccountStateSchema,
   hostedOAuthStartRequestSchema,
   hostedOAuthStartResponseSchema,
@@ -32,6 +34,8 @@ function toAccount(wire: HostedAccountStateWire): HostedAccount {
     avatarUrl: wire.avatarUrl ?? null,
     displayName: wire.displayName ?? null,
     email: wire.email ?? null,
+    // An offer this build does not know is not shown.
+    offers: (wire.offers ?? []).filter((offer): offer is AccountOffer => offer === 'sign-in'),
     signedIn: wire.signedIn,
   };
 }
@@ -86,6 +90,28 @@ export function createAccountAdapter(
       return toAccount(
         await request(client, {
           ...call('/api/account', signal, 'Account details are unavailable.'),
+          schema: hostedAccountStateSchema,
+        }),
+      );
+    },
+    async markOfferSeen(offer, signal) {
+      return toAccount(
+        await request(client, {
+          ...call(
+            `/api/account/offers/${hostedAccountOfferSchema.parse(offer)}/seen`,
+            signal,
+            'The banner could not be dismissed.',
+          ),
+          method: 'POST',
+          schema: hostedAccountStateSchema,
+        }),
+      );
+    },
+    async resetOffers(signal) {
+      return toAccount(
+        await request(client, {
+          ...call('/api/account/offers', signal, 'Banners could not be reset.'),
+          method: 'DELETE',
           schema: hostedAccountStateSchema,
         }),
       );

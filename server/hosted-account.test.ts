@@ -118,6 +118,81 @@ function runIsolated(source: string) {
   }
 }
 
+test('the sign-in banner persists per installation: sign-in answers it, sign-out keeps it answered, reset restores it', () => {
+  const result = runIsolated(`
+    globalThis.fetch = async (url) => {
+      if (String(url).endsWith('/auth/v1/token?grant_type=pkce')) return Response.json({
+        access_token: 'access-1', refresh_token: 'refresh-1', expires_at: 4102444800,
+        user: { id: 'user-1', email: 'person@example.com' },
+      });
+      if (String(url).includes('/auth/v1/logout')) return new Response(null, { status: 204 });
+      throw new Error('unexpected URL ' + url);
+    };
+    const account = await import('./server/hosted-account.ts');
+    const config = await import('./server/app-config.ts');
+    const first = await account.hostedAccountState();
+    const started = account.beginHostedOAuth('google', 'http://127.0.0.1:8090');
+    await account.exchangeHostedOAuthCode(started.flowId, 'auth-code-1');
+    const signedIn = await account.hostedAccountState();
+    await account.signOutHostedAccount();
+    const signedOut = await account.hostedAccountState();
+    config.resetAccountOffers();
+    const reset = await account.hostedAccountState();
+    process.stdout.write(JSON.stringify({ first, signedIn, signedOut, reset }));
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.deepEqual(output.first, { signedIn: false, offers: ['sign-in'] });
+  assert.deepEqual(output.signedIn.offers, []);
+  assert.deepEqual(output.signedOut, { signedIn: false, offers: [] });
+  assert.deepEqual(output.reset.offers, ['sign-in']);
+});
+
+test('billing calls carry the desktop session, refresh once on 401, and open only Stripe pages', () => {
+  const result = runIsolated(`
+    const calls = [];
+    let checkoutUrl = 'https://checkout.stripe.com/c/pay/cs_test_1';
+    let statusAttempts = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      const target = String(url);
+      calls.push({ url: target, method: init.method ?? 'GET', body: init.body ? JSON.parse(String(init.body)) : null, authorization: new Headers(init.headers).get('authorization') });
+      if (target.endsWith('/auth/v1/token?grant_type=pkce')) return Response.json({
+        access_token: 'access-1', refresh_token: 'refresh-1', expires_at: 4102444800,
+        user: { id: 'user-1', email: 'person@example.com' },
+      });
+      if (target.endsWith('/auth/v1/token?grant_type=refresh_token')) return Response.json({
+        access_token: 'access-2', refresh_token: 'refresh-2', expires_at: 4102444800,
+        user: { id: 'user-1', email: 'person@example.com' },
+      });
+      if (target.endsWith('/v1/billing/status')) {
+        statusAttempts += 1;
+        if (statusAttempts === 1) return Response.json({ code: 'unauthorized', message: 'Expired.' }, { status: 401 });
+        return Response.json({ plan: null, status: 'free', paidThrough: null, periodEnd: null, cancelAtPeriodEnd: false, canManage: false });
+      }
+      if (target.endsWith('/v1/billing/checkout')) return Response.json({ url: checkoutUrl });
+      if (target.endsWith('/v1/billing/portal')) return Response.json({ url: 'https://evil.example/portal' });
+      throw new Error('unexpected URL ' + url);
+    };
+    const account = await import('./server/hosted-account.ts');
+    const started = account.beginHostedOAuth('google', 'http://127.0.0.1:8090');
+    await account.exchangeHostedOAuthCode(started.flowId, 'auth-code-1');
+    const status = await account.fetchHostedBillingStatus();
+    const checkout = await account.createHostedCheckout('price_plus');
+    const portal = await account.createHostedBillingPortal().then(() => 'opened', (error) => error.message);
+    checkoutUrl = 'http://checkout.stripe.com/c/pay/cs_test_2';
+    const insecure = await account.createHostedCheckout('price_plus').then(() => 'opened', (error) => error.message);
+    process.stdout.write(JSON.stringify({ calls: calls.filter((call) => call.url.includes('/v1/billing/')), status, checkout, portal, insecure }));
+  `);
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.deepEqual(output.calls.slice(0, 3).map((call: { authorization: string }) => call.authorization), ['Bearer access-1', 'Bearer access-2', 'Bearer access-2']);
+  assert.equal(output.status.status, 'free');
+  assert.deepEqual(output.calls[2].body, { priceId: 'price_plus' });
+  assert.equal(output.checkout.url, 'https://checkout.stripe.com/c/pay/cs_test_1');
+  assert.equal(output.portal, 'Billing returned an unexpected page.');
+  assert.equal(output.insecure, 'Billing returned an unexpected page.');
+});
+
 test('OAuth PKCE session persists locally and authenticates Agent allowance requests', () => {
   const result = runIsolated(`
     const calls = [];
@@ -343,7 +418,7 @@ test('sign out clears display profile data with the local session', () => {
     process.stdout.write(JSON.stringify({ session: config.getHostedAccountSession() ?? null, state: await account.hostedAccountState() }));
   `);
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), { session: null, state: { signedIn: false } });
+  assert.deepEqual(JSON.parse(result.stdout), { session: null, state: { signedIn: false, offers: ['sign-in'] } });
 });
 
 test('concurrent hosted token refreshes share one request', () => {

@@ -3,12 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { DocumentRevisionProposal, DocumentTabsRuntime } from '@/features/documents/public';
 import { createDocumentTabsRuntime } from '@/features/documents/public';
+import { DocumentTurnChangesError } from '@/features/documents/test-support';
 import { createWorkspaceRuntime } from '@/features/workspace/test-support';
 import {
   documentTabsRuntimeOptions,
   revisionsApi,
   sourceApi,
   textSource,
+  turnChangesApi,
 } from '@/test/fakes/documents';
 
 import { useRevisionPickup } from './use-revision-pickup';
@@ -71,7 +73,11 @@ function createDocuments() {
   return documents;
 }
 
-function mountPickup(proposals: readonly DocumentRevisionProposal[], unresolved: string[] = []) {
+function mountPickup(
+  proposals: readonly DocumentRevisionProposal[],
+  unresolved: string[] = [],
+  turns = turnChangesApi(),
+) {
   const documents = createDocuments();
   const workspace = createWorkspace();
   const pending = [...proposals];
@@ -80,7 +86,13 @@ function mountPickup(proposals: readonly DocumentRevisionProposal[], unresolved:
     drain: vi.fn(async () => ({ proposals: pending.splice(0), unresolved: unnamed.splice(0) })),
   });
   const view = renderHook(() =>
-    useRevisionPickup({ api, documents, sourceApi: currentSource, workspace }),
+    useRevisionPickup({
+      api,
+      documents,
+      sourceApi: currentSource,
+      turnChangesApi: turns,
+      workspace,
+    }),
   );
   return { ...view, documents, workspace };
 }
@@ -153,7 +165,13 @@ describe('picking up parked revisions', () => {
     });
     const { rerender, result } = renderHook(
       ({ documents }: { documents: DocumentTabsRuntime }) =>
-        useRevisionPickup({ api, documents, sourceApi: currentSource, workspace }),
+        useRevisionPickup({
+          api,
+          documents,
+          sourceApi: currentSource,
+          turnChangesApi: turnChangesApi(),
+          workspace,
+        }),
       { initialProps: { documents: first } },
     );
     await waitFor(() => expect(result.current.failures).toHaveLength(1));
@@ -170,8 +188,58 @@ describe('picking up parked revisions', () => {
   it('never drains while there is nowhere to put the result', () => {
     const api = revisionsApi();
     renderHook(() =>
-      useRevisionPickup({ api, documents: null, sourceApi: currentSource, workspace: null }),
+      useRevisionPickup({
+        api,
+        documents: null,
+        sourceApi: currentSource,
+        turnChangesApi: turnChangesApi(),
+        workspace: null,
+      }),
     );
     expect(api.drain).not.toHaveBeenCalled();
+  });
+});
+
+describe('reviewing what an Agent turn changed', () => {
+  const source = { folderPath, path: 'plan.md' };
+
+  it('opens the document as a kept tab and starts the reversed review', async () => {
+    const turns = turnChangesApi({
+      load: vi.fn(async (request) => ({
+        afterVersion: BASE_VERSION,
+        before: '# Earlier plan\n',
+        source: request.source,
+        turnId: request.turnId,
+      })),
+    });
+    const { documents, result } = mountPickup([], [], turns);
+
+    result.current.reviewTurnChange({ source, turnId: 'turn-1' });
+
+    await waitFor(() => expect(reviewOn(documents, 'plan.md')?.kind).toBe('starting'));
+    const revision = reviewOn(documents, 'plan.md');
+    expect(revision?.kind === 'idle' ? null : revision?.review.origin).toEqual({
+      kind: 'turn',
+      turnId: 'turn-1',
+    });
+    expect(documents.store.getState().tabs.map((tab) => tab.preview)).toEqual([false]);
+    expect(result.current.failures).toEqual([]);
+  });
+
+  it('says so on the notice strip when the turn has expired', async () => {
+    const turns = turnChangesApi({
+      load: vi.fn(async () => {
+        throw new DocumentTurnChangesError('expired', 'gone');
+      }),
+    });
+    const { result } = mountPickup([], [], turns);
+
+    result.current.reviewTurnChange({ source, turnId: 'turn-1' });
+
+    await waitFor(() =>
+      expect(result.current.failures).toEqual([
+        'The changes that turn made to plan.md are no longer available to review.',
+      ]),
+    );
   });
 });

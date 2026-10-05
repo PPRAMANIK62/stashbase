@@ -8,6 +8,7 @@ import type { AgentContextItem } from '@/features/agent/domain/context';
 import type { AgentModel, AgentSkill } from '@/features/agent/domain/runtime-catalog';
 import type {
   AgentTranscriptBlock,
+  AgentTurnChangedFile,
   AgentTurnFailureReason,
 } from '@/features/agent/domain/session-transcript';
 import type { AgentId } from '@/shared/domain/agent-id';
@@ -184,6 +185,13 @@ type AgentSessionStateEvent =
       after: string;
       additions: number;
       deletions: number;
+    }
+  | {
+      /** The Markdown files a finished turn left different on disk. It can
+       *  land after the next turn has started. */
+      kind: 'turn-changed';
+      turnId: string;
+      files: readonly AgentTurnChangedFile[];
     }
   | {
       kind: 'permission-requested';

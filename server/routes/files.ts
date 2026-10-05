@@ -75,8 +75,7 @@ async function sendUnavailableExplicitFolder(
 }
 
 /** Run a non-mutating handler against an explicit `?folder=` member folder
- *  when the request carries one; otherwise against the window's own folder.
- *  Same membership rule as the `/api/files?folder=` listing above. */
+ *  when the request carries one; otherwise against the window's own folder. */
 async function runWithExplicitReadFolder(
   req: express.Request,
   res: express.Response,
@@ -175,43 +174,20 @@ export function mount(
   adapters: FileRouteAdapters = defaultFileRouteAdapters,
 ): void {
   // ----- list -----
-  // Optional `?folder=` lists an explicit project-member folder for Agent
-  // mention/attachment validation. It intentionally keeps the default-safe
-  // listing regardless of the Workbench preference: showing hidden rows never
-  // widens Agent discovery. Membership is still validated here.
+  // Workbench visibility applies to both explicit and window-scoped listings.
+  // Agent/MCP discovery uses the separate project-directory surface.
   app.get('/api/files', async (req, res) => {
     try {
-      // Application-level Workbench visibility applies only to the current
-      // window listing. Explicit member listings are Agent-facing.
-      const showHidden = getWorkspacePreferences().showHiddenFiles;
-      const rawFolder = typeof req.query.folder === 'string' ? req.query.folder : '';
-      if (rawFolder) {
-        const member = filesystemPath.isAbsolute(rawFolder)
-          ? await exactRegisteredFolderRootAsync(rawFolder)
-          : null;
-        if (!member) {
-          await sendUnavailableExplicitFolder(res, rawFolder);
-          return;
-        }
-        const result = await runWithFolderRoot(member, async () => ({
-          folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),
-          files: await listFilesAndFoldersAsync(),
-        }));
+      await runWithExplicitReadFolder(req, res, async () => {
+        const showHidden = getWorkspacePreferences().showHiddenFiles;
+        const listing = await listFilesAndFoldersAsync({ showHidden });
         res.json(workspaceFilesSchema.parse({
-          folder: result.folder,
-          files: result.files.files,
-          folders: result.files.folders,
-          showHiddenFiles: false,
+          folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),
+          files: listing.files,
+          folders: listing.folders,
+          showHiddenFiles: showHidden,
         }));
-        return;
-      }
-      const listing = await listFilesAndFoldersAsync({ showHidden });
-      res.json(workspaceFilesSchema.parse({
-        folder: getCurrentFolderLabel() ?? getCurrentFolderBasename(),
-        files: listing.files,
-        folders: listing.folders,
-        showHiddenFiles: showHidden,
-      }));
+      });
     } catch (err: unknown) {
       sendError(res, err);
     }

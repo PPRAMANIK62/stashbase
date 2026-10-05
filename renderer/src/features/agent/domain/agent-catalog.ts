@@ -45,6 +45,8 @@ export interface Agent {
   /** Whether the one thing between it and ready is the user signing in. */
   readonly needsSignIn: boolean;
   readonly preparing?: boolean;
+  /** Whether the installed runtime exposes an in-place updater. */
+  readonly updatable?: boolean;
   readonly setupFailure?: string;
   readonly abilities: AgentAbilities;
   /** The catalog the service remembers for this runtime, so a fresh chat can

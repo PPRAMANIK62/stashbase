@@ -15,6 +15,7 @@ export { createAppearanceAdapter } from './infrastructure/appearance-api';
 export { createSystemTextAdapter } from './infrastructure/system-text';
 export { useSearchKeyConfigured } from './hooks/use-embedder';
 export { AccountProvider, useAccountView } from './hooks/account-context';
+export { useAccountOffers } from './hooks/use-account-offers';
 export { SidebarAccountRow } from './ui/account/sidebar-account-row';
 export { DeveloperTools, Settings } from './ui/settings';
 export type { SettingsSectionId, SettingsTarget } from './ui/settings-types';

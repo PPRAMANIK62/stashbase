@@ -4,7 +4,9 @@ import { FOCUS_RING_SEAM } from '@/lib/focus-ring';
 import { cn } from '@/lib/utils';
 import { clamp } from '@/shared/utils/clamp';
 
-const KEY_STEP_PX = 16;
+/** How far one arrow-key press moves a seam, shared by every resizable seam
+ *  so the keyboard steps the same distance wherever it resizes. */
+export const KEY_STEP_PX = 16;
 
 interface SplitHandleProps {
   /** Accessible name, e.g. "Resize Agent pane". */

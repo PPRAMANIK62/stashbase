@@ -15,6 +15,7 @@ import { sessionPersistence } from '@/test/fakes/workspace';
 import { createTestQueryClient, queryWrapper } from '@/test/query';
 
 import { WorkspaceLayout, type WorkspaceComposition } from './workspace-layout';
+import { WorkspaceNotices } from './workspace-notices';
 
 afterEach(cleanup);
 
@@ -48,7 +49,7 @@ function mount(overrides: Partial<WorkspaceComposition> = {}) {
   const composition: WorkspaceComposition = {
     dialogs: <div data-testid="dialogs" />,
     hasActiveFolder: true,
-    notices: [],
+    notices: null,
     panes: <div data-testid="panes" />,
     session: active,
     sidebar: <div data-testid="sidebar" />,
@@ -113,7 +114,7 @@ describe('workspace layout', () => {
         tone: 'capability',
       },
     ];
-    mount({ notices });
+    mount({ notices: <WorkspaceNotices notices={notices} /> });
 
     // What the reader can correct interrupts; a capability that could not
     // answer is said quietly.

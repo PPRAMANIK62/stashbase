@@ -50,6 +50,7 @@ import { useTreeFollowsDocument } from './composition/folder/use-tree-follows-do
 import { useGalleryShop } from './composition/gallery/use-gallery-shop';
 import { WorkspaceDialogs } from './composition/layout/workspace-dialogs';
 import { WorkspaceLayout } from './composition/layout/workspace-layout';
+import { WorkspaceNoticeStrip } from './composition/layout/workspace-notice-strip';
 import { WorkspacePanes } from './composition/layout/workspace-panes';
 import { WorkspaceSidebar } from './composition/layout/workspace-sidebar';
 import { WorkspaceTitlebar } from './composition/layout/workspace-titlebar';
@@ -146,6 +147,7 @@ function WorkspaceWindow() {
     api: docs.adapters.revisions,
     documents,
     sourceApi: docs.adapters.source,
+    turnChangesApi: docs.adapters.turnChanges,
     workspace,
   });
 
@@ -262,7 +264,7 @@ function WorkspaceWindow() {
           </>
         }
         hasActiveFolder={activeFolder !== null}
-        notices={chrome.notices}
+        notices={<WorkspaceNoticeStrip notices={chrome.notices} />}
         panes={
           <WorkspacePanes
             chatPaneOpen={chatPaneOpen}
@@ -274,6 +276,7 @@ function WorkspaceWindow() {
             onCreateDraft={newDraft}
             onPrepare={preparation.prepare}
             onReprocess={refresh.reprocess}
+            onReviewTurnChange={revisions.reviewTurnChange}
             onShowDocuments={() => chrome.navigator.selectMode('documents')}
             revisions={openRevisions}
             session={session}

@@ -5,12 +5,12 @@
  * account is worth (the bundled Agent's free credits) is stated in
  * Settings → Agents rather than inside this row. Signed in the row and its
  * menu wear the same initials disc — the theme's ink around the name's first
- * letters, never a provider picture — and the menu holds the credits,
- * Settings, and sign-out. The same sign-in the Agents section runs, through
+ * letters, never a provider picture — and the menu holds the credits, Plans
+ * and billing (the subscription in Settings → Agents), Settings, and sign-out. The same sign-in the Agents section runs, through
  * the same port, so the two entries can never disagree.
  */
 import { useQuery } from '@tanstack/react-query';
-import { Gauge, LogOut, Settings as SettingsIcon, UserRound, X } from 'lucide-react';
+import { CreditCard, Gauge, LogOut, Settings as SettingsIcon, UserRound, X } from 'lucide-react';
 
 import {
   DropdownContent,
@@ -41,6 +41,8 @@ export interface SidebarAccountRowProps {
   agentRuntimeApi: AgentRuntimePort;
   /** Opens Settings — the menu is its sidebar home, not a standing row. */
   onOpenSettings(): void;
+  /** Opens the subscription, which lives with the credits in Settings → Agents. */
+  onOpenPlans(): void;
 }
 
 /** The menu hangs off the account row and is read as the bottom of the left
@@ -50,7 +52,11 @@ export interface SidebarAccountRowProps {
  *  row's label sat 6px left of the sidebar label directly beneath it. */
 const SIDEBAR_ROW = 'gap-2 px-2';
 
-export function SidebarAccountRow({ agentRuntimeApi, onOpenSettings }: SidebarAccountRowProps) {
+export function SidebarAccountRow({
+  agentRuntimeApi,
+  onOpenPlans,
+  onOpenSettings,
+}: SidebarAccountRowProps) {
   const account = useAccountView();
   // The menu inherits the sidebar's compact step through the portal, so its
   // glyphs are the column's own 14px. Only the icon size comes from the step:
@@ -160,6 +166,12 @@ export function SidebarAccountRow({ agentRuntimeApi, onOpenSettings }: SidebarAc
             </span>
             {percent !== null && <ProgressBar className="mt-1.5" value={percent} />}
           </DropdownLabel>
+          <MenuItem
+            className={SIDEBAR_ROW}
+            icon={CreditCard}
+            label="Plans and billing"
+            onSelect={onOpenPlans}
+          />
           <DropdownSeparator />
           <MenuItem
             className={SIDEBAR_ROW}

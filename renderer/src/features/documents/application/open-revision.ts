@@ -9,10 +9,15 @@
  */
 import type { DocumentEditorState } from '@/features/documents/domain/document';
 import { splitLeadingYamlFrontmatter } from '@/features/documents/domain/markdown';
-import type { RevisionRefusal } from '@/features/documents/domain/revision';
+import type { RevisionOrigin, RevisionRefusal } from '@/features/documents/domain/revision';
 
 import type { DocumentRuntime } from './document-runtime';
-import type { DocumentRevisionProposal, DocumentSourcePort } from './ports';
+import {
+  DocumentTurnChangesError,
+  type DocumentSourcePort,
+  type DocumentTurnChange,
+  type DocumentTurnChangesPort,
+} from './ports';
 
 /** Long enough for a large document to finish its first read over a busy
  *  local server, short enough that a tab which will never load stops holding
@@ -22,6 +27,10 @@ const EDITOR_WAIT_MS = 20_000;
 /** Why a drained proposal never became a review. Everything here is said to
  *  the reader: the host has already forgotten the proposal. */
 export type RevisionPickupFailure = RevisionRefusal | 'not-opened' | 'not-verified';
+
+/** Why a turn the reader asked to review never became a review. `expired` is
+ *  the host no longer holding the text from before the turn. */
+export type TurnChangeReviewFailure = RevisionPickupFailure | 'expired';
 
 /** The document's editor once it has text, or null when the runtime was
  *  disposed or the wait ran out first. */
@@ -52,11 +61,23 @@ function waitForEditor(runtime: DocumentRuntime): Promise<DocumentEditorState | 
   });
 }
 
-/** Opens `proposal` as a review on `runtime`. Answers why it could not be
- *  opened, or null once the review is up. */
+/** The text a review offers and what it was computed against. A parked
+ *  proposal and a turn's earlier text both reduce to this. */
+interface ReviewOffer {
+  readonly baseVersion: string;
+  /** The whole file, frontmatter included. */
+  readonly content: string;
+  readonly id: string;
+  readonly origin: RevisionOrigin;
+}
+
+/** Opens `offer` as a review on `runtime` once its editor exists and the file
+ *  on disk is still the version the offer was computed against. A parked
+ *  proposal is already one. Answers why it could not be opened, or null once
+ *  the review is up. */
 export async function openDocumentRevision(
   runtime: DocumentRuntime,
-  proposal: DocumentRevisionProposal,
+  offer: ReviewOffer,
   sourceApi: DocumentSourcePort,
 ): Promise<RevisionPickupFailure | null> {
   const editor = await waitForEditor(runtime);
@@ -71,27 +92,58 @@ export async function openDocumentRevision(
   }
   let result: RevisionPickupFailure | null = 'not-opened';
   const accepted = runtime.accept(scope, () => {
-    if (currentVersion !== proposal.baseVersion) {
+    if (currentVersion !== offer.baseVersion) {
       result = 'stale-version';
       return;
     }
     const current = splitLeadingYamlFrontmatter(
       runtime.store.getState().editor?.value ?? editor.value,
     );
-    const proposed = splitLeadingYamlFrontmatter(proposal.content);
+    const proposed = splitLeadingYamlFrontmatter(offer.content);
     if (current.source !== proposed.source) {
       result = 'frontmatter-changed';
       return;
     }
     result = runtime.startRevision(
       {
-        baseVersion: proposal.baseVersion,
-        id: proposal.id,
-        origin: proposal.origin,
+        baseVersion: offer.baseVersion,
+        id: offer.id,
+        origin: offer.origin,
         proposal: proposed.body,
       },
       current.body,
     );
   });
   return accepted ? result : 'not-opened';
+}
+
+/** Opens what Agent turn `turnId` changed in `runtime`'s document as a
+ *  reversed review: the editor keeps the turn's text and the offer is the text
+ *  from before it, so the version gate means the file has not changed since
+ *  the turn ended. Answers why it could not be opened, or null once the review
+ *  is up. */
+export async function openTurnChangeReview(
+  runtime: DocumentRuntime,
+  turnId: string,
+  ports: { source: DocumentSourcePort; turnChanges: DocumentTurnChangesPort },
+): Promise<TurnChangeReviewFailure | null> {
+  let change: DocumentTurnChange;
+  try {
+    change = await ports.turnChanges.load({ source: runtime.scope.source, turnId }, runtime.signal);
+  } catch (error) {
+    if (runtime.signal.aborted) return 'not-opened';
+    return error instanceof DocumentTurnChangesError && error.kind === 'expired'
+      ? 'expired'
+      : 'not-verified';
+  }
+  return openDocumentRevision(
+    runtime,
+    {
+      baseVersion: change.afterVersion,
+      content: change.before,
+      id: `turn:${turnId}:${change.source.path}`,
+      origin: { kind: 'turn', turnId },
+    },
+    ports.source,
+  );
 }

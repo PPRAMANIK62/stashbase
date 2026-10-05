@@ -47,7 +47,7 @@ Settings owns lasting preferences and connection configuration:
   Custom colors, custom CSS, imported editor themes, and per-project
   appearance are out of scope.
 - **Agents:** group account, credit balance/refill, and connection state under
-  Default, with a Plans and billing entry that opens the website; manage Codex and Claude individually. An installed runtime shows its
+  Default, with the account's subscription and the plans it can buy; manage Codex and Claude individually. An installed runtime shows its
   version; a runtime whose own updater StashBase can run offers Update, which
   runs that updater in place and never replaces a provider-owned installation
   with a second copy. A runtime that reports a model its
@@ -117,11 +117,32 @@ simulators use a separate development-only entry. Neither belongs in normal Sett
 
 ## Default Agent Subscriptions
 
+A window that is signed out shows a one-time banner in the notice strip, with or
+without a folder open: "Sign in for free Default Agent credits, valid for 7
+days." with Sign in and Not now. A completed sign-in or Not now answers it for
+the installation; signing out does not bring it back. The sidebar account row
+remains the account's only home, and the banner starts the same sign-in.
+
 Plus and Pro add hosted Default Agent capacity; local files, writing tools,
-Claude/Codex access, and BYOK search remain independent. The website shows the
-signed-in billing account. A desktop user uses that same account in the browser;
-no desktop session token travels in a link. Returning to Settings refreshes the
-existing allowance query; opening billing never sends a draft.
+Claude/Codex access, and BYOK search remain independent. Settings -> Agents shows
+the signed-in account's plan, beside its credits; Plans and billing in the
+sidebar account menu opens it there. A Free account sees each tier with its price and
+Subscribe; a subscribed account sees its plan, paid-through or end date, and
+Manage. Subscribe asks the hosted API, as the desktop account, for a
+Stripe Checkout page and opens it in the system browser, so paying never requires
+a website sign-in. Manage opens the Stripe Customer Portal the same
+way. The desktop host holds the session token and verifies that the returned page
+is Stripe-hosted; the renderer receives only that page, and no desktop session
+token travels in a link. Promotion codes are entered on the Checkout page, which
+shows the discount and renewal terms. Opening billing never sends a draft.
+
+After Checkout opens, Settings shows that it is waiting for payment and polls
+subscription rights, also re-reading them when the window regains focus. It stops
+polling after two minutes and keeps the purchase buttons hidden until the reader
+refreshes or stops waiting. Confirmed rights refresh the credit balance. The
+browser returns to the website's pricing page, which points a reader without a
+browser session back to the app. The website remains an independent purchase
+path for a browser-signed-in account.
 
 Stripe owns prices, promotion codes, and payment management. The hosted API owns
 subscription rights and usage. A discounted subscription receives its full tier

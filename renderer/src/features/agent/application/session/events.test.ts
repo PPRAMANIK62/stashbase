@@ -174,6 +174,24 @@ describe('applyAgentSessionEvent', () => {
     expect(test.context.notifyFilesChanged).toHaveBeenCalledWith(['notes.md']);
   });
 
+  it('reloads every file the host saw a turn change, including ones a command wrote', () => {
+    const test = harness(live);
+
+    test.apply({
+      files: [
+        { additions: 1, change: 'edited', deletions: 0, path: '/project/notes.md' },
+        { additions: 0, change: 'deleted', deletions: 3, path: '/project/old.md' },
+      ],
+      kind: 'turn-changed',
+      turnId: 't1',
+    });
+
+    expect(test.context.notifyFilesChanged).toHaveBeenCalledWith([
+      '/project/notes.md',
+      '/project/old.md',
+    ]);
+  });
+
   it('reports that the folder may have moved once a turn that ran a command settles', () => {
     const test = harness({ connection: { kind: 'live', turn: { promptBlockId: 'u1' } } });
     test.context.transition({ at: 1, context: [], id: 'u1', kind: 'submit-prompt', text: 'Go' });

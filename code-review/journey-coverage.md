@@ -290,6 +290,10 @@ Inline review: `renderer/src/features/documents/domain/revision.ts`,
 `renderer/src/features/documents/hooks/use-revision-proposals.ts`, and
 `renderer/src/features/documents/ui/markdown/revision-adapter.ts` over a patched
 `@milkdown/plugin-diff` (`patches/`).
+Turn review: `renderer/src/features/documents/application/open-revision.ts`
+(`openTurnChangeReview`), `infrastructure/turn-change-api.ts`, and the reversed
+labels and colours in `ui/markdown/revision-adapter.ts`, `review-bar.tsx` and
+`document.css`; host `server/turn-changes.ts` and `server/routes/turn-changes.ts`.
 Ask Agent on a selection: `renderer/src/features/documents/ui/markdown/selection-markdown.ts`
 and `selection-toolbar.ts`, bound in `renderer/src/app/shell.tsx`, which saves the
 documents, shows the chat pane, and hands the passage to the Agent workspace.
@@ -310,6 +314,11 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   `pnpm test:electron`, and `pnpm test:electron:smoke` cover format capabilities, source identity,
   hidden-file policy, tab/history behavior, save barriers, shared version
   authority, conflicts, and failure handling.
+  `server/__tests__/file-listing.test.ts` exercises root and nested project
+  configuration/skills with hidden-file visibility both off and on, sync/async
+  listing parity, protected/derived exclusions, and unchanged index eligibility.
+  `server/routes/files.test.ts` verifies preference changes through folder-explicit
+  workspace requests, including project isolation and refusal of unregistered roots.
   `pnpm test:config` covers strict durable preferences.
   `reading-text-menu.test.tsx`, the Appearance domain/infrastructure/surface
   suites, `shared/protocols/http/appearance.test.ts`, and
@@ -332,6 +341,18 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   `selection-toolbar.test.ts` runs the Heading menu against a real Milkdown
   editor, covering toolbar order, the checked block kind, paragraph/heading
   conversion, menu dismissal, and Ask Agent as the last item.
+- **Project configuration visibility runtime pass (2026-09-30):** the built
+  macOS source app used isolated configuration and a supplied folder-picker result.
+  All five recognized configuration directories appeared with hidden files off.
+  Toggling off → on → off showed and hid an unrecognized dot-directory, retained
+  the configuration directories, kept caches unexpandable, and hid VCS/product state.
+  Files opened a writing skill under the fixture's `.agents` directory; Quick Open
+  found and opened a `.claude` skill. The expanded tree and document were reviewed by eye.
+  A release-candidate rerun on 2026-10-04 after integrating current main confirmed
+  all five default-visible directories and opened the `.agents` writing skill
+  through the built desktop tree; its rendered document was reviewed by eye.
+  Telemetry was unavailable in the isolated test configuration.
+  These passes did not exercise a native picker or a packaged, signed application.
 - **Reading typography runtime pass (2026-09-26):** the built macOS source app,
   with isolated configuration and telemetry disabled, opened this repository's
   README in Documents. The document reading menu changed Serif to Sans and the
@@ -413,15 +434,44 @@ Host/services: `server/file-save.ts`, `server/text-file-transaction.ts`,
   while such a draft is open, so quitting needs the reader to restore or discard first
   and then repeat the quit; that refusal is proven at the renderer layer only, and no
   packaged build has been driven through this journey.
+- **Focus-scoped current line (2026-10-01):** the code editor (plain text and JSON)
+  and Markdown code blocks paint the current line only while their editor has
+  focus, so a document the caret has left no longer shows a second marked line.
+  A temporary harness in Electron's Chromium mounted both editors with the
+  shipped theme and stylesheet and read the computed background: before the
+  change it stayed painted after focus moved away; after it, focused lines keep
+  the hover color and unfocused lines are transparent. happy-dom does not apply
+  CodeMirror's focus class or theme, so no unit test owns this.
+  A built-app Electron pass (2026-10-02) opened plain-text, JSON, and Markdown
+  files in an isolated project/profile. Real mouse input focused and blurred
+  the source editors via the file tree, then moved from a Markdown code block
+  to prose and between two code blocks. Computed line and gutter backgrounds
+  were the hover color only in the focused editor and transparent otherwise;
+  refocusing restored the highlight. The light composition was inspected by eye.
 - **Known issues — source/viewers:** Markdown relative images lack folder-scoped resolution/upload/lightbox; heading
   ids are assigned by order without identity cross-check. PDF placeholder/observer
-  counts are unbounded. Active-line paint is not focus-scoped.
+  counts are unbounded.
   Markdown retention remains a format-name exception outside the registry.
 - **Known issues — work continuity:** sandboxed HTML owns its internal scroll
-  position; host reading-position capture does not cross that boundary. Sidebar
-  resizing is pointer-only. Native close tracks document
+  position; host reading-position capture does not cross that boundary. Native
+  close tracks document
   load rather than separate save-handler readiness, with failure/timeout keeping
   the window open. Recovery is a React remount, not a native reload protocol.
+- **Keyboard sidebar resizing (2026-10-01):** the sidebar's edge rail is a
+  focusable separator reporting its width and bounds; arrow keys step it 16 px,
+  the same step as the Agent pane seam, within 272–360 px, and never collapse it.
+  The rail now renders inside the sidebar's landmark, measured at the same
+  position in the sidebar, floating, and inset variants.
+  `sidebar.test.tsx` covers the bounds, clamping, the reported width, the
+  width-change callback, and shrinking from the provider's 288 px default.
+  A harness in Electron's Chromium with the shipped stylesheet
+  pressed real Tab and arrow keys: focus reached the rail, the panel and saved
+  width moved 300 → 332 → 272, the edge hairline took the focus colour, and the
+  rail's tooltip stood beside it and closed when focus left.
+  A built-app Electron pass (2026-10-02) opened an empty project with an
+  isolated profile, reached the rail with real Tab input, resized from 288 px
+  with arrow keys, held both bounds without collapsing, and verified a 328 px
+  rendered width, native session-file persistence, and restoration after reload.
 - **Documents implementation (2026-09-15):** focused regressions cover explicit
   merge completion with no marker autosave, version-checked Keep-my-version,
   hidden-tab autosave, retained CodeMirror undo, New tab close routing, preview
@@ -553,11 +603,32 @@ Host/services: `server/retrieval/index.ts`, `server/indexer.mfs.ts`, `python/sta
 
 ## J06: Agent
 
-**Default Agent billing:** Settings -> Agents exposes Plans and billing through
-`settings/hooks/use-account.ts` and `settings/ui/agents/agents-panel.tsx`. The
-website and hosted API own Checkout, subscription state, and paid allowance
-ceilings; the existing allowance query refreshes the desktop. The panel test
-checks the fixed external destination. Hosted API integration tests cover
+**Default Agent billing:** Settings -> Agents shows the subscription, reached also
+from the sidebar account menu, through
+`settings/hooks/use-billing.ts` and `settings/ui/agents/subscription-rows.tsx`.
+`server/hosted-account.ts` calls the hosted billing plans, status, Checkout, and
+Portal endpoints with the desktop session and admits only Stripe-hosted pages;
+`server/routes/account.ts` exposes them to the renderer. The hosted API owns
+Checkout, subscription state, and paid allowance ceilings; the website remains a
+separate purchase path. A host test covers the bearer token, one refresh after
+401, and refusal of a non-Stripe or non-HTTPS page. Panel tests cover Checkout
+for a chosen plan, waiting until the status read confirms paid rights, the
+following allowance refresh, Portal for a subscriber, and a refused Checkout that
+keeps the plans and reads rights again. A sidebar test opens it from the account
+menu's Plans and billing. The one-time sign-in banner is
+`settings/hooks/use-account-offers.ts`, appended to the notice strip by
+`app/composition/layout/workspace-notice-strip.tsx`; the host stores answered
+offers in `server/app-config.ts`. A host test covers sign-in answering it,
+sign-out keeping it answered, and the Developer tools reset; an App test covers
+Not now. A macOS source-runtime pass on 2026-10-05 used the built renderer and
+an isolated empty configuration: the banner appeared without a project, Not now
+removed it, and it stayed dismissed after a clean quit and relaunch. The signed-out
+Agents panel remained usable. The built subscription and turn-change Stories were
+also visually inspected. The subscription fixture entered its slow-confirmation
+state after the two-minute wait, kept Subscribe hidden, resumed waiting with
+Refresh, and restored the plans with Stop waiting. A website test covers the
+app-return hint without a browser session. Real Checkout from the packaged app
+and promotion entry at Checkout from that path remain unverified. Hosted API integration tests cover
 account isolation, idempotent Checkout recovery, paid-through expiry, tier changes
 without usage resets, and settlement after cancellation. The built Settings Story
 was visually inspected with a signed-in fixture; built website browser checks
@@ -658,11 +729,40 @@ descriptor and schema fields, the hook's reconnect-and-resend and refused-update
 paths, the transcript's action swap, and the Settings action. Codex offers the
 same Settings update through its own update subcommand, verified on an isolated
 npm-prefix copy of 0.153.4 that moved to 0.155.0; its catalog comes from the
-installed app-server, so an old Codex hides newer models rather than refusing
-them, and the chat-side update action never triggers for it. A Codex model
+installed app-server. An old catalog can hide newer models, but the native
+configuration can still name one and fail at inference (see the Codex recovery
+entry below). A Codex model
 chosen while its catalog is still being read is now held for that read instead
 of being refused as unavailable. Not proven: the packaged application running
 a real update end to end.
+
+**Codex model compatibility recovery (2026-10-04):** an older runtime using
+`gpt-6.1-sol` from native configuration reported missing model metadata and then
+a ChatGPT model rejection. The prior classifier emitted a plain turn error, so
+the chat offered only Retry. `server/codex-session-runtime.ts` now associates
+those two native messages by model within the app-server generation and sends
+the existing `runtime-outdated` recovery kind. This exposes Update Codex through
+the existing updater/reconnect/resend flow without rewriting the user's model.
+Adapter regressions replay the reported warning and JSON error through terminal
+notifications, failed completion, and RPC rejection; warnings alone, another
+model's warning, service-tier warnings, and unrelated errors do not trigger it.
+The native error is retained, warnings remain advisory, and a failed turn settles
+once. The signal offers an update attempt, not a claimed minimum version or
+guaranteed account access. Not proven: a real Codex update and successful provider
+turn through the packaged application for this failure.
+
+**Model-picker update entry (2026-10-04):** `ui/composer/thinking.tsx` also
+offers the native updater in the model list before a turn fails, using the
+host's `updatable` capability and `use-agent-runtime-update.ts`. The mounted
+workspace regression starts with only an older model, invokes Update Codex,
+then verifies reconnection publishes the replacement catalog and keeps the
+unsent draft without sending a prompt. A refused update preserves the draft
+and connection and reports its failure in the picker. The `ModelPicker` Story
+covers the entry's composition and accessibility. These use controlled ports;
+they do not establish which models a real updated Codex account can access.
+The built Storybook model picker was inspected in Chrome: the update action
+appears below the model choices. This is a
+source UI check with controlled ports, not an installed Codex update.
 
 **Newer-model offer (2026-09-23):** Claude learns from its server which models
 an account may use, including ones the installed build is too old to run, and
@@ -902,7 +1002,9 @@ owns that rule and the history restore.
 
 **Implementation:** Renderer: `renderer/src/features/agent/application/session-runtime.ts`, `renderer/src/features/documents/application/document-runtime.ts`, `renderer/src/app/composition/layout/workspace-panes.tsx`.
 Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction.ts`,
-`server/document-revisions.ts`, `server/project-operations/index.ts`.
+`server/document-revisions.ts`, `server/project-operations/index.ts`,
+`server/turn-changes.ts` (turn baselines at the `attachAgentRuntime` seam), and
+`renderer/src/features/agent/ui/transcript/turn-changes-card.tsx`.
 
 **Status:** Release-dependent.
 
@@ -935,6 +1037,23 @@ Host/services: `server/project-file-mutations.ts`, `server/text-file-transaction
   held only its name without it. Not proven: that a real runtime follows the
   guidance turn after turn. It is a standing instruction, not a gate, and no
   conversation was driven after the change.
+- **Turn review (2026-10-04):** every turn on a folder-bound Agent socket is
+  bracketed by a Markdown baseline taken before the prompt reaches the runtime
+  and a rescan at `turn-end`; the Chat card offers Review per edited file, which
+  opens a reversed inline review (Undo/Keep). The runtime policy now has Agents
+  write directly and propose with `suggest_edits` only on request.
+  `server/turn-changes.test.ts` covers created/edited/deleted detection for
+  untooled writes, hidden-note and size exclusion, retention, prompt hold and
+  ordering, capture failure, and a refused prompt's baseline;
+  `server/routes/turn-changes.test.ts` covers scope, expiry and repeatable reads;
+  `open-revision.test.ts`, `turn-change-api.test.ts`, `document-revision.test.tsx`,
+  `turn-changes-card.test.tsx`, `session.test.ts` and `events.test.ts` cover the
+  renderer path. A driven dev-build pass with a real Claude turn showed the card,
+  the reversed review with Undo/Keep labels and swapped colours, a per-change
+  Undo saving, Keep all, a stale refusal on a second Review, and a later
+  `suggest_edits` proposal reading Accept/Reject again. Not proven: Codex and the
+  Default runtime driven at runtime (they share the socket seam but were not
+  run), a packaged build, and large-vault scan cost per prompt.
 - **Citations (2026-09-25):** `renderer/src/features/agent/domain/citation.ts`
   reads a `#:~:text=` phrase from a reply's local link; the transcript hands it
   to `locatePassage` in `use-document-sources.ts`, which opens the file with a

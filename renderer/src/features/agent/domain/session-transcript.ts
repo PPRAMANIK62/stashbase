@@ -37,6 +37,15 @@ interface AgentTranscriptAttachment {
   previewUrl?: string | undefined;
 }
 
+/** One Markdown file an Agent turn left different on disk, as the host saw it
+ *  by comparing the folder before and after the turn. `path` is absolute. */
+export interface AgentTurnChangedFile {
+  readonly path: string;
+  readonly change: 'created' | 'edited' | 'deleted';
+  readonly additions: number;
+  readonly deletions: number;
+}
+
 export type AgentTranscriptBlock =
   | {
       kind: 'user';
@@ -68,6 +77,16 @@ export type AgentTranscriptBlock =
       path: string;
       /** The parked proposal's identity, shared with the drained review. */
       proposalId: string;
+    }
+  | {
+      /** What one turn changed in the folder's Markdown, offered for review
+       *  inside each document. Not a tool block, for the reason `revision`
+       *  is not: the activity disclosure would swallow it. */
+      kind: 'turn-changes';
+      id: string;
+      /** The host's identity for the turn, which is what a review asks for. */
+      turnId: string;
+      files: readonly AgentTurnChangedFile[];
     }
   | {
       kind: 'tool';
@@ -229,6 +248,33 @@ export function recordRevisionProposal(
     ...transcript,
     { id, kind: 'revision', path: proposal.path, proposalId: proposal.proposalId },
   ];
+}
+
+/**
+ * Records what turn `turnId` changed. The host rescans the folder after the
+ * turn ends, so this can arrive after the next prompt was already sent; the
+ * card then goes before that prompt, beside the turn it describes. Recording
+ * twice is as safe as once.
+ */
+export function recordTurnChanges(
+  transcript: AgentTranscriptBlock[],
+  changes: { turnId: string; files: readonly AgentTurnChangedFile[] },
+  nextPromptId: string | null,
+): AgentTranscriptBlock[] {
+  const id = `turn-changes-${changes.turnId}`;
+  if (transcript.some((block) => block.id === id)) return transcript;
+  const block: AgentTranscriptBlock = {
+    files: changes.files,
+    id,
+    kind: 'turn-changes',
+    turnId: changes.turnId,
+  };
+  const index =
+    nextPromptId === null
+      ? -1
+      : transcript.findIndex((entry) => entry.kind === 'user' && entry.id === nextPromptId);
+  if (index < 0) return [...transcript, block];
+  return [...transcript.slice(0, index), block, ...transcript.slice(index)];
 }
 
 export function requestToolPermission(

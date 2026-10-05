@@ -5,6 +5,7 @@ import type { AgentCatalogPort, AgentPersonaPort } from '@/features/agent/applic
 import type { AgentWorkspaceRuntime } from '@/features/agent/application/workspace-runtime';
 import type { AgentScope } from '@/features/agent/domain/session';
 import type { AgentRevisionReview } from '@/features/agent/ui/transcript/revision-card';
+import type { AgentTurnChangeReview } from '@/features/agent/ui/transcript/turn-changes-card';
 import type { SourceReference } from '@/shared/domain/source-reference';
 import { lazySurface } from '@/shared/runtime/lazy-surface';
 import { SurfaceBoundary } from '@/shared/runtime/surface-boundary';
@@ -27,6 +28,10 @@ export interface AgentWorkspaceProps {
   /** Opens a file the Agent changed or cited beside the chat; the user chose
    *  it. A cited phrase is the passage to locate, null for the whole file. */
   onOpenSource?: ((source: SourceReference, phrase: string | null) => void) | undefined;
+  /** Opens what an Agent turn changed in one file as a review inside that
+   *  document. The documents feature owns the review, so the composition
+   *  layer supplies this. */
+  onReviewTurnChange?: ((review: AgentTurnChangeReview) => void) | undefined;
   /** Restarts preparation for a bound source whose prepared text failed. */
   onReprocess?: ((source: SourceReference) => void) | undefined;
   /** The review open on a document an agent proposed a revision to, by

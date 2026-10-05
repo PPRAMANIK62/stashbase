@@ -12,6 +12,8 @@ export const settingsQueryKeys = {
   account: ['settings', 'account'] as const,
   agentAllowance: ['settings', 'agent-allowance'] as const,
   agentCatalog: ['settings', 'agent-catalog'] as const,
+  billingPlans: ['settings', 'billing-plans'] as const,
+  billingStatus: ['settings', 'billing-status'] as const,
   appearance: ['settings', 'appearance'] as const,
   embedder: ['settings', 'embedder'] as const,
   mcpAccess: ['settings', 'mcp-access'] as const,
@@ -67,6 +69,23 @@ export function agentAllowanceQuery(port: AgentRuntimePort) {
   return {
     queryFn: ({ signal }: { signal: AbortSignal }) => port.getAllowance(signal),
     queryKey: settingsQueryKeys.agentAllowance,
+    retry: false,
+  } as const;
+}
+
+export function billingPlansQuery(port: AgentRuntimePort) {
+  return {
+    queryFn: ({ signal }: { signal: AbortSignal }) => port.getBillingPlans(signal),
+    queryKey: settingsQueryKeys.billingPlans,
+    retry: false,
+    staleTime: 10 * 60_000,
+  } as const;
+}
+
+export function billingStatusQuery(port: AgentRuntimePort) {
+  return {
+    queryFn: ({ signal }: { signal: AbortSignal }) => port.getBillingStatus(signal),
+    queryKey: settingsQueryKeys.billingStatus,
     retry: false,
   } as const;
 }

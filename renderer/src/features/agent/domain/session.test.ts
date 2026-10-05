@@ -87,6 +87,52 @@ describe('Agent session domain', () => {
     expect(unchanged.transcript.some((block) => block.kind === 'revision')).toBe(false);
   });
 
+  it('files what a turn changed beside that turn, even once the next prompt is out', () => {
+    const files = [
+      { additions: 2, change: 'edited' as const, deletions: 1, path: '/project/Research/plan.md' },
+    ];
+    const live = {
+      ...createAgentSessionState({
+        agent: 'stashbase',
+        id: 'chat-1',
+        scope: { kind: 'folder', path: '/project/Research' },
+      }),
+      connection: { kind: 'live' as const, turn: null },
+    };
+    const first = transitionAgentSession(live, {
+      at: 1,
+      context: [],
+      id: 'u1',
+      kind: 'submit-prompt',
+      text: 'Edit the plan',
+    });
+    const settled = transitionAgentSession(first, { at: 2, isError: false, kind: 'settle-turn' });
+    // The host rescans after the turn ends, so its report can land after the
+    // next prompt has already gone out.
+    const next = transitionAgentSession(settled, {
+      at: 3,
+      context: [],
+      id: 'u2',
+      kind: 'submit-prompt',
+      text: 'Now the summary',
+    });
+    const recorded = transitionAgentSession(next, { files, kind: 'turn-changed', turnId: 't1' });
+
+    expect(recorded.transcript.map((block) => block.id)).toEqual(['u1', 'turn-changes-t1', 'u2']);
+    expect(recorded.transcript[1]).toEqual({
+      files,
+      id: 'turn-changes-t1',
+      kind: 'turn-changes',
+      turnId: 't1',
+    });
+    expect(transitionAgentSession(recorded, { files, kind: 'turn-changed', turnId: 't1' })).toBe(
+      recorded,
+    );
+
+    const idle = transitionAgentSession(settled, { files, kind: 'turn-changed', turnId: 't1' });
+    expect(idle.transcript.at(-1)?.id).toBe('turn-changes-t1');
+  });
+
   it('treats only an identity-free empty transcript as reusable', () => {
     const session = createAgentSessionState({
       agent: 'stashbase',

@@ -90,6 +90,15 @@ export interface FolderListingOptions {
   showHidden?: boolean;
 }
 
+/** User-maintained project configuration belongs in the ordinary file tree. */
+const VISIBLE_PROJECT_CONFIG_DIRS = new Set([
+  '.agents',
+  '.claude',
+  '.codex',
+  '.github',
+  '.vscode',
+]);
+
 /** Product-owned hidden state is never a Workbench browsing surface, even
  * when ordinary user dot-directories are visible. This classification lives
  * beside traversal so renderers and tool callers cannot widen it. */
@@ -106,8 +115,8 @@ function isProtectedHiddenDirName(name: string): boolean {
  * Protected hidden directories never surface even when hidden files are
  * shown. This is distinct from `INDEX_EXCLUDED_DIRS`, whose other hidden
  * members surface as bounded excluded rows when the option is enabled. Hidden
- * product-derived artifacts and dot-directories remain infrastructure, while
- * ordinary dot-files and unknown source formats are real user content. */
+ * product-derived artifacts remain infrastructure. Recognized project configuration
+ * is visible by default, as are ordinary dot-files and unknown source formats. */
 function workspaceDirectoryEntries(entries: fs.Dirent[], opts: FolderListingOptions): fs.Dirent[] {
   const noteStems = new Set<string>();
   const legacyDerivedStems = new Set<string>();
@@ -121,8 +130,8 @@ function workspaceDirectoryEntries(entries: fs.Dirent[], opts: FolderListingOpti
 
   return entries.filter((entry) => {
     if (entry.isDirectory() && isHiddenDirName(entry.name)) {
-      if (!opts.showHidden) return false;
       if (isProtectedHiddenDirName(entry.name)) return false;
+      if (!opts.showHidden && !VISIBLE_PROJECT_CONFIG_DIRS.has(entry.name)) return false;
     }
     if (entry.isFile() && HIDDEN_DOT_FILES.has(entry.name)) return false;
     if (entry.isFile() && entry.name.startsWith('.')) {
@@ -513,6 +522,19 @@ export async function listIndexableTextFilesUnderAsync(
   return out;
 }
 
+/** Markdown sources a person can open from the tree under the absolute `root`.
+ *  Dot-notes stay out the way the workspace listing keeps them out, so a
+ *  hidden derived note is never reported as something the reader can review. */
+export async function walkMarkdownSourcesAsync(
+  root: string,
+  fn: (rel: string, full: string) => Promise<void>,
+): Promise<void> {
+  await walkAsync(root, '', async (rel, full, entry) => {
+    if (!entry.isFile() || entry.name.startsWith('.') || detectFormat(rel) !== 'md') return;
+    await fn(rel, full);
+  });
+}
+
 function readTextPrefix(full: string, size: number, format: FileFormat): string {
   const fd = fs.openSync(full, 'r');
   try {
@@ -537,9 +559,8 @@ async function readTextPrefixAsync(full: string, size: number, format: FileForma
   }
 }
 
-/** Junk dot-FILES hidden from the workspace. Dot DIRECTORIES (.claude,
- *  .git, .stashbase, …) are hidden wholesale by `isHiddenDirName` unless
- *  the listing's explicit `showHidden` option opts eligible ones in. */
+/** Junk dot-FILES hidden from the workspace. Workspace directory visibility
+ *  belongs to `workspaceDirectoryEntries`; retrieval walks skip dot-directories. */
 export const HIDDEN_DOT_FILES = new Set<string>([
   '.DS_Store',
 ]);

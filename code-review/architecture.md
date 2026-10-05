@@ -68,6 +68,11 @@ Journey-specific entry points and evidence stay in [Journey Coverage](journey-co
 - Workbench visibility can include generic files and excluded placeholders.
   That does not grant preparation, retrieval, or MCP access. Derived artifacts
   never become visible source results or writable targets.
+  `server/file-listing.ts` owns browsing visibility, including default-visible
+  project configuration directories; `server/indexable.ts` retains dot-directory
+  exclusions for preparation and retrieval. Workspace listings apply the browsing
+  preference with either explicit project scope or window scope; Agent/MCP directory
+  discovery uses the separate Project Operations surface.
 
 The shared entry experience is owned by [Entering a Project](../design-docs/capabilities/project-entry.md).
 The renderer owns one acquisition/entry operation per window. Electron serializes
@@ -104,6 +109,17 @@ preview, content editing, and rename/delete are separate permissions.
   they orphan. A proposal is handed
   to one window and forgotten, so delivery is at most once and a failed handoff is
   reported to the reader rather than retried.
+- Turn changes are host state owned by `server/turn-changes.ts`. Native runtime
+  writes and shell commands never pass through the host, so `attachAgentRuntime`
+  wraps every Agent socket bound to a folder: a prompt and everything after it
+  wait until the folder's Markdown baseline exists, and the runtime's `turn-end`
+  triggers a rescan and a `turn-changes` event. This is the one seam shared by every
+  runtime; adapters carry no tracking of their own. Tracking is best effort: a
+  failed scan leaves the turn untracked and never delays or fails it. Scans skip
+  hidden derived notes and are bounded by file size, count and bytes; recorded
+  turns are bounded per folder and by age, live in memory only, and retire with
+  their folder. Anything that changed during a turn is attributed to it, including
+  a concurrent session's or the reader's own edit.
 - Rename/move/delete validate before cancelling work, await native-handle release,
   mutate, retire current AppData-derived/index identity, then rediscover and notify.
   Retired extraction filenames never authorize sibling-file migration or deletion. Generic
@@ -234,7 +250,7 @@ stable status without download, retry, or a new durable demand latch.
   output. Own temporary scripts and descendant cancellation; neither cleanup nor
   shell wrappers may mask failure. Do not redirect official installs into private
   paths or destructively rewrite user PATH. Platform details live beside the installer.
-- A model an installed runtime is too old to run is that runtime's own
+- A proactive offer for a model an installed runtime is too old to run is that runtime's own
   statement, read from its own state and passed through unchanged; StashBase
   compares no versions and infers no requirement, and the renderer only renders
   what the runtime said. A file that is absent, unreadable, or differently
@@ -329,6 +345,17 @@ stable status without download, retry, or a new durable demand latch.
   never become terminal errors. Recover by structured kind: authentication needs
   process/session refresh, credits/restrictions need account recovery, transient
   failures may resend. Raw socket loss has bounded retry then manual recovery.
+  The Codex adapter correlates native missing-model-metadata warnings with a
+  subsequent ChatGPT model rejection for the same model in that process
+  generation, offering the existing `runtime-outdated` update recovery while
+  retaining the native error. Neither signal alone changes failure recovery;
+  no version minimum or account entitlement is inferred. A replacement process
+  starts with no remembered metadata warnings.
+  The model picker exposes an updater only when the host advertises `updatable`.
+  This explicit action shares the failed-turn update owner, but has no request
+  to resend. Reconnection reads models from the replacement native process;
+  catalog memory never supplies a fabricated new model. The composer retains
+  drafts and blocks Send and provider changes during the update.
 
 ## Credentials and External Access
 
@@ -360,9 +387,10 @@ data migration is not required by [maintenance policy](../MAINTENANCE.md#previou
   Turn/channel retirement cancels body reads and pending upstream work; awaited
   credential acquisition cannot forward a request after retirement.
   Hosted quota/accounting and Stripe billing stay external; the desktop exposes
-  bounded usage and a fixed website Plans and billing link. Browser billing uses
-  its own authenticated session, explicitly displaying the account; desktop
-  account tokens never appear in links or Stripe configuration.
+  bounded usage, plans, and subscription status. The host requests Checkout and
+  Portal pages with the account session and hands the renderer only a verified
+  Stripe-hosted URL; desktop account tokens never appear in links or Stripe
+  configuration. Website billing uses its own browser session.
   Child environment and AppData HOME/config isolate ambient secrets and user config.
 - Built-in HTTP and external MCP share Project Operations. Streamable HTTP checks
   the current Settings token on every POST; rotation invalidates old tokens.
@@ -457,6 +485,14 @@ registered host boundaries; renderer shared types are a different layer.
   patch carries the reviewed document's trailing empty paragraph into a parsed
   proposal, which Markdown cannot spell. A Milkdown upgrade carries the patch,
   or retires it against the revision engine test.
+- A turn review is that same review reversed, not a second diff surface: the
+  editor holds the file the turn left, the offer is the text from before it, and
+  the offer's base version is the version the turn left, so the existing stale
+  gate refuses a file that moved on. Taking a change undoes it through the
+  ordinary save; ending the review keeps the source byte-identical. The origin
+  `{ kind: 'turn' }` selects the Undo/Keep labels and the swapped colours.
+  Upstream keeps its original label config object, so `revision-adapter.ts`
+  supplies the labels through getters set on each start.
 - Surface recovery remounts the smallest boundary. Shell remount loses live buffers
   and reloads only saved source files. HTTP loss must not reload the app.
   Raw failures are mapped to feature-owned messages and recovery kinds.

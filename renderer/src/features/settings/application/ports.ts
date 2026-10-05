@@ -1,4 +1,5 @@
 import type {
+  AccountOffer,
   HostedAccount,
   HostedSignIn,
   HostedSignInStatus,
@@ -13,6 +14,7 @@ import type {
   AppearancePreferences,
   SystemFont,
 } from '@/features/settings/domain/appearance';
+import type { BillingPlan, BillingStatus } from '@/features/settings/domain/billing';
 import type { LocalComponentStatus } from '@/features/settings/domain/local-component';
 import type { McpAccess, McpHttpAccess } from '@/features/settings/domain/mcp-access';
 import type { AgentId } from '@/shared/domain/agent-id';
@@ -32,6 +34,14 @@ export interface AgentRuntimePort {
   ): Promise<AgentCatalog>;
   updateDebug(patch: AgentDebugPatch, signal: AbortSignal): Promise<AgentCatalog>;
   getAllowance(signal: AbortSignal): Promise<AgentAllowance>;
+  /** The public plan catalog. */
+  getBillingPlans(signal: AbortSignal): Promise<readonly BillingPlan[]>;
+  getBillingStatus(signal: AbortSignal): Promise<BillingStatus>;
+  /** A Stripe Checkout page for this account and plan; promotion codes are
+   *  entered there. */
+  startCheckout(priceId: string, signal: AbortSignal): Promise<string>;
+  /** The Stripe Customer Portal for an existing subscription. */
+  openBillingPortal(signal: AbortSignal): Promise<string>;
 }
 
 export type AgentRuntimeFailureKind = TransportFailureKind;
@@ -64,6 +74,10 @@ export interface AccountPort {
    *  failure. */
   avatar(signal: AbortSignal): Promise<Blob | null>;
   load(signal: AbortSignal): Promise<HostedAccount>;
+  /** Records a banner as taken up or declined; answers the account. */
+  markOfferSeen(offer: AccountOffer, signal: AbortSignal): Promise<HostedAccount>;
+  /** Development: shows every banner again; answers the account. */
+  resetOffers(signal: AbortSignal): Promise<HostedAccount>;
   signInStatus(flowId: string, signal: AbortSignal): Promise<HostedSignInStatus>;
   signOut(signal: AbortSignal): Promise<HostedAccount>;
   startSignIn(signal: AbortSignal): Promise<HostedSignIn>;
